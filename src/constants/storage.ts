@@ -1,0 +1,18 @@
+export const STORAGE_KEYS = {
+  TOKEN: 'kap_fret_token',
+  REFRESH_TOKEN: 'kap_fret_refresh_token',
+  USER: 'kap_fret_user',
+  TICKETS_VIEW: 'kap_fret_tickets_view',
+  CHECKINS_VIEW: 'kap_fret_checkins_view',
+  FREIGHT_VIEW: 'kap_fret_freight_view',
+  PROFILES_VIEW: 'kap_fret_profiles_view',
+  USERS_VIEW: 'kap_fret_users_view',
+  ISSUING_OFFICES_VIEW: 'kap_fret_issuing_offices_view',
+  PROVINCES_VIEW: 'kap_fret_provinces_view',
+  CHECKPOINTS_VIEW: 'kap_fret_checkpoints_view',
+  CURRENCIES_VIEW: 'kap_fret_currencies_view',
+  EXCHANGE_RATES_VIEW: 'kap_fret_exchange_rates_view',
+  CASH_REGISTERS_VIEW: 'kap_fret_cash_registers_view',
+  ACTIVITIES_VIEW: 'kap_fret_activities_view',
+  SIDEBAR_COLLAPSED: 'kap_fret_sidebar_collapsed',
+} as const
