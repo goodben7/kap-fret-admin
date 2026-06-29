@@ -3,53 +3,54 @@ import { AppLayout } from '@/layouts/AppLayout'
 import { AuthLayout } from '@/layouts/AuthLayout'
 import { ProtectedRoute } from '@/routes/ProtectedRoute'
 import { ROLES } from '@/constants/roles'
-
-import { LoginPage } from '@/pages/auth/LoginPage'
-import { DashboardPage } from '@/pages/dashboard/DashboardPage'
-import { TicketsListPage } from '@/pages/tickets/TicketsListPage'
-import { TicketCreatePage } from '@/pages/tickets/TicketCreatePage'
-import { TicketDetailPage } from '@/pages/tickets/TicketDetailPage'
-import { TicketEditPage } from '@/pages/tickets/TicketEditPage'
-import { CheckInsListPage } from '@/pages/checkins/CheckInsListPage'
-import { CheckInCreatePage } from '@/pages/checkins/CheckInCreatePage'
-import { CheckInDetailPage } from '@/pages/checkins/CheckInDetailPage'
-import { CheckInEditPage } from '@/pages/checkins/CheckInEditPage'
-import { FreightListPage } from '@/pages/freight/FreightListPage'
-import { FreightCreatePage } from '@/pages/freight/FreightCreatePage'
-import { FreightDetailPage } from '@/pages/freight/FreightDetailPage'
-import { FreightEditPage } from '@/pages/freight/FreightEditPage'
-import { AdminPage } from '@/pages/admin/AdminPage'
-import { SuperAdminSetupPage } from '@/pages/admin/SuperAdminSetupPage'
-import { IssuingOfficesPage } from '@/pages/admin/IssuingOfficesPage'
-import { IssuingOfficeFormPage } from '@/pages/admin/IssuingOfficeFormPage'
-import { IssuingOfficeDetailPage } from '@/pages/admin/IssuingOfficeDetailPage'
-import { ProvincesPage } from '@/pages/admin/ProvincesPage'
-import { ProvinceFormPage } from '@/pages/admin/ProvinceFormPage'
-import { ProvinceDetailPage } from '@/pages/admin/ProvinceDetailPage'
-import { CheckpointsPage } from '@/pages/admin/CheckpointsPage'
-import { CheckpointFormPage } from '@/pages/admin/CheckpointFormPage'
-import { CheckpointDetailPage } from '@/pages/admin/CheckpointDetailPage'
-import { UsersPage } from '@/pages/admin/UsersPage'
-import { UserFormPage } from '@/pages/admin/UserFormPage'
-import { UserEditPage } from '@/pages/admin/UserEditPage'
-import { ProfilesPage } from '@/pages/admin/ProfilesPage'
-import { ProfileFormPage } from '@/pages/admin/ProfileFormPage'
-import { ActivitiesPage } from '@/pages/admin/ActivitiesPage'
-import { CurrenciesPage } from '@/pages/admin/CurrenciesPage'
-import { CurrencyFormPage } from '@/pages/admin/CurrencyFormPage'
-import { CurrencyDetailPage } from '@/pages/admin/CurrencyDetailPage'
-import { ExchangeRatesPage } from '@/pages/admin/ExchangeRatesPage'
-import { ExchangeRateFormPage } from '@/pages/admin/ExchangeRateFormPage'
-import { ExchangeRateDetailPage } from '@/pages/admin/ExchangeRateDetailPage'
-import { CashRegistersPage } from '@/pages/admin/CashRegistersPage'
-import { CashRegisterFormPage } from '@/pages/admin/CashRegisterFormPage'
-import { CashRegisterDetailPage } from '@/pages/admin/CashRegisterDetailPage'
-import { CashTransactionsListPage } from '@/pages/cash-transactions/CashTransactionsListPage'
-import { CashTransactionCreatePage } from '@/pages/cash-transactions/CashTransactionCreatePage'
-import { CashTransactionDetailPage } from '@/pages/cash-transactions/CashTransactionDetailPage'
-import { ProfilePage } from '@/pages/profile/ProfilePage'
-import { NoIssuingOfficePage } from '@/pages/info/NoIssuingOfficePage'
-import { UnauthorizedPage } from '@/pages/info/UnauthorizedPage'
+import {
+  ActivitiesPage,
+  AdminPage,
+  CashRegisterDetailPage,
+  CashRegisterFormPage,
+  CashRegistersPage,
+  CashTransactionCreatePage,
+  CashTransactionDetailPage,
+  CashTransactionsListPage,
+  CheckpointDetailPage,
+  CheckpointFormPage,
+  CheckpointsPage,
+  CheckInCreatePage,
+  CheckInDetailPage,
+  CheckInEditPage,
+  CheckInsListPage,
+  CurrenciesPage,
+  CurrencyDetailPage,
+  CurrencyFormPage,
+  DashboardPage,
+  ExchangeRateDetailPage,
+  ExchangeRateFormPage,
+  ExchangeRatesPage,
+  FreightCreatePage,
+  FreightDetailPage,
+  FreightEditPage,
+  FreightListPage,
+  IssuingOfficeDetailPage,
+  IssuingOfficeFormPage,
+  IssuingOfficesPage,
+  LoginPage,
+  NoIssuingOfficePage,
+  ProfileFormPage,
+  ProfilePage,
+  ProfilesPage,
+  ProvinceDetailPage,
+  ProvinceFormPage,
+  ProvincesPage,
+  SuperAdminSetupPage,
+  TicketCreatePage,
+  TicketDetailPage,
+  TicketEditPage,
+  TicketsListPage,
+  UnauthorizedPage,
+  UserEditPage,
+  UserFormPage,
+  UsersPage,
+} from '@/routes/lazy-pages'
 
 export const router = createBrowserRouter([
   {

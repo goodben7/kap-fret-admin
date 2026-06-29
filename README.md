@@ -4,14 +4,16 @@
 ![Version](https://img.shields.io/badge/version-0.0.0-blue)
 ![Node](https://img.shields.io/badge/node-%3E%3D22-339933?logo=node.js&logoColor=white)
 ![React](https://img.shields.io/badge/react-19-61DAFB?logo=react&logoColor=black)
+![Vite](https://img.shields.io/badge/vite-8-646CFF?logo=vite&logoColor=white)
 ![License](https://img.shields.io/badge/license-Proprietary-lightgrey)
 
-Interface web de gestion **transport aérien et logistique** pour l'écosystème Kap-Fret.  
-Ce dépôt correspond à l'**environnement de test** (frontend) consommant l'API REST hébergée sur :
+Interface web de gestion **transport aérien et logistique** pour l'écosystème Kap-Fret.
 
-**`https://api.kap-fret.ereborhub.cloud`**
+Ce dépôt correspond à l'**environnement de test** (frontend) consommant l'API REST :
 
-> Les routes applicatives sont préfixées par `/api` (ex. `/api/tickets`, `/api/users/about`).
+**`https://api.kap-fret.ereborhub.cloud/api`**
+
+> En pratique, la variable `VITE_API_BASE_URL` pointe vers l'hôte **sans** le suffixe `/api` (`https://api.kap-fret.ereborhub.cloud`). Les services appellent déjà les chemins `/api/...`.
 
 **Environnement de test déployé :** [LIEN_NETLIFY](https://[votre-site].netlify.app) <!-- TODO: remplacer par l'URL Netlify réelle -->
 
@@ -21,6 +23,7 @@ Ce dépôt correspond à l'**environnement de test** (frontend) consommant l'API
 
 - [Description](#description)
 - [Prérequis](#prérequis)
+- [Compatibilité navigateurs](#compatibilité-navigateurs)
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Scripts disponibles](#scripts-disponibles)
@@ -41,49 +44,76 @@ Ce dépôt correspond à l'**environnement de test** (frontend) consommant l'API
 
 Kap-Fret Frontend est une **Single Page Application (SPA)** qui permet aux équipes terrain et back-office de :
 
-- Gérer la **billetterie** (émission, modification, statuts)
+- Gérer la **billetterie** (émission, modification, statuts, manifestes passagers)
 - Effectuer les **check-ins** passagers et bagages
 - Piloter les **expéditions fret** (création, suivi, encaissement)
-- Consulter le **tableau de bord** (KPIs, graphiques, statistiques)
+- Consulter le **tableau de bord** (KPIs, graphiques, activité récente)
 - Administrer les référentiels (bureaux, checkpoints, caisses, taux de change, utilisateurs)
 - Suivre les **transactions de caisse** et générer des rapports PDF
 
-L'application s'appuie sur une API **Symfony / API Platform** exposant des collections **JSON-LD / Hydra**.
+### Rôle dans l'écosystème
+
+| Composant | Rôle |
+|-----------|------|
+| **Ce frontend** | Interface utilisateur (React), authentification JWT, formulaires, tableaux de bord |
+| **API Kap-Fret** | Logique métier, persistance, sécurité (`https://api.kap-fret.ereborhub.cloud/api`) |
+| **Netlify** | Hébergement statique de l'environnement de test (build Vite → `dist/`) |
 
 ```mermaid
-flowchart LR
-  subgraph Browser
-    UI[React SPA]
-    RQ[TanStack Query]
-    AX[Axios Client]
+flowchart TB
+  subgraph Client["Navigateur"]
+    SPA["React SPA<br/>(Kap-Fret Frontend)"]
+    RQ["TanStack Query<br/>(cache serveur)"]
+    AX["Axios<br/>(JWT + intercepteurs)"]
+    SPA --> RQ --> AX
   end
 
-  subgraph Netlify
-  UI --> RQ --> AX
+  subgraph Hosting["Netlify (test)"]
+    CDN["Assets statiques<br/>index.html + chunks JS"]
   end
 
-  AX -->|HTTPS + JWT| API[API Kap-Fret]
-  API --> DB[(Base de données)]
+  subgraph Backend["API Kap-Fret"]
+    API["REST /api/*<br/>JSON-LD / Hydra"]
+    DB[("Base de données")]
+    API --> DB
+  end
 
-  style UI fill:#fff7ed,stroke:#F57C00
+  SPA --> CDN
+  AX -->|"HTTPS<br/>Authorization: Bearer"| API
+
+  style SPA fill:#fff7ed,stroke:#F57C00
   style API fill:#eff6ff,stroke:#3B82F6
+  style CDN fill:#f0fdf4,stroke:#22C55E
 ```
 
 ---
 
 ## Prérequis
 
-| Outil | Version minimale | Notes |
-|-------|------------------|-------|
-| **Node.js** | 22.x (recommandé) | Aligné sur `netlify.toml` |
-| **npm** | 10+ | Fourni avec Node 22 |
-| **Git** | 2.x | Clone du dépôt |
-| Navigateur moderne | Dernière version stable | Chrome, Firefox, Safari, Edge |
+| Outil | Version minimale | Recommandée | Notes |
+|-------|------------------|-------------|-------|
+| **Node.js** | 18+ | **22.x** | Aligné sur `netlify.toml` (`NODE_VERSION = "22"`) |
+| **npm** | 9+ | 10+ | Fourni avec Node |
+| **Git** | 2.x | — | Clone et contributions |
+| **Navigateur moderne** | Voir ci-dessous | Dernière stable | Chrome, Firefox, Edge, Safari |
 
 Optionnel :
 
-- [Netlify CLI](https://docs.netlify.com/cli/get-started/) pour simuler le déploiement en local
-- Accès à l'API de test (`https://api.kap-fret.ereborhub.cloud`)
+- [Netlify CLI](https://docs.netlify.com/cli/get-started/) — déploiement et preview depuis le terminal
+- Accès réseau à l'API de test : `https://api.kap-fret.ereborhub.cloud`
+
+---
+
+## Compatibilité navigateurs
+
+| Navigateur | Support |
+|------------|---------|
+| Google Chrome | Dernière version stable |
+| Mozilla Firefox | Dernière version stable |
+| Microsoft Edge | Dernière version stable |
+| Safari (macOS / iOS) | 2 dernières versions majeures |
+
+L'application cible les **navigateurs modernes** (ESM, `fetch`, CSS Grid/Flexbox). Internet Explorer n'est pas supporté.
 
 ---
 
@@ -106,11 +136,25 @@ npm run dev
 
 L'application est accessible sur **http://localhost:5173**.
 
+Pour tester contre l'API distante en local :
+
+```bash
+# Option A — proxy Vite (recommandé en dev, pas de CORS)
+# Laisser VITE_API_BASE_URL vide dans .env
+npm run dev
+
+# Option B — build + preview comme en production
+VITE_API_BASE_URL=https://api.kap-fret.ereborhub.cloud npm run build
+npm run preview
+```
+
 ---
 
 ## Configuration
 
 ### Fichier `.env`
+
+Copier `.env.example` vers `.env` et adapter :
 
 ```env
 # ─── Développement local ───────────────────────────────────────────────
@@ -121,27 +165,31 @@ VITE_API_BASE_URL=
 # Cible du proxy Vite (dev uniquement)
 VITE_PROXY_TARGET=https://localhost:8000
 
-# ─── Production / Preview (npm run preview) / Netlify ────────────────
-# URL de BASE du backend, SANS le suffixe /api
+# ─── Production / Preview / Netlify ────────────────────────────────────
+# Hôte de l'API SANS le suffixe /api
 # VITE_API_BASE_URL=https://api.kap-fret.ereborhub.cloud
 ```
+
+> **Note :** certaines documentations mentionnent `VITE_API_URL`. Ce projet utilise **`VITE_API_BASE_URL`** — c'est la variable lue par `src/lib/api-config.ts`. La valeur cible en production reste `https://api.kap-fret.ereborhub.cloud` ; les routes applicatives sont préfixées `/api` dans le code.
 
 ### Variables critiques
 
 | Variable | Obligatoire en prod | Description |
 |----------|---------------------|-------------|
-| `VITE_API_BASE_URL` | **Oui** | Hôte de l'API (ex. `https://api.kap-fret.ereborhub.cloud`). Les services appellent déjà `/api/...`. **Ne pas** ajouter `/api` à la fin. |
-| `VITE_PROXY_TARGET` | Non (dev only) | URL du backend local pour le proxy Vite. Ignorée en production. |
+| `VITE_API_BASE_URL` | **Oui** | Racine HTTP de l'API (ex. `https://api.kap-fret.ereborhub.cloud`). **Ne pas** terminer par `/api`. |
+| `VITE_PROXY_TARGET` | Non (dev only) | Backend cible du proxy Vite (`/api` → cette URL). Ignoré en production. |
 
-> **Pourquoi `VITE_API_BASE_URL` et pas `VITE_API_URL` ?**  
-> Vite n'expose que les variables préfixées par `VITE_`. Le projet utilise `VITE_API_BASE_URL` comme racine HTTP ; les chemins `/api/*` sont définis dans les services.
+### Résolution des URLs
 
-### Exemple de résolution d'URL
-
-| Contexte | `VITE_API_BASE_URL` | Requête `GET /api/tickets` → URL finale |
-|----------|---------------------|----------------------------------------|
+| Contexte | `VITE_API_BASE_URL` | `GET /api/tickets` → URL finale |
+|----------|---------------------|----------------------------------|
 | `npm run dev` | *(vide)* | `http://localhost:5173/api/tickets` → proxy → backend |
 | `npm run preview` / Netlify | `https://api.kap-fret.ereborhub.cloud` | `https://api.kap-fret.ereborhub.cloud/api/tickets` |
+
+### Sécurité
+
+- Le fichier `.env` est **ignoré par Git** (ne jamais committer de secrets).
+- Les variables `VITE_*` sont **injectées dans le bundle client** — n'y mettre que des URLs publiques, jamais de clés secrètes.
 
 ---
 
@@ -149,21 +197,21 @@ VITE_PROXY_TARGET=https://localhost:8000
 
 | Commande | Description |
 |----------|-------------|
-| `npm run dev` | Serveur de développement Vite (HMR) sur le port 5173 |
-| `npm run build` | Compilation TypeScript + build de production dans `dist/` |
-| `npm run preview` | Sert le build localement (port 4173) — simule la prod |
-| `npm run lint` | Analyse statique ESLint sur le projet |
+| `npm run dev` | Serveur de développement Vite (HMR) — port **5173** |
+| `npm run build` | Compilation TypeScript (`tsc -b`) + build production dans `dist/` |
+| `npm run preview` | Sert le build localement — port **4173** (simule la prod) |
+| `npm run lint` | Analyse statique ESLint sur tout le projet |
 
 ```bash
 # Build de production
 npm run build
 
-# Tester le build en local (avec l'API distante)
+# Vérifier le build avec l'API distante
 VITE_API_BASE_URL=https://api.kap-fret.ereborhub.cloud npm run build
 npm run preview
 ```
 
-> **Note :** aucun script `test` n'est configuré pour l'instant. Voir la section [Tests](#tests).
+> **Note :** aucun script `npm run test` n'est configuré pour l'instant. Voir la section [Tests](#tests).
 
 ---
 
@@ -173,24 +221,30 @@ npm run preview
 
 ```
 kap-fret-app/
-├── public/                 # Assets statiques (favicon, icônes)
+├── public/                     # Assets statiques (favicon.svg, etc.)
 ├── src/
-│   ├── app/                # Bootstrap React (App, main)
-│   ├── routes/             # Router, routes protégées par rôle
-│   ├── layouts/            # AppLayout, AuthLayout
-│   ├── pages/              # Pages métier (tickets, fret, admin…)
-│   ├── components/         # UI réutilisable, formulaires, dashboard
-│   ├── hooks/              # Hooks React Query par domaine
-│   ├── services/           # Client Axios + services API
-│   ├── lib/                # Utilitaires (Hydra, stats, PDF, filtres)
-│   ├── providers/          # AuthProvider, QueryClientProvider
-│   ├── schemas/            # Schémas Zod (validation formulaires)
-│   ├── constants/          # Rôles, statuts, libellés
-│   └── types/              # Types TypeScript (Hydra, entités)
-├── netlify.toml            # Configuration déploiement Netlify
-├── vite.config.ts          # Vite + proxy dev + alias @/
-├── .env.example            # Modèle de variables d'environnement
-└── dist/                   # Sortie du build (généré)
+│   ├── app/                    # Point d'entrée React (App.tsx)
+│   ├── main.tsx                # Bootstrap DOM
+│   ├── routes/
+│   │   ├── index.tsx           # Définition du router (createBrowserRouter)
+│   │   ├── lazy-page.tsx       # Helper React.lazy + Suspense
+│   │   ├── lazy-pages.ts       # Toutes les pages en chargement différé
+│   │   └── ProtectedRoute.tsx  # Garde d'authentification et rôles
+│   ├── layouts/                # AppLayout, AuthLayout
+│   ├── pages/                  # Écrans métier (tickets, fret, admin…)
+│   ├── components/             # UI, formulaires, dashboard, modales
+│   ├── hooks/                  # Hooks React Query par domaine
+│   ├── services/               # Client Axios + services API
+│   ├── lib/                    # Hydra, stats, PDF, filtres, api-config
+│   ├── providers/              # AuthProvider, QueryProvider, SidebarProvider
+│   ├── schemas/                # Schémas Zod (validation formulaires)
+│   ├── constants/              # Rôles, endpoints, clés localStorage
+│   └── types/                  # Types TypeScript (Hydra, entités métier)
+├── netlify.toml                # Build + redirect SPA Netlify
+├── vite.config.ts              # Vite, proxy dev, alias @/, code splitting
+├── .env.example                # Modèle de variables d'environnement
+├── eslint.config.js            # Configuration ESLint
+└── dist/                       # Sortie du build (généré, non versionné)
 ```
 
 ### Stack technique
@@ -198,32 +252,58 @@ kap-fret-app/
 | Couche | Technologie | Rôle |
 |--------|-------------|------|
 | UI | React 19 | Composants, hooks |
-| Build | Vite 8 | Bundler rapide, HMR, ESM natif |
-| Langage | TypeScript 6 (strict) | Typage fort, maintenabilité |
-| Styles | Tailwind CSS 4 | Utility-first, mobile first |
+| Build | Vite 8 | Bundler, HMR, ESM natif |
+| Langage | TypeScript 6 (strict) | Typage fort |
+| Styles | Tailwind CSS 4 | Utility-first, responsive |
 | UI Kit | Radix UI + composants maison | Accessibilité, dialogs, selects |
-| Routing | React Router 7 | SPA, routes protégées |
+| Routing | React Router 7 | SPA, routes protégées par rôle |
 | Data fetching | TanStack Query 5 | Cache, invalidation, états async |
-| HTTP | Axios | Intercepteurs JWT, refresh token |
-| Formulaires | React Hook Form + Zod | Validation déclarative |
-| Graphiques | Recharts | Dashboard statistiques |
-| PDF | jsPDF + autotable | Manifestes, rapports de caisse |
+| HTTP | Axios | JWT, refresh token, intercepteurs |
+| Formulaires | React Hook Form + Zod 4 | Validation déclarative |
+| Graphiques | Recharts 3 | Dashboard statistiques |
+| PDF | jsPDF + jspdf-autotable | Manifestes, rapports de caisse |
 | Notifications | Sonner | Toasts utilisateur |
+| Icônes | Lucide React | Iconographie cohérente |
 
 ### Pourquoi Vite plutôt que Webpack ?
 
-- **Démarrage instantané** en dev (ESM natif, pas de bundle complet au cold start)
-- **Configuration minimale** pour React + TypeScript
-- **Build Rollup** optimisé pour la production
-- **Écosystème moderne** aligné avec React 19 et les dernières versions de TypeScript
+- **Démarrage rapide** en dev grâce aux modules ESM natifs (pas de bundle complet au cold start)
+- **Configuration minimale** pour React + TypeScript + Tailwind
+- **Build Rollup/Rolldown** optimisé avec code splitting automatique
+- **Écosystème aligné** avec React 19 et les versions récentes de TypeScript
 
 ### Gestion d'état
 
-- **Serveur** : TanStack Query (cache des listes, détails, stats)
-- **Auth** : React Context (`AuthProvider`) + `localStorage` (JWT, refresh token, profil)
-- **UI locale** : `useState` / `useReducer` dans les composants et formulaires
+| Type d'état | Solution |
+|-------------|----------|
+| Données serveur | **TanStack Query** — cache, refetch, clés par filtres |
+| Authentification | **React Context** (`AuthProvider`) + `localStorage` (JWT, refresh, profil) |
+| UI locale | `useState` / formulaires contrôlés (React Hook Form) |
+| Navigation | React Router 7 |
 
 Pas de Redux : la complexité métier est portée par React Query et les services API.
+
+### Code splitting et performances
+
+Les pages sont chargées **à la demande** via `lazy-pages.ts` et le helper `lazyPage()` :
+
+```typescript
+// src/routes/lazy-pages.ts
+export const DashboardPage = lazyPage(
+  () => import('@/pages/dashboard/DashboardPage'),
+  'DashboardPage',
+)
+```
+
+Tailles indicatives après `npm run build` :
+
+| Chunk | Taille (gzip) | Chargé quand |
+|-------|---------------|--------------|
+| Bundle initial (`index` + vendors) | ~170 Ko | Première visite / login |
+| `DashboardPage` (Recharts) | ~129 Ko | Navigation vers `/dashboard` |
+| `passenger-manifest-pdf` (jsPDF) | ~141 Ko | Export PDF manifeste |
+
+Le bundle initial est d'environ **~556 Ko** (non compressé) au lieu d'un monolithe ~2 Mo.
 
 ---
 
@@ -236,6 +316,7 @@ Pas de Redux : la complexité métier est portée par React Query et les service
   command = "npm run build"
   publish = "dist"
 
+# SPA React Router — évite les 404 au refresh direct
 [[redirects]]
   from = "/*"
   to = "/index.html"
@@ -245,15 +326,15 @@ Pas de Redux : la complexité métier est portée par React Query et les service
   NODE_VERSION = "22"
 ```
 
-La redirection `/* → /index.html` est **obligatoire** pour React Router (évite les 404 sur refresh direct).
-
-### Variables Netlify
+### Variables d'environnement Netlify
 
 Dans **Site settings → Environment variables** :
 
-| Clé | Valeur (Production) |
-|-----|---------------------|
+| Clé | Valeur (Production / Preview) |
+|-----|-------------------------------|
 | `VITE_API_BASE_URL` | `https://api.kap-fret.ereborhub.cloud` |
+
+> Sans cette variable, le build réussit mais l'application ne peut pas joindre l'API en production.
 
 ### Déploiement via CLI
 
@@ -271,13 +352,24 @@ netlify deploy --build
 netlify deploy --prod --build
 ```
 
+### Déploiement via Git (recommandé)
+
+1. Connecter le dépôt GitHub/GitLab à Netlify
+2. Build command : `npm run build`
+3. Publish directory : `dist`
+4. Ajouter `VITE_API_BASE_URL` dans l'UI Netlify
+5. Chaque push sur la branche de production déclenche un déploiement
+
 ### Checklist post-déploiement
 
 - [ ] Page de login accessible
-- [ ] Authentification JWT fonctionnelle
-- [ ] Navigation directe vers `/tickets`, `/freight` (pas de 404)
-- [ ] Pas d'erreur CORS dans la console navigateur
+- [ ] Authentification JWT fonctionnelle (`POST /api/authentication_token`)
+- [ ] `GET /api/users/about` sans erreur CORS
+- [ ] Navigation directe vers `/tickets`, `/freight` (pas de 404 — redirect SPA)
 - [ ] Dashboard et listes chargent les données API
+- [ ] Origine Netlify whitelistée côté backend CORS
+
+**URL de test :** [LIEN_NETLIFY](https://[votre-site].netlify.app) <!-- TODO -->
 
 ---
 
@@ -285,14 +377,17 @@ netlify deploy --prod --build
 
 ### URL de base
 
-| Environnement | Base URL |
-|---------------|----------|
-| Production / Test | `https://api.kap-fret.ereborhub.cloud` |
+| Élément | Valeur |
+|---------|--------|
+| Hôte API | `https://api.kap-fret.ereborhub.cloud` |
 | Préfixe routes | `/api` |
+| URL complète exemple | `https://api.kap-fret.ereborhub.cloud/api/tickets` |
+| Format réponses listes | JSON-LD / Hydra (`hydra:member`, `hydra:totalItems`) |
+| Authentification | JWT Bearer (`Authorization: Bearer <token>`) |
 
 ### Configuration Axios
 
-Le client HTTP est centralisé dans `src/services/api.ts` :
+Client centralisé dans `src/services/api.ts` :
 
 ```typescript
 import axios from 'axios'
@@ -322,33 +417,37 @@ api.interceptors.request.use((config) => {
 })
 ```
 
-`getApiBaseUrl()` (`src/lib/api-config.ts`) :
+Résolution de l'URL (`src/lib/api-config.ts`) :
 
-- **Dev** → `''` (requêtes relatives, proxy Vite)
-- **Prod** → `import.meta.env.VITE_API_BASE_URL`
+```typescript
+export function getApiBaseUrl(): string {
+  if (import.meta.env.DEV) return ''
+  const envUrl = import.meta.env.VITE_API_BASE_URL
+  if (envUrl?.trim()) return envUrl.replace(/\/$/, '')
+  // En prod sans variable : log d'erreur + fallback dev
+  return 'http://localhost:8000'
+}
+```
 
-### Exemple : authentification + profil utilisateur
+### Exemple : login + profil utilisateur
 
 ```typescript
 // POST /api/authentication_token
-const { data } = await api.post('/api/authentication_token', {
-  username: 'agent@exemple.com',
-  password: '********',
-}, {
-  headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-})
+const { data: auth } = await api.post(
+  '/api/authentication_token',
+  { username: 'agent@exemple.com', password: '********' },
+  { headers: { Accept: 'application/json', 'Content-Type': 'application/json' } },
+)
+// auth.token, auth.refresh_token
 
-// GET /api/users/about (profil connecté)
-const { data: user } = await api.get('/api/users/about', {
-  headers: { Accept: 'application/ld+json' },
-})
+// GET /api/users/about
+const { data: user } = await api.get('/api/users/about')
 ```
 
-### Collections Hydra
-
-Les listes API Platform sont lues via `hydra:member` :
+### Exemple : liste Hydra
 
 ```typescript
+import { api } from '@/services/api'
 import { extractHydraMember } from '@/lib/hydra'
 
 const { data } = await api.get('/api/tickets', {
@@ -356,15 +455,47 @@ const { data } = await api.get('/api/tickets', {
 })
 
 const tickets = extractHydraMember(data)
+const total = data['hydra:totalItems']
 ```
+
+### Gestion des erreurs (intercepteur)
+
+```typescript
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config
+
+    // Pas de redirection auto sur login ou requêtes marquées skipAuthRedirect
+    if (originalRequest?.skipAuthRedirect) {
+      return Promise.reject(error)
+    }
+
+    // 401 → tentative refresh token, sinon redirection /login
+    if (error.response?.status === 401 && !originalRequest?._retry) {
+      // ... logique refresh JWT ...
+    }
+
+    // Toast utilisateur (Hydra, RFC 7807, erreurs réseau)
+    handleApiError(error)
+    return Promise.reject(error)
+  },
+)
+```
+
+Les flags internes (`skipAuthRedirect`, `_retry`) sont des propriétés **Axios** — ils ne doivent **pas** être envoyés comme en-têtes HTTP (sinon échec du preflight CORS).
+
+Messages d'erreur extraits via `extractApiErrorMessage()` : `hydra:description`, `detail`, `violations` (422).
 
 ### CORS
 
 En production, le frontend (Netlify) et l'API (sous-domaine distinct) communiquent en **cross-origin**.
 
-- Le backend doit autoriser l'origine Netlify dans `Access-Control-Allow-Origin`
-- Les en-têtes autorisés côté API : `content-type`, `authorization`
-- **Ne pas** envoyer d'en-têtes HTTP personnalisés depuis le frontend (les flags internes Axios comme `skipAuthRedirect` restent dans la config Axios, pas dans les headers)
+| Côté frontend | Côté backend (à configurer) |
+|---------------|----------------------------|
+| `VITE_API_BASE_URL` correctement défini | `Access-Control-Allow-Origin` incluant l'URL Netlify |
+| Pas d'en-têtes HTTP custom non standards | Autoriser `Authorization`, `Content-Type`, `Accept` |
+| En dev : proxy Vite (`VITE_API_BASE_URL` vide) | Whitelister `http://localhost:5173` si appel direct |
 
 ---
 
@@ -372,26 +503,35 @@ En production, le frontend (Netlify) et l'API (sous-domaine distinct) communique
 
 ### Conventions de code
 
-- **TypeScript strict** activé (`tsconfig.app.json`)
-- **ESLint** : `npm run lint` avant toute PR
+- **TypeScript strict** — `tsconfig.app.json`
+- **ESLint** — exécuter `npm run lint` avant toute PR
 - **Alias** `@/` → `src/`
 - **Nommage** :
   - Composants : `PascalCase` (`TicketForm.tsx`)
   - Hooks : `use` + `camelCase` (`useTickets.ts`)
-  - Services : `camelCase` + suffixe `.service.ts`
-  - Types : `PascalCase` dans `src/types/`
-- **Formulaires** : schéma Zod dans `src/schemas/`, resolver Hook Form
+  - Services : `*.service.ts`
+  - Schémas Zod : `src/schemas/`
+  - Types : `src/types/`
+- **Formulaires** : schéma Zod + `zodResolver` (React Hook Form)
+
+### Gestion des états
+
+1. **Données API** → hooks React Query (`useTickets`, `useStats`, etc.)
+2. **Auth globale** → `AuthProvider` + `useAuth()`
+3. **Formulaires** → état local React Hook Form
+4. **Filtres de page** → `useState` / URL search params selon le cas
 
 ### Optimisations
 
 | Technique | Statut | Détail |
 |-----------|--------|--------|
-| Code splitting par route | À améliorer | Bundle principal ~2 Mo (Recharts, jsPDF) |
-| React Query cache | Actif | `staleTime`, clés par filtres |
-| Lazy loading images | Partiel | Assets dans `public/` |
-| Proxy dev anti-CORS | Actif | `vite.config.ts` |
+| Lazy loading par route | Actif | `lazy-pages.ts` + `Suspense` |
+| Vendor chunks | Actif | `react-vendor`, `data-vendor` dans `vite.config.ts` |
+| React Query cache | Actif | `staleTime`, clés par filtres et pagination |
+| Proxy dev anti-CORS | Actif | `vite.config.ts` → `/api` |
+| PDF / Recharts | À la demande | Chunks séparés, chargés à l'usage |
 
-Piste d'amélioration : `React.lazy()` sur les pages admin et modules PDF.
+Piste d'amélioration : `import()` dynamique de jsPDF **au clic** sur « Exporter PDF » pour retarder encore le chunk PDF.
 
 ---
 
@@ -401,17 +541,18 @@ Piste d'amélioration : `React.lazy()` sur les pages admin et modules PDF.
 
 | Outil suggéré | Usage |
 |---------------|-------|
-| **Vitest** | Tests unitaires (utils, parsers Hydra, stats) |
-| **Testing Library** | Tests composants React |
-| **Playwright / Cypress** | Tests E2E (login, création billet) |
+| **Vitest** | Tests unitaires (`lib/`, parsers Hydra, stats) |
+| **Testing Library** | Tests de composants React |
+| **Playwright** ou **Cypress** | Tests E2E (login, création billet, check-in) |
 
 ```bash
-# À venir — placeholder
+# À configurer — placeholders
 # npm run test
 # npm run test:coverage
+# npm run test:e2e
 ```
 
-**Couverture cible suggérée :** `lib/`, `services/`, parsers Hydra, hooks critiques.
+**Couverture cible suggérée :** `src/lib/`, `src/services/`, parsers Hydra, hooks critiques (`useAuth`, `useStats`).
 
 ---
 
@@ -419,10 +560,11 @@ Piste d'amélioration : `React.lazy()` sur les pages admin et modules PDF.
 
 ### Workflow
 
-1. Fork / branche feature depuis `main`
+1. Fork ou branche feature depuis `main`
 2. `git checkout -b feat/ma-fonctionnalite`
-3. Développer + `npm run lint` + `npm run build`
-4. Ouvrir une Pull Request
+3. Développer
+4. `npm run lint` et `npm run build`
+5. Ouvrir une Pull Request
 
 ### Conventions de commit (Conventional Commits)
 
@@ -430,6 +572,7 @@ Piste d'amélioration : `React.lazy()` sur les pages admin et modules PDF.
 feat(tickets): ajouter filtre par bureau émetteur
 fix(auth): corriger preflight CORS sur /users/about
 docs(readme): mettre à jour section Netlify
+perf(bundle): lazy load des pages métier
 chore(deps): bump vite to 8.x
 ```
 
@@ -444,23 +587,27 @@ chore(deps): bump vite to 8.x
 - [ ] Nouvelle fonctionnalité
 - [ ] Refactoring
 - [ ] Documentation
+- [ ] Performance
 
 ## Checklist
 - [ ] `npm run lint` OK
 - [ ] `npm run build` OK
-- [ ] Testé en local (`npm run dev` ou `preview`)
-- [ ] Pas de secret committé (.env)
+- [ ] Testé en local (`npm run dev` ou `npm run preview`)
+- [ ] Pas de secret committé (`.env`)
+- [ ] Variable `VITE_API_BASE_URL` documentée si modifiée
 - [ ] Screenshots si changement UI
 
 ## Issues liées
 Closes #<!-- numéro -->
 ```
 
-### Review
+### Règles de review
 
-- PR petite et focalisée (< 400 lignes si possible)
+- PR **petite et focalisée** (< 400 lignes si possible)
 - Pas de refactor hors scope
-- Respect des patterns existants (services, hooks, Hydra)
+- Respect des patterns existants (services → hooks → pages)
+- Vérifier l'impact CORS / auth pour tout changement Axios
+- Pas de régression sur le code splitting (éviter les imports statiques de libs lourdes dans `App.tsx` ou les layouts)
 
 ---
 
@@ -468,26 +615,37 @@ Closes #<!-- numéro -->
 
 ### Erreur CORS / « Preflight response is not successful »
 
-**Symptôme :** requête bloquée après login, `OPTIONS` en 400.
+**Symptôme :** requête bloquée après login, `OPTIONS` en 400 dans l'onglet Network.
 
 **Causes fréquentes :**
-- En-têtes HTTP custom non autorisés par l'API
-- Origine non whitelistée (ex. `http://localhost:4173`)
+- Origine Netlify ou `localhost:4173` non whitelistée côté API
+- En-têtes HTTP personnalisés envoyés au serveur (ex. anciens `X-Skip-Auth-Redirect`)
 
 **Solutions :**
-- Vérifier que `VITE_API_BASE_URL` est correct
-- Demander l'ajout de l'origine Netlify / localhost côté backend CORS
-- En dev : laisser `VITE_API_BASE_URL` vide et utiliser `npm run dev` (proxy)
+- En dev : laisser `VITE_API_BASE_URL` vide et utiliser `npm run dev` (proxy Vite)
+- Demander l'ajout de l'origine exacte dans la config CORS backend
+- Vérifier que les flags Axios (`skipAuthRedirect`) restent dans `config`, pas dans `headers`
 
-### Build échoue sur Netlify
+### Build échoue (`tsc` ou Vite)
 
-- Vérifier `NODE_VERSION = 22` dans `netlify.toml`
-- Vérifier les logs : erreurs TypeScript (`tsc -b`)
-- Confirmer `VITE_API_BASE_URL` dans les variables Netlify
+```bash
+npm run build
+```
+
+- Erreurs TypeScript → corriger les types avant le merge
+- Vérifier Node 22 (`netlify.toml` ou `nvm use 22`)
+- Supprimer `node_modules` et réinstaller : `rm -rf node_modules && npm install`
 
 ### 404 sur refresh (`/tickets/123`)
 
-- Vérifier la redirection SPA dans `netlify.toml`
+Vérifier la redirection SPA dans `netlify.toml` :
+
+```toml
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+```
 
 ### API injoignable en preview local
 
@@ -498,22 +656,44 @@ npm run preview
 
 ### `VITE_API_BASE_URL` manquant en production
 
-Message console : `[KAP FRET] VITE_API_BASE_URL est manquant...`  
-→ Configurer la variable dans Netlify et redéployer.
+**Symptôme :** console `[KAP FRET] VITE_API_BASE_URL est manquant en production...`
+
+**Solution :** configurer la variable dans Netlify → **Site settings → Environment variables** → redéployer.
+
+### Dashboard à 0 / stats incorrectes
+
+- Vérifier que `GET /api/stats` répond (erreur 500 = problème backend)
+- Vérifier les filtres de période et de devise sur le dashboard
+- Consulter l'onglet Network pour les erreurs API
+
+### Bundle JS volumineux (avertissement Netlify)
+
+Le code splitting est en place. Un avertissement peut subsister sur la **taille totale** des assets, mais le **chargement initial** est réduit (~556 Ko). Les chunks Recharts et PDF ne se chargent qu'à l'usage.
 
 ---
 
 ## Changelog
 
-Voir [CHANGELOG.md](./CHANGELOG.md) *(à créer)* ou les releases GitHub.
-
 ### [0.0.0] — Environnement de test
 
+#### Ajouté
 - Application React complète (billetterie, check-in, fret, caisses, admin)
-- Tableau de bord avec statistiques et graphiques
+- Tableau de bord avec KPIs, graphiques Recharts, activité récente
 - Authentification JWT + refresh token
-- Déploiement Netlify (`netlify.toml`)
-- Correction CORS : flags Axios internes hors headers HTTP
+- Export PDF (manifestes passagers, fret, rapports caisse)
+- Configuration Netlify (`netlify.toml`)
+- Lazy loading des pages (`lazy-pages.ts`)
+- Code splitting vendors (`react-vendor`, `data-vendor`)
+
+#### Corrigé
+- Preflight CORS : flags Axios internes hors en-têtes HTTP
+- Filtres dashboard (devise, période, revenus multi-devises)
+- Favicon et variables d'environnement documentées
+
+#### À venir
+- Suite de tests (Vitest + Playwright)
+- URL Netlify de test définitive
+- Changelog détaillé dans `CHANGELOG.md` <!-- TODO: créer le fichier si besoin -->
 
 ---
 
@@ -521,10 +701,10 @@ Voir [CHANGELOG.md](./CHANGELOG.md) *(à créer)* ou les releases GitHub.
 
 **Proprietary — Tous droits réservés.**
 
-Ce code est la propriété de **[NOM_ORGANISATION]** <!-- TODO -->.  
-Toute reproduction ou distribution sans autorisation est interdite.
+Ce code est la propriété de **[NOM_ORGANISATION]** <!-- TODO: nom légal de l'organisation -->.  
+Toute reproduction ou distribution sans autorisation écrite est interdite.
 
-<!-- Alternative open source : MIT, Apache 2.0 — à confirmer avec le porteur du projet -->
+<!-- Alternative open source à confirmer : MIT, Apache 2.0 -->
 
 ---
 
@@ -542,5 +722,5 @@ Développeur Frontend — Kap-Fret
 ---
 
 <p align="center">
-  <sub>Kap-Fret · Environnement de test</sub>
+  <sub>Kap-Fret · Environnement de test frontend</sub>
 </p>
