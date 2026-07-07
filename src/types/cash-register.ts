@@ -1,19 +1,13 @@
 import type { HydraResource } from './hydra'
 
-export interface CashRegisterCurrencyRef extends HydraResource {
-  id: string
-  code: string
-  label: string
-  symbol: string
-}
-
 export interface CashRegisterResource extends HydraResource {
   id: string
   code: string
   name: string
-  currency: string | CashRegisterCurrencyRef
-  openingBalance: string
-  currentBalance: string
+  openingBalanceCDF: string
+  openingBalanceUSD: string
+  currentBalanceCDF: string
+  currentBalanceUSD: string
   active: boolean
   deleted: boolean
   issuingOffice?: string
@@ -24,8 +18,8 @@ export interface CashRegisterResource extends HydraResource {
 export interface CashRegisterCreatePayload {
   code: string
   name: string
-  currency: string
-  openingBalance: string
+  openingBalanceCDF: string
+  openingBalanceUSD: string
   active: boolean
 }
 

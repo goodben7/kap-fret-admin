@@ -4,8 +4,8 @@ import { cashTransactionService } from '@/services/cash-transaction.service'
 
 export const previewConversionKeys = {
   all: ['previewConversion'] as const,
-  preview: (cashRegister: string, amount: string, currencyIri: string) =>
-    [...previewConversionKeys.all, cashRegister, amount, currencyIri] as const,
+  preview: (cashRegister: string, amount: string, currencyIri: string, paymentCurrencyIri?: string) =>
+    [...previewConversionKeys.all, cashRegister, amount, currencyIri, paymentCurrencyIri ?? ''] as const,
 }
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
@@ -23,6 +23,7 @@ export function usePreviewConversion(params: {
   cashRegister?: string
   amount: string
   currencyIri?: string
+  paymentCurrencyIri?: string
   enabled?: boolean
 }) {
   const debouncedAmount = useDebouncedValue(params.amount, 400)
@@ -37,12 +38,14 @@ export function usePreviewConversion(params: {
       params.cashRegister ?? '',
       debouncedAmount,
       params.currencyIri ?? '',
+      params.paymentCurrencyIri,
     ),
     queryFn: () =>
       cashTransactionService.previewConversion({
         cashRegister: params.cashRegister!,
         amount: debouncedAmount,
         currency: params.currencyIri!,
+        paymentCurrency: params.paymentCurrencyIri,
       }),
     enabled: canFetch,
     staleTime: 30_000,

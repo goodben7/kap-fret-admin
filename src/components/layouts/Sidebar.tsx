@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
   Ticket,
@@ -7,11 +7,12 @@ import {
   Settings,
   User,
   Receipt,
+  Wallet,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import { useSidebar } from '@/hooks/useSidebar'
-import { NAV_ITEMS, getNavItemsForRoles } from '@/constants/roles'
+import { NAV_ITEMS, getNavItemsForRoles, isNavPathActive } from '@/constants/roles'
 import {
   APP_SHELL_HEADER_TOP,
   SIDEBAR_TRANSITION,
@@ -26,6 +27,7 @@ const iconMap = {
   Package,
   Settings,
   Receipt,
+  Wallet,
 }
 
 function CollapsedNavTooltip({ label }: { label: string }) {
@@ -54,20 +56,22 @@ function SidebarNavLink({
   icon: typeof LayoutDashboard
   collapsed: boolean
 }) {
+  const location = useLocation()
+  const active = isNavPathActive(location.pathname, to)
+
   const link = (
     <NavLink
       to={to}
       title={collapsed ? label : undefined}
       aria-label={collapsed ? label : undefined}
-      className={({ isActive }) =>
-        cn(
-          'flex items-center rounded-xl text-sm font-medium transition-colors',
-          collapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5',
-          isActive
-            ? 'bg-brand-orange text-white shadow-sm'
-            : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
-        )
-      }
+      aria-current={active ? 'page' : undefined}
+      className={cn(
+        'flex items-center rounded-xl text-sm font-medium transition-colors',
+        collapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5',
+        active
+          ? 'bg-brand-orange text-white shadow-sm'
+          : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+      )}
     >
       <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
       {!collapsed && <span className="truncate">{label}</span>}

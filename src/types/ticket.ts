@@ -1,7 +1,7 @@
 import type { HydraResource } from './hydra'
 import type { Checkpoint } from './checkpoint'
 import type { IssuingOffice } from './issuing-office'
-import type { Gender, PaymentMode, TicketStatus, Currency } from '@/constants/ticket'
+import type { Gender, PaymentMode, TicketStatus, Currency, TicketCategory } from '@/constants/ticket'
 
 export interface CashRegisterRef extends HydraResource {
   id: string
@@ -22,7 +22,8 @@ export interface Ticket extends HydraResource {
   id: string
   ticketNumber: string
   passengerName: string
-  age: number
+  age?: number
+  category?: TicketCategory
   gender: Gender
   phone?: string
   departure: string | Checkpoint
@@ -32,7 +33,10 @@ export interface Ticket extends HydraResource {
   issuingOffice: string | IssuingOffice
   issuingOfficeName?: string
   basePrice: string
+  /** Devise du tarif billet (toujours USD côté métier). */
   currency?: Currency
+  /** Devise choisie pour l'encaissement. */
+  paymentCurrency?: Currency
   tva: string
   fpt: string
   rva: string
@@ -58,7 +62,8 @@ export interface Ticket extends HydraResource {
 
 export interface TicketCreatePayload {
   passengerName: string
-  age: number
+  age?: number
+  category: TicketCategory
   gender: Gender
   phone: string
   departure: string
@@ -66,7 +71,10 @@ export interface TicketCreatePayload {
   travelDate: string
   travelTime: string
   basePrice: string
+  /** Tarif billet en USD. */
   currency: Currency
+  /** Devise d'encaissement (USD ou CDF). */
+  paymentCurrency: Currency
   tva: string
   fpt: string
   rva: string
@@ -104,7 +112,10 @@ export interface TicketReportTravelDatePayload {
 }
 
 export interface TicketPaymentPayload {
+  /** Montant du billet en USD. */
   amount: string
+  /** Devise d'encaissement. */
+  paymentCurrency: Currency
   cashRegister: string
   description: string
 }

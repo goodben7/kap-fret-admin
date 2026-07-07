@@ -10,7 +10,7 @@ import {
   Users,
   Banknote,
   ArrowLeftRight,
-  Wallet,
+  Receipt,
   type LucideIcon,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -67,10 +67,10 @@ const adminSections: AdminSection[] = [
         icon: ArrowLeftRight,
       },
       {
-        title: 'Caisses',
-        description: 'Caisses enregistreuses et soldes',
-        path: '/admin/cash-registers',
-        icon: Wallet,
+        title: 'Transactions',
+        description: 'Mouvements caisse, encaissements et décaissements',
+        path: '/cash-transactions',
+        icon: Receipt,
       },
     ],
   },

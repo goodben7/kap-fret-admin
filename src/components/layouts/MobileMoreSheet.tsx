@@ -1,6 +1,7 @@
-import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Menu, Package, Receipt, Settings, Ticket, User, UserCheck, X } from 'lucide-react'
+import { NavLink, useLocation } from 'react-router-dom'
+import { LayoutDashboard, Menu, Package, Receipt, Settings, Ticket, User, UserCheck, Wallet, X } from 'lucide-react'
 import type { NavItem } from '@/constants/roles'
+import { isNavPathActive } from '@/constants/roles'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -13,6 +14,7 @@ const iconMap = {
   User,
   Menu,
   Receipt,
+  Wallet,
 }
 
 interface MobileMoreSheetProps {
@@ -30,6 +32,8 @@ export function MobileMoreSheet({
   title = 'Menu',
   emptyMessage = 'Aucun élément disponible.',
 }: MobileMoreSheetProps) {
+  const location = useLocation()
+
   if (!open) return null
 
   return (
@@ -62,19 +66,19 @@ export function MobileMoreSheet({
           <ul className="space-y-1">
             {items.map((item) => {
               const Icon = iconMap[item.icon as keyof typeof iconMap] ?? Menu
+              const active = isNavPathActive(location.pathname, item.path)
               return (
                 <li key={item.path}>
                   <NavLink
                     to={item.path}
                     onClick={onClose}
-                    className={({ isActive }) =>
-                      cn(
-                        'flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors',
-                        isActive
-                          ? 'bg-brand-orange/10 text-brand-orange'
-                          : 'text-foreground hover:bg-muted/60',
-                      )
-                    }
+                    aria-current={active ? 'page' : undefined}
+                    className={cn(
+                      'flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors',
+                      active
+                        ? 'bg-brand-orange/10 text-brand-orange'
+                        : 'text-foreground hover:bg-muted/60',
+                    )}
                   >
                     <span
                       className={cn(

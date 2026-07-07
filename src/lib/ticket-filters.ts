@@ -5,14 +5,17 @@ import { parseCurrencyFilter } from '@/constants/ticket'
 function addDay(isoDate: string, days: number): string {
   const date = new Date(`${isoDate}T12:00:00`)
   date.setDate(date.getDate() + days)
-  return date.toISOString().split('T')[0] ?? isoDate
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
 
 function appendTravelDateFilter(params: Record<string, string | number>, travelDate: string) {
   const day = travelDate.trim()
   if (!day) return
-  params['travelDate[after]'] = `${day}T00:00:00`
-  params['travelDate[before]'] = `${addDay(day, 1)}T00:00:00`
+  params['travelDate[after]'] = `${day}T00:00:00.000Z`
+  params['travelDate[before]'] = `${addDay(day, 1)}T00:00:00.000Z`
 }
 
 export interface TicketFilters {

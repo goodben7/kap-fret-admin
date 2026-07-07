@@ -175,7 +175,7 @@ export async function generatePassengerManifestPdf(params: PassengerManifestPara
     String(index + 1),
     ticket.passengerName,
     ticket.ticketNumber,
-    String(ticket.age),
+    ticket.category ?? '—',
     formatGender(ticket.gender),
     ticket.phone?.trim() || '—',
   ])
@@ -185,7 +185,7 @@ export async function generatePassengerManifestPdf(params: PassengerManifestPara
 
   autoTable(doc, {
     startY: TABLE_START_Y,
-    head: [['N°', 'NOMS PASSAGERS', 'N° BILLET', 'AGE', 'SEXE', 'TELEPHONE']],
+    head: [['N°', 'NOMS PASSAGERS', 'N° BILLET', 'CATEGORIES', 'SEXE', 'TELEPHONE']],
     body: rows,
     theme: 'grid',
     styles: {

@@ -1,8 +1,7 @@
 import { Wallet } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { formatMoney } from '@/lib/utils'
-import { CURRENCY, normalizeCurrency, type Currency } from '@/constants/ticket'
+import { CURRENCY, type Currency } from '@/constants/ticket'
 import type { AppStats } from '@/types/stats'
 
 interface CashRegistersSectionProps {
@@ -53,8 +52,8 @@ export function CashRegistersSection({ cashRegisters }: CashRegistersSectionProp
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               {registers.map((register) => {
-                const currency = normalizeCurrency(register.currency)
-                const balance = parseFloat(register.currentBalance) || 0
+                const usd = parseFloat(register.currentBalanceUSD) || 0
+                const cdf = parseFloat(register.currentBalanceCDF) || 0
                 return (
                   <div
                     key={register.id}
@@ -65,11 +64,15 @@ export function CashRegistersSection({ cashRegisters }: CashRegistersSectionProp
                         <p className="truncate font-semibold">{register.name}</p>
                         <p className="mt-0.5 font-mono text-xs text-muted-foreground">{register.id}</p>
                       </div>
-                      <Badge variant="secondary">{currency}</Badge>
                     </div>
-                    <p className="mt-3 text-xl font-bold tabular-nums text-brand-orange">
-                      {formatMoney(balance, currency)}
-                    </p>
+                    <div className="mt-3 space-y-1">
+                      <p className="text-lg font-bold tabular-nums text-brand-orange">
+                        {formatMoney(usd, CURRENCY.USD)}
+                      </p>
+                      <p className="text-sm font-semibold tabular-nums text-brand-orange">
+                        {formatMoney(cdf, CURRENCY.CDF)}
+                      </p>
+                    </div>
                   </div>
                 )
               })}

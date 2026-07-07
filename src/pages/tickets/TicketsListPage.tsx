@@ -14,6 +14,7 @@ import {
   LayoutGrid,
   Table2,
   FileText,
+  Bookmark,
 } from 'lucide-react'
 import { useTickets } from '@/hooks/useTickets'
 import {
@@ -37,8 +38,8 @@ import { Pagination } from '@/components/ui/pagination'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { CheckpointAsyncSelect } from '@/components/ui/checkpoint-async-select'
-import { formatMoney, formatDate, cn } from '@/lib/utils'
-import { getTicketTotal } from '@/lib/ticket'
+import { formatMoney, cn } from '@/lib/utils'
+import { getTicketTotal, getUpcomingFlightTravelDateInput, formatTicketTravelDate, formatTravelDateInput } from '@/lib/ticket'
 import {
   countActiveTicketFilters,
   emptyTicketFilters,
@@ -93,7 +94,7 @@ function TicketCard({ ticket }: { ticket: TicketType }) {
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
                 <span className="inline-flex items-center gap-1">
                   <Calendar className="h-3.5 w-3.5 shrink-0" />
-                  {formatDate(ticket.travelDate)}
+                  {formatTicketTravelDate(ticket.travelDate)}
                 </span>
                 {ticket.phone && (
                   <span className="inline-flex items-center gap-1">
@@ -161,7 +162,7 @@ function TicketTable({ tickets }: { tickets: TicketType[] }) {
                 </Badge>
               </TableCell>
               <TableCell className="hidden sm:table-cell text-muted-foreground whitespace-nowrap">
-                {formatDate(ticket.travelDate)}
+                {formatTicketTravelDate(ticket.travelDate)}
               </TableCell>
               <TableCell className="hidden md:table-cell text-muted-foreground whitespace-nowrap">
                 {ticket.phone ?? '—'}
@@ -269,6 +270,7 @@ function TicketFiltersFields({
       <Input
         label="Date de voyage"
         type="date"
+        placeholder="Prochain vol si vide"
         value={draft.travelDate}
         onChange={(e) => onChange({ travelDate: e.target.value })}
         className={filterInputClass}
@@ -390,6 +392,9 @@ export function TicketsListPage() {
     [searchParams],
   )
 
+  const explicitTravelDate = filters.travelDate.trim()
+  const activeFlightDate = explicitTravelDate || getUpcomingFlightTravelDateInput()
+
   const [searchInput, setSearchInput] = useState(filters.passengerName)
 
   useEffect(() => {
@@ -416,6 +421,7 @@ export function TicketsListPage() {
 
   const { data, isLoading, isFetching } = useTickets({
     ...filters,
+    travelDate: activeFlightDate,
     page,
     itemsPerPage: ITEMS_PER_PAGE,
   })
@@ -479,6 +485,16 @@ export function TicketsListPage() {
     }
   }
 
+  const reservedOnlyActive = filters.status === TICKET_STATUS.RESERVED
+
+  const toggleReservedOnly = () => {
+    const next: TicketFiltersState = {
+      ...filters,
+      status: reservedOnlyActive ? '' : TICKET_STATUS.RESERVED,
+    }
+    setSearchParams(ticketFiltersToSearchParams(next, 1), { replace: true })
+  }
+
   return (
     <div className="mx-auto max-w-3xl space-y-4 lg:max-w-5xl">
       <div className="flex items-center justify-between gap-3">
@@ -492,6 +508,8 @@ export function TicketsListPage() {
           {data && (
             <p className="text-sm text-muted-foreground mt-1 pl-11">
               {data.totalItems} billet{data.totalItems !== 1 ? 's' : ''}
+              {reservedOnlyActive ? ` réservé${data.totalItems !== 1 ? 's' : ''}` : ''}
+              {' · '}Vol du {formatTravelDateInput(activeFlightDate)}
             </p>
           )}
         </div>
@@ -545,6 +563,20 @@ export function TicketsListPage() {
             )}
           </Button>
         </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant={reservedOnlyActive ? 'default' : 'outline'}
+          size="sm"
+          className="h-9 rounded-full px-3 shadow-sm"
+          onClick={toggleReservedOnly}
+          aria-pressed={reservedOnlyActive}
+        >
+          <Bookmark className="h-4 w-4 sm:mr-1.5" />
+          <span className="text-sm">Réservés — vol du {formatTravelDateInput(activeFlightDate)}</span>
+        </Button>
       </div>
 
       {/* Mobile : bottom sheet */}
@@ -615,8 +647,11 @@ export function TicketsListPage() {
           {filters.phone && (
             <FilterChip label={filters.phone} onRemove={() => patchFilters({ phone: '' })} />
           )}
-          {filters.travelDate && (
-            <FilterChip label={formatDate(filters.travelDate)} onRemove={() => patchFilters({ travelDate: '' })} />
+          {explicitTravelDate && (
+            <FilterChip
+              label={`Vol ${formatTravelDateInput(explicitTravelDate)}`}
+              onRemove={() => patchFilters({ travelDate: '' })}
+            />
           )}
           {filters.status && (
             <FilterChip
@@ -655,8 +690,12 @@ export function TicketsListPage() {
       ) : !data?.items.length ? (
         <EmptyState
           icon={Ticket}
-          title="Aucun billet trouvé"
-          description="Modifiez vos filtres ou créez un nouveau billet."
+          title={reservedOnlyActive ? 'Aucun billet réservé' : 'Aucun billet pour ce vol'}
+          description={
+            reservedOnlyActive
+              ? `Aucun billet réservé pour le vol du ${formatTravelDateInput(activeFlightDate)}.`
+              : `Aucun billet pour le vol du ${formatTravelDateInput(activeFlightDate)}. Modifiez les filtres ou créez un nouveau billet.`
+          }
           action={{ label: 'Nouveau billet', onClick: () => { window.location.href = '/tickets/new' } }}
         />
       ) : (

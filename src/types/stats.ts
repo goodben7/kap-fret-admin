@@ -60,8 +60,8 @@ export interface StatsFinance {
 export interface StatsCashRegisterItem {
   id: string
   name: string
-  currency: string
-  currentBalance: string
+  currentBalanceCDF: string
+  currentBalanceUSD: string
 }
 
 export interface StatsCashRegisters {

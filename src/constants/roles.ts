@@ -30,7 +30,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Billetterie', path: '/tickets', icon: 'Ticket', roles: [ROLES.SPADM, ROLES.ADM, ROLES.TKT] },
   { label: 'Check-In', path: '/checkins', icon: 'UserCheck', roles: [ROLES.SPADM, ROLES.ADM, ROLES.CHK] },
   { label: 'Fret', path: '/freight', icon: 'Package', roles: [ROLES.SPADM, ROLES.ADM, ROLES.FRT] },
-  { label: 'Transactions', path: '/cash-transactions', icon: 'Receipt', roles: [ROLES.SPADM, ROLES.ADM, ROLES.MGR, ROLES.TKT, ROLES.CHK, ROLES.FRT] },
+  { label: 'Caisses', path: '/admin/cash-registers', icon: 'Wallet', roles: [ROLES.SPADM, ROLES.ADM, ROLES.MGR, ROLES.TKT, ROLES.CHK, ROLES.FRT] },
   { label: 'Administration', path: '/admin', icon: 'Settings', roles: [ROLES.SPADM, ROLES.ADM] },
 ]
 
@@ -39,7 +39,7 @@ export const MOBILE_ACTION_NAV_ITEMS: NavItem[] = [
   { label: 'Tickets', path: '/tickets', icon: 'Ticket', roles: [ROLES.SPADM, ROLES.ADM, ROLES.TKT] },
   { label: 'Check-In', path: '/checkins', icon: 'UserCheck', roles: [ROLES.SPADM, ROLES.ADM, ROLES.CHK] },
   { label: 'Fret', path: '/freight', icon: 'Package', roles: [ROLES.SPADM, ROLES.ADM, ROLES.FRT] },
-  { label: 'Transactions', path: '/cash-transactions', icon: 'Receipt', roles: [ROLES.SPADM, ROLES.ADM, ROLES.MGR, ROLES.TKT, ROLES.CHK, ROLES.FRT] },
+  { label: 'Caisses', path: '/admin/cash-registers', icon: 'Wallet', roles: [ROLES.SPADM, ROLES.ADM, ROLES.MGR, ROLES.TKT, ROLES.CHK, ROLES.FRT] },
   { label: 'Administration', path: '/admin', icon: 'Settings', roles: [ROLES.SPADM, ROLES.ADM] },
 ]
 
@@ -62,10 +62,18 @@ export function isMobileAccueilActive(pathname: string, accueilPath: string): bo
   return pathname === accueilPath || pathname.startsWith(`${accueilPath}/`)
 }
 
+export function isNavPathActive(pathname: string, path: string): boolean {
+  if (path === '/admin') {
+    return pathname === '/admin' || (pathname.startsWith('/admin/') && !pathname.startsWith('/admin/cash-registers'))
+  }
+  if (path === '/admin/cash-registers') {
+    return pathname === '/admin/cash-registers' || pathname.startsWith('/admin/cash-registers/')
+  }
+  return pathname === path || pathname.startsWith(`${path}/`)
+}
+
 export function isMobileActionRouteActive(pathname: string, actionPaths: string[]): boolean {
-  return actionPaths.some(
-    (path) => pathname === path || pathname.startsWith(`${path}/`) || (path === '/admin' && pathname.startsWith('/admin')),
-  )
+  return actionPaths.some((path) => isNavPathActive(pathname, path))
 }
 
 export function hasRole(userRoles: string[], requiredRoles: Role[]): boolean {

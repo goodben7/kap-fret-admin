@@ -112,9 +112,10 @@ export const router = createBrowserRouter([
           {
             element: <ProtectedRoute roles={[ROLES.SPADM, ROLES.ADM, ROLES.MGR, ROLES.TKT, ROLES.CHK, ROLES.FRT]} />,
             children: [
-              { path: '/cash-transactions', element: <CashTransactionsListPage /> },
-              { path: '/cash-transactions/new', element: <CashTransactionCreatePage /> },
-              { path: '/cash-transactions/:id', element: <CashTransactionDetailPage /> },
+              { path: '/admin/cash-registers', element: <CashRegistersPage /> },
+              { path: '/admin/cash-registers/new', element: <CashRegisterFormPage /> },
+              { path: '/admin/cash-registers/:id', element: <CashRegisterDetailPage /> },
+              { path: '/admin/cash-registers/:id/edit', element: <CashRegisterFormPage /> },
             ],
           },
           {
@@ -147,11 +148,10 @@ export const router = createBrowserRouter([
               { path: '/admin/exchange-rates', element: <ExchangeRatesPage /> },
               { path: '/admin/exchange-rates/new', element: <ExchangeRateFormPage /> },
               { path: '/admin/exchange-rates/:id', element: <ExchangeRateDetailPage /> },
-              { path: '/admin/cash-registers', element: <CashRegistersPage /> },
-              { path: '/admin/cash-registers/new', element: <CashRegisterFormPage /> },
-              { path: '/admin/cash-registers/:id', element: <CashRegisterDetailPage /> },
-              { path: '/admin/cash-registers/:id/edit', element: <CashRegisterFormPage /> },
               { path: '/admin/activities', element: <ActivitiesPage /> },
+              { path: '/cash-transactions', element: <CashTransactionsListPage /> },
+              { path: '/cash-transactions/new', element: <CashTransactionCreatePage /> },
+              { path: '/cash-transactions/:id', element: <CashTransactionDetailPage /> },
             ],
           },
         ],

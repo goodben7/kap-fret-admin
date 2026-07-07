@@ -1,5 +1,6 @@
 import { api } from './api'
 import { extractHydraMember, extractHydraTotalItems } from '@/lib/hydra'
+import { filterTicketsByTravelDateInput } from '@/lib/ticket'
 import { buildTicketFilterParams, type TicketFilters } from '@/lib/ticket-filters'
 import type { HydraCollection } from '@/types/hydra'
 import type { Ticket, TicketCreatePayload, TicketStatusPayload, TicketPatchPayload, TicketReportTravelDatePayload, TicketPaymentPayload } from '@/types/ticket'
@@ -12,12 +13,33 @@ const JSON_HEADERS = {
   'Content-Type': 'application/json',
 } as const
 
+const TRAVEL_DATE_FETCH_CAP = 500
+
 export const ticketService = {
   async getAll(filters: TicketFilters = {}) {
-    const params = buildTicketFilterParams(filters)
+    const travelDay = filters.travelDate?.trim()
+    const page = filters.page ?? 1
+    const itemsPerPage = filters.itemsPerPage ?? 15
+
+    const requestFilters: TicketFilters = travelDay
+      ? { ...filters, page: 1, itemsPerPage: TRAVEL_DATE_FETCH_CAP }
+      : filters
+
+    const params = buildTicketFilterParams(requestFilters)
     const { data } = await api.get<HydraCollection<Ticket>>('/api/tickets', { params })
+    let items = extractHydraMember(data)
+
+    if (travelDay) {
+      items = filterTicketsByTravelDateInput(items, travelDay)
+      const start = (page - 1) * itemsPerPage
+      return {
+        items: items.slice(start, start + itemsPerPage),
+        totalItems: items.length,
+      }
+    }
+
     return {
-      items: extractHydraMember(data),
+      items,
       totalItems: extractHydraTotalItems(data),
     }
   },

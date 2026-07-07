@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowDownLeft,
+  ArrowLeft,
   ArrowUpRight,
   ChevronRight,
   LayoutGrid,
@@ -264,6 +265,14 @@ export function CashTransactionsListPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 pb-6 lg:max-w-5xl">
+      <Link
+        to="/admin"
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+        Administration
+      </Link>
+
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2">

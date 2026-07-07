@@ -90,3 +90,38 @@ export const GENDER_LABELS: Record<Gender, string> = {
   M: 'Homme',
   F: 'Femme',
 }
+
+/** Catégories passager — alignées sur Ticket::CATEGORY_* côté API */
+export const TICKET_CATEGORY = {
+  INF: 'INF',
+  CD: 'CD',
+  AD: 'AD',
+} as const
+
+export type TicketCategory = (typeof TICKET_CATEGORY)[keyof typeof TICKET_CATEGORY]
+
+export const TICKET_CATEGORY_LABELS: Record<TicketCategory, string> = {
+  INF: 'Nourrisson (0-2 ans)',
+  CD: 'Enfant (3-10 ans)',
+  AD: 'Adulte (11 ans et +)',
+}
+
+export const TICKET_CATEGORY_OPTIONS: { value: TicketCategory; label: string }[] = [
+  TICKET_CATEGORY.INF,
+  TICKET_CATEGORY.CD,
+  TICKET_CATEGORY.AD,
+].map((value) => ({ value, label: TICKET_CATEGORY_LABELS[value] }))
+
+/** Prix de base par défaut (USD) selon la catégorie */
+export const TICKET_CATEGORY_BASE_PRICE_USD: Record<TicketCategory, string> = {
+  INF: '100.00',
+  CD: '200.00',
+  AD: '250.00',
+}
+
+/** Plages d'âge indicatives par catégorie */
+export const TICKET_CATEGORY_AGE_RANGE: Record<TicketCategory, { min: number; max: number }> = {
+  INF: { min: 0, max: 2 },
+  CD: { min: 3, max: 10 },
+  AD: { min: 11, max: 120 },
+}

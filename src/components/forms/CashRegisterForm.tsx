@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { LoaderIcon } from '@/components/ui/loading-spinner'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -10,13 +9,9 @@ import {
   type CashRegisterCreateFormData,
   type CashRegisterPatchFormData,
 } from '@/schemas/cash-register.schema'
-import { useCurrenciesForSelect } from '@/hooks/useCurrencies'
-import { extractIri } from '@/lib/hydra'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { cn } from '@/lib/utils'
 import type { ReactNode } from 'react'
 
@@ -134,19 +129,6 @@ export function CashRegisterCreateForm({
   submitLabel = 'Créer la caisse',
   cancelHref = '/admin/cash-registers',
 }: CashRegisterCreateFormProps) {
-  const { data: currencies = [], isLoading: currenciesLoading } = useCurrenciesForSelect()
-
-  const currencyOptions = useMemo(
-    () =>
-      currencies
-        .filter((currency) => currency.active && !currency.deleted)
-        .map((currency) => ({
-          value: extractIri(currency) ?? currency['@id'],
-          label: `${currency.code} — ${currency.label}`,
-        })),
-    [currencies],
-  )
-
   const {
     register,
     handleSubmit,
@@ -156,22 +138,14 @@ export function CashRegisterCreateForm({
   } = useForm<CashRegisterCreateFormData>({
     resolver: zodResolver(cashRegisterCreateSchema),
     defaultValues: {
-      openingBalance: '0.00',
+      openingBalanceCDF: '0.00',
+      openingBalanceUSD: '0.00',
       active: true,
       ...defaultValues,
     },
   })
 
-  const currency = watch('currency')
   const isActive = watch('active')
-
-  if (currenciesLoading) {
-    return (
-      <div className="flex justify-center py-12">
-        <LoadingSpinner label="Chargement des devises..." />
-      </div>
-    )
-  }
 
   return (
     <form id={CREATE_FORM_ID} onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -190,22 +164,21 @@ export function CashRegisterCreateForm({
           error={errors.name?.message}
           {...register('name')}
         />
-        <Select
-          label="Devise"
-          placeholder="Sélectionner..."
-          options={[{ value: '', label: 'Sélectionner...' }, ...currencyOptions]}
-          value={currency ?? ''}
-          onChange={(e) => setValue('currency', e.target.value, { shouldValidate: true })}
-          error={errors.currency?.message}
-          variant="filter"
-        />
         <Input
-          label="Solde d'ouverture"
+          label="Solde d'ouverture USD"
           inputMode="decimal"
           placeholder="0.00"
           className={fieldClass}
-          error={errors.openingBalance?.message}
-          {...register('openingBalance')}
+          error={errors.openingBalanceUSD?.message}
+          {...register('openingBalanceUSD')}
+        />
+        <Input
+          label="Solde d'ouverture CDF"
+          inputMode="decimal"
+          placeholder="0.00"
+          className={fieldClass}
+          error={errors.openingBalanceCDF?.message}
+          {...register('openingBalanceCDF')}
         />
         <div className="sm:col-span-2">
           <label
@@ -287,7 +260,7 @@ export function CashRegisterPatchForm({
           >
             <div>
               <p className="text-sm font-medium">Caisse active</p>
-              <p className="text-xs text-muted-foreground">Le solde et la devise ne sont pas modifiables ici</p>
+              <p className="text-xs text-muted-foreground">Les soldes d'ouverture ne sont pas modifiables ici</p>
             </div>
             <input
               type="checkbox"

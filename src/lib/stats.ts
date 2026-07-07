@@ -162,8 +162,8 @@ function parseCashRegisters(member: unknown[]): StatsCashRegisters {
       registers.push({
         id: String(item.id ?? ''),
         name: String(item.name ?? '—'),
-        currency: String(item.currency ?? ''),
-        currentBalance: String(item.currentBalance ?? '0'),
+        currentBalanceCDF: String(item.currentBalanceCDF ?? item.currentBalance ?? '0'),
+        currentBalanceUSD: String(item.currentBalanceUSD ?? '0'),
       })
     }
   }
@@ -280,9 +280,7 @@ export function applyStatsClientFilters(stats: AppStats, filters: StatsFilters):
       totalsByCurrency: {
         [currency]: stats.cashRegisters.totalsByCurrency[currency] ?? '0',
       },
-      registers: stats.cashRegisters.registers.filter(
-        (register) => normalizeCurrency(register.currency) === currency,
-      ),
+      registers: stats.cashRegisters.registers,
     }
     if (currencyRow) {
       result.finance = {

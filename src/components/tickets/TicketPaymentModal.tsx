@@ -9,23 +9,22 @@ import { Button } from '@/components/ui/button'
 import { LoaderIcon } from '@/components/ui/loading-spinner'
 import { ConversionPreviewCard } from '@/components/tickets/ConversionPreviewCard'
 import { ticketPaymentSchema, type TicketPaymentFormData } from '@/schemas/ticket-payment.schema'
-import { CURRENCY_LABELS, normalizeCurrency } from '@/constants/ticket'
+import { CURRENCY, CURRENCY_OPTIONS } from '@/constants/ticket'
 import { useAuth } from '@/hooks/useAuth'
 import { useCashRegistersForSelect } from '@/hooks/useCashRegisters'
 import { useCurrenciesForSelect } from '@/hooks/useCurrencies'
+import { useExchangeRates } from '@/hooks/useExchangeRates'
 import { usePreviewConversion } from '@/hooks/usePreviewConversion'
-import { getCashRegisterCurrencyCode } from '@/lib/cash-register'
+import { formatCashRegisterSelectLabel } from '@/lib/cash-register'
 import { resolveCurrencyIriByCode } from '@/lib/currency-resource'
 import { extractIri } from '@/lib/hydra'
 import { resolveUserIssuingOfficeIri } from '@/lib/issuing-office'
-import { buildTicketPaymentDescription, getTicketPaymentAmount } from '@/lib/ticket'
+import { buildTicketPaymentDescription, computeTicketPaymentAmount, getTicketPaymentAmount } from '@/lib/ticket'
 import { formatMoney } from '@/lib/utils'
 import type { Ticket } from '@/types/ticket'
 
 const fieldClass =
   'h-11 rounded-xl border-transparent bg-muted/40 focus-visible:bg-background focus-visible:border-input'
-
-const lockedFieldClass = `${fieldClass} cursor-not-allowed bg-muted/60`
 
 interface TicketPaymentModalProps {
   open: boolean
@@ -48,20 +47,12 @@ export function TicketPaymentModal({
     issuingOfficeIri,
   )
   const { data: currencies = [] } = useCurrenciesForSelect()
+  const { data: exchangeRatesData } = useExchangeRates({ pagination: false })
+  const exchangeRates = exchangeRatesData?.items ?? []
 
-  const currency = normalizeCurrency(ticket.currency)
   const amount = getTicketPaymentAmount(ticket)
   const defaultDescription = buildTicketPaymentDescription(ticket)
-  const currencyIri = resolveCurrencyIriByCode(currencies, currency) ?? ''
-
-  const currencyCodeByIri = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const c of currencies) {
-      const iri = extractIri(c) ?? c['@id']
-      if (iri && c.code) map.set(iri, c.code)
-    }
-    return map
-  }, [currencies])
+  const usdCurrencyIri = resolveCurrencyIriByCode(currencies, CURRENCY.USD) ?? ''
 
   const {
     register,
@@ -74,34 +65,42 @@ export function TicketPaymentModal({
     resolver: zodResolver(ticketPaymentSchema),
     defaultValues: {
       cashRegister: '',
+      paymentCurrency: ticket.paymentCurrency ?? CURRENCY.USD,
       description: defaultDescription,
     },
   })
 
   const cashRegister = watch('cashRegister')
+  const paymentCurrency = watch('paymentCurrency')
+  const paymentCurrencyIri = resolveCurrencyIriByCode(currencies, paymentCurrency ?? CURRENCY.USD) ?? ''
+  const fallbackPaymentAmount = (() => {
+    const converted = computeTicketPaymentAmount(parseFloat(amount) || 0, paymentCurrency ?? CURRENCY.USD, exchangeRates)
+    return converted != null ? parseFloat(converted) : undefined
+  })()
 
   useEffect(() => {
     if (!open) return
     reset({
       cashRegister: '',
+      paymentCurrency: ticket.paymentCurrency ?? CURRENCY.USD,
       description: defaultDescription,
     })
-  }, [open, defaultDescription, reset])
+  }, [open, defaultDescription, reset, ticket.paymentCurrency])
 
   const cashRegisterOptions = useMemo(
     () =>
-      cashRegisters.map((register) => {
-        const code = getCashRegisterCurrencyCode(register.currency, currencyCodeByIri)
-        const value = extractIri(register) ?? register['@id']
-        return {
-          value,
-          label: code ? `${register.code} — ${register.name} (${code})` : `${register.code} — ${register.name}`,
-        }
-      }),
-    [cashRegisters, currencyCodeByIri],
+      cashRegisters.map((register) => ({
+        value: extractIri(register) ?? register['@id'],
+        label: formatCashRegisterSelectLabel(register),
+      })),
+    [cashRegisters],
   )
 
-  const previewEnabled = !!cashRegister && !!currencyIri && (parseFloat(amount) || 0) > 0
+  const previewEnabled =
+    !!cashRegister
+    && !!usdCurrencyIri
+    && !!paymentCurrencyIri
+    && (parseFloat(amount) || 0) > 0
   const {
     data: conversionPreview,
     isLoading: conversionPreviewLoading,
@@ -109,7 +108,8 @@ export function TicketPaymentModal({
   } = usePreviewConversion({
     cashRegister: cashRegister || undefined,
     amount,
-    currencyIri,
+    currencyIri: usdCurrencyIri,
+    paymentCurrencyIri: paymentCurrency !== CURRENCY.USD ? paymentCurrencyIri : undefined,
     enabled: previewEnabled && open,
   })
 
@@ -126,17 +126,17 @@ export function TicketPaymentModal({
       open={open}
       onOpenChange={handleOpenChange}
       title="Encaissement du billet"
-      description="Sélectionnez la caisse pour finaliser le paiement et émettre le billet."
+      description="Sélectionnez la caisse et la devise de paiement pour finaliser l'encaissement."
       className="rounded-2xl sm:max-w-lg"
     >
       <form onSubmit={(e) => void submit(e)} className="space-y-4">
         <div className="flex items-center justify-between gap-4 rounded-xl border border-brand-orange/25 bg-brand-orange/5 px-4 py-3">
           <div className="min-w-0">
-            <p className="text-xs text-muted-foreground">Montant à encaisser</p>
+            <p className="text-xs text-muted-foreground">Montant billet (USD)</p>
             <p className="truncate font-mono text-sm text-muted-foreground">{ticket.ticketNumber}</p>
           </div>
           <p className="shrink-0 text-lg font-bold tabular-nums text-brand-orange">
-            {formatMoney(parseFloat(amount) || 0, currency)}
+            {formatMoney(parseFloat(amount) || 0, CURRENCY.USD)}
           </p>
         </div>
 
@@ -157,22 +157,19 @@ export function TicketPaymentModal({
           onChange={(e) => setValue('cashRegister', e.target.value, { shouldValidate: true })}
         />
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Input
-            label="Montant"
-            value={amount}
-            disabled
-            readOnly
-            className={lockedFieldClass}
-          />
-          <Input
-            label="Devise"
-            value={CURRENCY_LABELS[currency]}
-            disabled
-            readOnly
-            className={lockedFieldClass}
-          />
-        </div>
+        <Select
+          label="Devise de paiement"
+          options={CURRENCY_OPTIONS}
+          error={errors.paymentCurrency?.message}
+          disabled={isLoading}
+          variant="filter"
+          value={paymentCurrency ?? CURRENCY.USD}
+          onChange={(e) =>
+            setValue('paymentCurrency', e.target.value as TicketPaymentFormData['paymentCurrency'], {
+              shouldValidate: true,
+            })
+          }
+        />
 
         <Input
           label="Description"
@@ -187,6 +184,10 @@ export function TicketPaymentModal({
             preview={conversionPreview}
             isLoading={conversionPreviewLoading}
             isError={conversionPreviewError}
+            referenceAmount={parseFloat(amount) || 0}
+            referenceCurrency={CURRENCY.USD}
+            paymentCurrency={paymentCurrency}
+            fallbackPaymentAmount={fallbackPaymentAmount}
           />
         )}
 
@@ -200,7 +201,11 @@ export function TicketPaymentModal({
           >
             Annuler
           </Button>
-          <Button type="submit" className="h-11 flex-1 rounded-xl" disabled={isLoading || !currencyIri}>
+          <Button
+            type="submit"
+            className="h-11 flex-1 rounded-xl"
+            disabled={isLoading || !usdCurrencyIri || !paymentCurrencyIri}
+          >
             {isLoading ? (
               <>
                 <LoaderIcon />

@@ -13,7 +13,8 @@ import {
 import { useCashRegister } from '@/hooks/useCashRegisters'
 import { useCashTransactions } from '@/hooks/useCashTransactions'
 import { CashRegisterReportModal } from '@/components/cash-registers/CashRegisterReportModal'
-import { getCashRegisterCurrencyCode, getCashRegisterCurrencyLabel } from '@/lib/cash-register'
+import { parseCashRegisterBalance } from '@/lib/cash-register'
+import { CURRENCY } from '@/constants/ticket'
 import {
   cashTransactionReferencePath,
   getCashTransactionCurrencyCode,
@@ -153,8 +154,10 @@ export function CashRegisterDetailPage() {
     )
   }
 
-  const currencyCode = getCashRegisterCurrencyCode(register.currency) ?? 'USD'
-  const money = (amount: string) => formatMoney(parseFloat(amount) || 0, currencyCode)
+  const usdBalance = parseCashRegisterBalance(register.currentBalanceUSD)
+  const cdfBalance = parseCashRegisterBalance(register.currentBalanceCDF)
+  const moneyUsd = (amount: number) => formatMoney(amount, CURRENCY.USD)
+  const moneyCdf = (amount: number) => formatMoney(amount, CURRENCY.CDF)
   const transactions = transactionsData?.items ?? []
 
   return (
@@ -181,9 +184,10 @@ export function CashRegisterDetailPage() {
               </Badge>
               {register.deleted && <Badge variant="destructive">Supprimé</Badge>}
             </div>
-            <div className="rounded-xl bg-brand-orange/10 px-4 py-3">
-              <p className="text-xs text-muted-foreground">Solde actuel</p>
-              <p className="text-2xl font-bold tabular-nums text-brand-orange">{money(register.currentBalance)}</p>
+            <div className="rounded-xl bg-brand-orange/10 px-4 py-3 space-y-2">
+              <p className="text-xs text-muted-foreground">Soldes actuels</p>
+              <p className="text-xl font-bold tabular-nums text-brand-orange">{moneyUsd(usdBalance)}</p>
+              <p className="text-lg font-semibold tabular-nums text-brand-orange">{moneyCdf(cdfBalance)}</p>
             </div>
             <Button
               type="button"
@@ -210,9 +214,10 @@ export function CashRegisterDetailPage() {
         <CardContent className="pt-0">
           <DetailRow label="Code" value={register.code} mono />
           <DetailRow label="Nom" value={register.name} />
-          <DetailRow label="Devise" value={getCashRegisterCurrencyLabel(register.currency)} />
-          <DetailRow label="Solde d'ouverture" value={money(register.openingBalance)} />
-          <DetailRow label="Solde actuel" value={money(register.currentBalance)} />
+          <DetailRow label="Solde d'ouverture USD" value={moneyUsd(parseCashRegisterBalance(register.openingBalanceUSD))} />
+          <DetailRow label="Solde d'ouverture CDF" value={moneyCdf(parseCashRegisterBalance(register.openingBalanceCDF))} />
+          <DetailRow label="Solde actuel USD" value={moneyUsd(usdBalance)} />
+          <DetailRow label="Solde actuel CDF" value={moneyCdf(cdfBalance)} />
           {register.createdAt && <DetailRow label="Créé le" value={formatDateTime(register.createdAt)} />}
           {register.updatedAt && <DetailRow label="Modifié le" value={formatDateTime(register.updatedAt)} />}
         </CardContent>

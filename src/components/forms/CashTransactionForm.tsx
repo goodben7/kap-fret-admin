@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link } from 'react-router-dom'
@@ -17,7 +17,7 @@ import { useCashRegistersForSelect } from '@/hooks/useCashRegisters'
 import { useCurrenciesForSelect } from '@/hooks/useCurrencies'
 import { usePreviewConversion } from '@/hooks/usePreviewConversion'
 import { useAuth } from '@/hooks/useAuth'
-import { getCashRegisterCurrencyIri } from '@/lib/cash-register'
+import { formatCashRegisterSelectLabel } from '@/lib/cash-register'
 import { getCurrentTravelTimeInput, getTodayTravelDateInput } from '@/lib/ticket'
 import { resolveUserIssuingOfficeIri } from '@/lib/issuing-office'
 import { extractIri } from '@/lib/hydra'
@@ -66,7 +66,7 @@ export function CashTransactionForm({
     () =>
       cashRegisters.map((register) => ({
         value: extractIri(register) ?? register['@id'],
-        label: `${register.code} — ${register.name}`,
+        label: formatCashRegisterSelectLabel(register),
       })),
     [cashRegisters],
   )
@@ -110,14 +110,6 @@ export function CashTransactionForm({
     currencyIri: currency || undefined,
     enabled: previewEnabled,
   })
-
-  useEffect(() => {
-    if (!cashRegister) return
-    const selected = cashRegisters.find((r) => (extractIri(r) ?? r['@id']) === cashRegister)
-    if (selected) {
-      setValue('currency', getCashRegisterCurrencyIri(selected), { shouldValidate: true })
-    }
-  }, [cashRegister, cashRegisters, setValue])
 
   return (
     <form id={FORM_ID} onSubmit={handleSubmit(onSubmit)} className="space-y-4">

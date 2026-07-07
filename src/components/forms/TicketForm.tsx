@@ -12,12 +12,13 @@ import {
   User,
 } from 'lucide-react'
 import { ticketSchema, ticketPatchSchema, type TicketFormData, type TicketPatchFormData } from '@/schemas/ticket.schema'
-import { GENDER_LABELS, PAYMENT_MODE, PAYMENT_MODE_LABELS, PAYMENT_MODE_OPTIONS, CURRENCY, CURRENCY_OPTIONS } from '@/constants/ticket'
+import { GENDER_LABELS, PAYMENT_MODE, PAYMENT_MODE_LABELS, PAYMENT_MODE_OPTIONS, CURRENCY, CURRENCY_OPTIONS, TICKET_CATEGORY_OPTIONS } from '@/constants/ticket'
 import { useAuth } from '@/hooks/useAuth'
 import { useCashRegistersForSelect } from '@/hooks/useCashRegisters'
 import { useCurrenciesForSelect } from '@/hooks/useCurrencies'
+import { useExchangeRates } from '@/hooks/useExchangeRates'
 import { usePreviewConversion } from '@/hooks/usePreviewConversion'
-import { getCashRegisterCurrencyCode } from '@/lib/cash-register'
+import { formatCashRegisterSelectLabel } from '@/lib/cash-register'
 import { resolveCurrencyIriByCode } from '@/lib/currency-resource'
 import { extractIri } from '@/lib/hydra'
 import { resolveUserIssuingOfficeIri } from '@/lib/issuing-office'
@@ -28,7 +29,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CheckpointAsyncSelect } from '@/components/ui/checkpoint-async-select'
 import { ConversionPreviewCard } from '@/components/tickets/ConversionPreviewCard'
 import { formatMoney } from '@/lib/utils'
-import { getTicketTotal, getTodayTravelDateInput, getCurrentTravelTimeInput } from '@/lib/ticket'
+import { getTicketTotal, getDefaultWednesdayTravelDateInput, getCurrentTravelTimeInput, getBasePriceForCategory, computeTicketPaymentAmount } from '@/lib/ticket'
 
 const FORM_ID = 'ticket-form'
 
@@ -157,16 +158,9 @@ function TicketCreateForm({
   const issuingOfficeIri = resolveUserIssuingOfficeIri(user)
   const { data: cashRegisters = [], isLoading: cashRegistersLoading } = useCashRegistersForSelect(issuingOfficeIri)
   const { data: currencies = [] } = useCurrenciesForSelect()
+  const { data: exchangeRatesData } = useExchangeRates({ pagination: false })
+  const exchangeRates = exchangeRatesData?.items ?? []
   const locked = readOnly
-
-  const currencyCodeByIri = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const c of currencies) {
-      const iri = extractIri(c) ?? c['@id']
-      if (iri && c.code) map.set(iri, c.code)
-    }
-    return map
-  }, [currencies])
 
   const {
     register,
@@ -178,10 +172,10 @@ function TicketCreateForm({
     resolver: zodResolver(ticketSchema),
     defaultValues: {
       paymentMode: PAYMENT_MODE.CASH,
-      currency: CURRENCY.USD,
-      travelDate: getTodayTravelDateInput(),
+      paymentCurrency: CURRENCY.USD,
+      travelDate: getDefaultWednesdayTravelDateInput(),
       travelTime: getCurrentTravelTimeInput(),
-      basePrice: '0.00',
+      basePrice: '',
       tva: '0.00',
       fpt: '0.00',
       rva: '0.00',
@@ -193,10 +187,11 @@ function TicketCreateForm({
   })
 
   const paymentMode = watch('paymentMode')
+  const category = watch('category')
   const departure = watch('departure')
   const destination = watch('destination')
   const basePrice = watch('basePrice')
-  const currency = watch('currency')
+  const paymentCurrency = watch('paymentCurrency')
   const tva = watch('tva')
   const fpt = watch('fpt')
   const rva = watch('rva')
@@ -205,20 +200,21 @@ function TicketCreateForm({
 
   const cashRegisterOptions = useMemo(
     () =>
-      cashRegisters.map((register) => {
-        const code = getCashRegisterCurrencyCode(register.currency, currencyCodeByIri)
-        const value = extractIri(register) ?? register['@id']
-        return {
-          value,
-          label: code ? `${register.code} — ${register.name} (${code})` : `${register.code} — ${register.name}`,
-        }
-      }),
-    [cashRegisters, currencyCodeByIri],
+      cashRegisters.map((register) => ({
+        value: extractIri(register) ?? register['@id'],
+        label: formatCashRegisterSelectLabel(register),
+      })),
+    [cashRegisters],
   )
 
   const handleCashRegisterChange = (iri: string) => {
     setValue('cashRegister', iri, { shouldValidate: true })
   }
+
+  useEffect(() => {
+    if (!category) return
+    setValue('basePrice', getBasePriceForCategory(category), { shouldValidate: true })
+  }, [category, setValue])
 
   useEffect(() => {
     if (paymentMode !== PAYMENT_MODE.CASH) {
@@ -235,9 +231,19 @@ function TicketCreateForm({
   }, [reserveForLater, setValue])
 
   const totalPreview = getTicketTotal({ basePrice, tva, fpt, rva })
-  const ticketCurrencyIri = resolveCurrencyIriByCode(currencies, currency ?? CURRENCY.USD)
+  const usdCurrencyIri = resolveCurrencyIriByCode(currencies, CURRENCY.USD)
+  const paymentCurrencyIri = resolveCurrencyIriByCode(currencies, paymentCurrency ?? CURRENCY.USD)
+  const fallbackPaymentAmount = useMemo(() => {
+    const converted = computeTicketPaymentAmount(totalPreview, paymentCurrency ?? CURRENCY.USD, exchangeRates)
+    return converted != null ? parseFloat(converted) : undefined
+  }, [totalPreview, paymentCurrency, exchangeRates])
   const previewEnabled =
-    paymentMode === PAYMENT_MODE.CASH && !reserveForLater && !!cashRegister && !!ticketCurrencyIri
+    paymentMode === PAYMENT_MODE.CASH
+    && !reserveForLater
+    && !!cashRegister
+    && !!usdCurrencyIri
+    && !!paymentCurrencyIri
+    && totalPreview > 0
   const {
     data: conversionPreview,
     isLoading: conversionPreviewLoading,
@@ -245,7 +251,9 @@ function TicketCreateForm({
   } = usePreviewConversion({
     cashRegister: cashRegister || undefined,
     amount: String(totalPreview),
-    currencyIri: ticketCurrencyIri,
+    currencyIri: usdCurrencyIri,
+    paymentCurrencyIri:
+      paymentCurrency !== CURRENCY.USD ? paymentCurrencyIri : undefined,
     enabled: previewEnabled,
   })
 
@@ -277,12 +285,25 @@ function TicketCreateForm({
             className={fieldClass}
             {...register('passengerName')}
           />
+          <Select
+            label="Catégorie"
+            placeholder="Sélectionner..."
+            options={TICKET_CATEGORY_OPTIONS}
+            error={errors.category?.message}
+            disabled={locked}
+            variant="filter"
+            value={category ?? ''}
+            onChange={(e) =>
+              setValue('category', e.target.value as TicketFormData['category'], { shouldValidate: true })
+            }
+          />
           <Input
             label="Âge"
             type="number"
             inputMode="numeric"
-            min={1}
+            min={0}
             max={120}
+            placeholder="Optionnel"
             error={errors.age?.message}
             disabled={locked}
             className={fieldClass}
@@ -354,16 +375,17 @@ function TicketCreateForm({
         </FormSection>
 
         <FormSection title="Tarification" icon={Banknote}>
-          <Select
-            label="Devise"
-            options={CURRENCY_OPTIONS}
-            error={errors.currency?.message}
+          <p className="text-sm text-muted-foreground sm:col-span-2">
+            Les montants du billet sont exprimés en USD.
+          </p>
+          <Input
+            label="Prix de base (USD)"
+            inputMode="decimal"
+            error={errors.basePrice?.message}
             disabled={locked}
-            variant="filter"
-            value={currency ?? CURRENCY.USD}
-            onChange={(e) => setValue('currency', e.target.value as TicketFormData['currency'], { shouldValidate: true })}
+            className={fieldClass}
+            {...register('basePrice')}
           />
-          <Input label="Prix de base" inputMode="decimal" error={errors.basePrice?.message} disabled={locked} className={fieldClass} {...register('basePrice')} />
           <Input label="TVA" inputMode="decimal" error={errors.tva?.message} disabled={locked} className={fieldClass} {...register('tva')} />
           <Input label="FPT" inputMode="decimal" error={errors.fpt?.message} disabled={locked} className={fieldClass} {...register('fpt')} />
           <Input label="RVA" inputMode="decimal" error={errors.rva?.message} disabled={locked} className={fieldClass} {...register('rva')} />
@@ -377,7 +399,7 @@ function TicketCreateForm({
           />
           <div className="flex items-center justify-between rounded-xl bg-brand-orange/10 px-4 py-3 sm:col-span-2">
             <span className="text-sm font-semibold">Total estimé</span>
-            <span className="text-lg font-bold tabular-nums text-brand-orange">{formatMoney(totalPreview, currency ?? CURRENCY.USD)}</span>
+            <span className="text-lg font-bold tabular-nums text-brand-orange">{formatMoney(totalPreview, CURRENCY.USD)}</span>
           </div>
         </FormSection>
 
@@ -455,13 +477,40 @@ function TicketCreateForm({
                       onChange={(e) => handleCashRegisterChange(e.target.value)}
                     />
                   )}
+                  <Select
+                    label="Devise de paiement"
+                    options={CURRENCY_OPTIONS}
+                    error={errors.paymentCurrency?.message}
+                    disabled={locked}
+                    variant="filter"
+                    value={paymentCurrency ?? CURRENCY.USD}
+                    onChange={(e) =>
+                      setValue('paymentCurrency', e.target.value as TicketFormData['paymentCurrency'], {
+                        shouldValidate: true,
+                      })
+                    }
+                  />
                 </div>
-                {previewEnabled && (
+                {paymentMode === PAYMENT_MODE.CASH && previewEnabled && (
                   <ConversionPreviewCard
                     preview={conversionPreview}
                     isLoading={conversionPreviewLoading}
                     isError={conversionPreviewError}
+                    referenceAmount={totalPreview}
+                    referenceCurrency={CURRENCY.USD}
+                    paymentCurrency={paymentCurrency}
+                    fallbackPaymentAmount={fallbackPaymentAmount}
                   />
+                )}
+                {paymentMode === PAYMENT_MODE.CASH
+                  && !reserveForLater
+                  && !!cashRegister
+                  && paymentCurrency !== CURRENCY.USD
+                  && fallbackPaymentAmount == null
+                  && totalPreview > 0 && (
+                  <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                    Aucun taux de change actif pour convertir le montant USD vers {paymentCurrency}.
+                  </div>
                 )}
               </div>
             )}
@@ -648,7 +697,7 @@ function TicketEditForm({
         <FormSection title="Tarification" icon={Banknote}>
           <Input
             label="Devise"
-            value={defaultValues?.currency ?? CURRENCY.USD}
+            value="USD — Dollar US"
             disabled
             readOnly
             className={fieldClass}
@@ -667,7 +716,7 @@ function TicketEditForm({
           <div className="flex items-center justify-between rounded-xl bg-brand-orange/10 px-4 py-3 sm:col-span-2">
             <span className="text-sm font-semibold">Total</span>
             <span className="text-lg font-bold tabular-nums text-brand-orange">
-              {formatMoney(totalPreview, defaultValues?.currency ?? CURRENCY.USD)}
+              {formatMoney(totalPreview, CURRENCY.USD)}
             </span>
           </div>
         </FormSection>

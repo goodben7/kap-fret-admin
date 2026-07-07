@@ -26,6 +26,7 @@ import {
   TICKET_STATUS_LABELS,
   PAYMENT_MODE_LABELS,
   GENDER_LABELS,
+  TICKET_CATEGORY_LABELS,
   normalizeCurrency,
   type TicketStatus,
 } from '@/constants/ticket'
@@ -343,7 +344,12 @@ export function TicketDetailPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <DetailSection title="Passager" icon={User}>
           <DetailRow label="Nom" value={ticket.passengerName} />
-          <DetailRow label="Âge" value={`${ticket.age} ans`} />
+          {ticket.category && (
+            <DetailRow label="Catégorie" value={TICKET_CATEGORY_LABELS[ticket.category]} />
+          )}
+          {ticket.age != null && (
+            <DetailRow label="Âge" value={`${ticket.age} ans`} />
+          )}
           <DetailRow label="Sexe" value={GENDER_LABELS[ticket.gender]} />
           {ticket.phone && (
             <DetailRow label="Téléphone" value={ticket.phone} href={`tel:${ticket.phone}`} />

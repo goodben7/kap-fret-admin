@@ -36,7 +36,7 @@ import { useCashRegistersForSelect } from '@/hooks/useCashRegisters'
 import { useCurrenciesForSelect } from '@/hooks/useCurrencies'
 import { useExchangeRates } from '@/hooks/useExchangeRates'
 import { usePreviewConversion } from '@/hooks/usePreviewConversion'
-import { getCashRegisterCurrencyCode } from '@/lib/cash-register'
+import { formatCashRegisterSelectLabel } from '@/lib/cash-register'
 import { resolveCurrencyIriByCode } from '@/lib/currency-resource'
 import { toIri, extractIri } from '@/lib/hydra'
 import { resolveUserIssuingOfficeIri } from '@/lib/issuing-office'
@@ -258,15 +258,6 @@ export function CheckInForm(props: CheckInFormProps) {
   const { data: exchangeRatesData } = useExchangeRates({ pagination: false })
   const exchangeRates = exchangeRatesData?.items ?? []
 
-  const currencyCodeByIri = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const c of currencies) {
-      const iri = extractIri(c) ?? c['@id']
-      if (iri && c.code) map.set(iri, c.code)
-    }
-    return map
-  }, [currencies])
-
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
   const [isLoadingTicket, setIsLoadingTicket] = useState(false)
   const initialBaggages = resolveInitialBaggages(defaultValues, isEdit)
@@ -358,15 +349,11 @@ export function CheckInForm(props: CheckInFormProps) {
 
   const cashRegisterOptions = useMemo(
     () =>
-      cashRegisters.map((register) => {
-        const code = getCashRegisterCurrencyCode(register.currency, currencyCodeByIri)
-        const value = extractIri(register) ?? register['@id']
-        return {
-          value,
-          label: code ? `${register.code} — ${register.name} (${code})` : `${register.code} — ${register.name}`,
-        }
-      }),
-    [cashRegisters, currencyCodeByIri],
+      cashRegisters.map((register) => ({
+        value: extractIri(register) ?? register['@id'],
+        label: formatCashRegisterSelectLabel(register),
+      })),
+    [cashRegisters],
   )
 
   const ticketCurrencyIri = resolveCurrencyIriByCode(currencies, currency ?? CURRENCY.USD)

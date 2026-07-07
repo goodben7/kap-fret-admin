@@ -58,8 +58,12 @@ export interface CashTransactionCreatePayload {
 
 export interface PreviewConversionPayload {
   cashRegister: string
+  /** Montant de référence (ex. total billet USD). */
   amount: string
+  /** Devise du montant de référence (IRI). */
   currency: string
+  /** Devise d'encaissement cible (IRI) — optionnel si identique à currency. */
+  paymentCurrency?: string
 }
 
 export interface PreviewConversionOutput {

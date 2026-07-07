@@ -6,7 +6,6 @@ export interface CashRegisterFilters {
   code?: string
   name?: string
   active?: boolean
-  currency?: string
   issuingOffice?: string
 }
 
@@ -14,17 +13,15 @@ export type CashRegisterFiltersState = {
   code: string
   name: string
   active: '' | 'true' | 'false'
-  currency: string
 }
 
 export const emptyCashRegisterFilters: CashRegisterFiltersState = {
   code: '',
   name: '',
   active: '',
-  currency: '',
 }
 
-const FILTER_PARAM_KEYS = ['code', 'name', 'active', 'currency'] as const satisfies readonly (keyof CashRegisterFiltersState)[]
+const FILTER_PARAM_KEYS = ['code', 'name', 'active'] as const satisfies readonly (keyof CashRegisterFiltersState)[]
 
 function parseActive(value: string | undefined): boolean | undefined {
   if (value === 'true') return true
@@ -49,9 +46,6 @@ export function buildCashRegisterFilterParams(
   const active = filters.active
   if (active != null) params.active = active
 
-  const currency = filters.currency?.trim()
-  if (currency) params.currency = normalizeIri(currency)
-
   const issuingOffice = filters.issuingOffice?.trim()
   if (issuingOffice) params.issuingOffice = normalizeIri(issuingOffice)
 
@@ -72,7 +66,6 @@ export function cashRegisterFiltersStateToApi(state: CashRegisterFiltersState): 
     code: state.code.trim() || undefined,
     name: state.name.trim() || undefined,
     active: parseActive(state.active),
-    currency: state.currency.trim() || undefined,
   }
 }
 
@@ -85,7 +78,6 @@ export function parseCashRegisterFiltersFromSearchParams(
     code: get('code'),
     name: get('name'),
     active: active === 'true' || active === 'false' ? active : '',
-    currency: get('currency'),
   }
 }
 

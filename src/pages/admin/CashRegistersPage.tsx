@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  ArrowLeft,
   ChevronRight,
   LayoutGrid,
   Plus,
@@ -12,7 +11,6 @@ import {
   X,
 } from 'lucide-react'
 import { useCashRegisters } from '@/hooks/useCashRegisters'
-import { useCurrenciesForSelect } from '@/hooks/useCurrencies'
 import {
   cashRegisterFiltersStateToApi,
   cashRegisterFiltersToSearchParams,
@@ -21,8 +19,8 @@ import {
   parseCashRegisterFiltersFromSearchParams,
   type CashRegisterFiltersState,
 } from '@/lib/cash-register-filters'
-import { getCashRegisterCurrencyCode } from '@/lib/cash-register'
-import { extractIri } from '@/lib/hydra'
+import { formatCashRegisterBalancesSummary } from '@/lib/cash-register'
+import { CURRENCY } from '@/constants/ticket'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -86,11 +84,9 @@ function FilterSection({ title, icon: Icon, children }: { title: string; icon: t
 function CashRegisterFiltersFields({
   draft,
   onChange,
-  currencyOptions,
 }: {
   draft: CashRegisterFiltersState
   onChange: (patch: Partial<CashRegisterFiltersState>) => void
-  currencyOptions: { value: string; label: string }[]
 }) {
   return (
     <div className="space-y-6">
@@ -98,7 +94,6 @@ function CashRegisterFiltersFields({
         <Input label="Code" placeholder="Ex. CASH-001" value={draft.code} onChange={(e) => onChange({ code: e.target.value })} className={filterInputClass} />
         <Input label="Nom" placeholder="Recherche partielle..." value={draft.name} onChange={(e) => onChange({ name: e.target.value })} className={filterInputClass} />
         <Select label="Statut" options={activeFilterOptions()} value={draft.active} onChange={(e) => onChange({ active: e.target.value as CashRegisterFiltersState['active'] })} variant="filter" />
-        <Select label="Devise" options={[{ value: '', label: 'Toutes' }, ...currencyOptions]} value={draft.currency} onChange={(e) => onChange({ currency: e.target.value })} variant="filter" />
       </FilterSection>
     </div>
   )
@@ -114,8 +109,7 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
 }
 
 function CashRegisterCard({ register }: { register: CashRegisterResource }) {
-  const currencyCode = getCashRegisterCurrencyCode(register.currency) ?? 'USD'
-  const balance = formatMoney(parseFloat(register.currentBalance) || 0, currencyCode)
+  const balances = formatCashRegisterBalancesSummary(register)
 
   return (
     <Card className="overflow-hidden rounded-2xl border-border/80 shadow-sm">
@@ -128,8 +122,7 @@ function CashRegisterCard({ register }: { register: CashRegisterResource }) {
                 <Badge variant={register.active ? 'success' : 'destructive'}>{register.active ? 'Actif' : 'Inactif'}</Badge>
               </div>
               <p className="font-mono text-xs font-semibold text-primary">{register.code}</p>
-              {currencyCode && <Badge variant="secondary" className="font-mono font-normal">{currencyCode}</Badge>}
-              <p className="text-sm font-bold tabular-nums text-brand-orange">{balance}</p>
+              <p className="text-sm font-bold tabular-nums text-brand-orange">{balances}</p>
             </div>
             <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground/50 group-hover:text-brand-orange" />
           </div>
@@ -152,21 +145,19 @@ function CashRegisterTable({ registers }: { registers: CashRegisterResource[] })
           <TableRow className="hover:bg-transparent">
             <TableHead>Code</TableHead>
             <TableHead>Nom</TableHead>
-            <TableHead>Devise</TableHead>
-            <TableHead className="text-right">Solde actuel</TableHead>
+            <TableHead className="text-right">Solde USD</TableHead>
+            <TableHead className="text-right">Solde CDF</TableHead>
             <TableHead>Statut</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {registers.map((register) => {
-            const currencyCode = getCashRegisterCurrencyCode(register.currency) ?? 'USD'
-            return (
+          {registers.map((register) => (
               <TableRow key={register.id}>
                 <TableCell className="cursor-pointer font-mono text-xs" onClick={() => void navigate(`/admin/cash-registers/${register.id}`)}>{register.code}</TableCell>
                 <TableCell className="cursor-pointer font-medium" onClick={() => void navigate(`/admin/cash-registers/${register.id}`)}>{register.name}</TableCell>
-                <TableCell className="font-mono text-xs">{currencyCode ?? '—'}</TableCell>
-                <TableCell className="text-right font-semibold tabular-nums">{formatMoney(parseFloat(register.currentBalance) || 0, currencyCode)}</TableCell>
+                <TableCell className="text-right font-semibold tabular-nums">{formatMoney(parseFloat(register.currentBalanceUSD) || 0, CURRENCY.USD)}</TableCell>
+                <TableCell className="text-right font-semibold tabular-nums">{formatMoney(parseFloat(register.currentBalanceCDF) || 0, CURRENCY.CDF)}</TableCell>
                 <TableCell><Badge variant={register.active ? 'success' : 'destructive'}>{register.active ? 'Actif' : 'Inactif'}</Badge></TableCell>
                 <TableCell>
                   <div className="flex justify-end gap-1">
@@ -175,8 +166,7 @@ function CashRegisterTable({ registers }: { registers: CashRegisterResource[] })
                   </div>
                 </TableCell>
               </TableRow>
-            )
-          })}
+          ))}
         </TableBody>
       </Table>
     </div>
@@ -188,15 +178,6 @@ export function CashRegistersPage() {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [panelDraft, setPanelDraft] = useState<CashRegisterFiltersState>(emptyCashRegisterFilters)
   const [viewMode, setViewMode] = useState<CashRegistersViewMode>(readCashRegistersViewMode)
-  const { data: currencies = [] } = useCurrenciesForSelect()
-
-  const currencyOptions = useMemo(
-    () =>
-      currencies
-        .filter((c) => c.active && !c.deleted)
-        .map((c) => ({ value: extractIri(c) ?? c['@id'], label: `${c.code} — ${c.label}` })),
-    [currencies],
-  )
 
   const page = Math.max(1, Number(searchParams.get('page')) || 1)
   const filters = useMemo(() => parseCashRegisterFiltersFromSearchParams(searchParams), [searchParams])
@@ -250,11 +231,6 @@ export function CashRegistersPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 pb-6 lg:max-w-5xl">
-      <Link to="/admin" className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="h-4 w-4" />
-        Administration
-      </Link>
-
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2">
@@ -289,7 +265,7 @@ export function CashRegistersPage() {
       {filtersOpen && (
         <Card className="rounded-2xl border-border/60 bg-muted/20 shadow-sm">
           <CardContent className="space-y-5 p-5">
-            <CashRegisterFiltersFields draft={panelDraft} onChange={(p) => setPanelDraft((prev) => ({ ...prev, ...p }))} currencyOptions={currencyOptions} />
+            <CashRegisterFiltersFields draft={panelDraft} onChange={(p) => setPanelDraft((prev) => ({ ...prev, ...p }))} />
             <div className="flex gap-2 border-t pt-4">
               <Button type="button" onClick={applyPanelFilters} className="flex-1 h-11 rounded-xl font-semibold">Appliquer</Button>
               {panelDraftCount > 0 && <Button type="button" variant="outline" onClick={resetAllFilters} className="h-11 rounded-xl px-4"><X className="h-4 w-4" /></Button>}
@@ -303,7 +279,6 @@ export function CashRegistersPage() {
           {filters.code && <FilterChip label={`Code ${filters.code}`} onRemove={() => patchFilters({ code: '' })} />}
           {filters.name && <FilterChip label={filters.name} onRemove={() => patchFilters({ name: '' })} />}
           {filters.active && <FilterChip label={filters.active === 'true' ? 'Actif' : 'Inactif'} onRemove={() => patchFilters({ active: '' })} />}
-          {filters.currency && <FilterChip label="Devise" onRemove={() => patchFilters({ currency: '' })} />}
         </div>
       )}
 

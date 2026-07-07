@@ -1,13 +1,12 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { BRAND } from '@/constants/brand'
-import { CURRENCY, normalizeCurrency, type Currency } from '@/constants/ticket'
+import { CURRENCY, type Currency } from '@/constants/ticket'
 import {
   getCashTransactionReferenceTypeLabel,
   sortCashTransactionsByOldestFirst,
   splitCashTransactionForReport,
 } from '@/lib/cash-transaction'
-import { getCashRegisterCurrencyCode } from '@/lib/cash-register'
 import { cashTransactionService } from '@/services/cash-transaction.service'
 import { downloadBlob } from '@/lib/passenger-manifest-pdf'
 import { toIri } from '@/lib/hydra'
@@ -166,13 +165,9 @@ function computeRegisterOpeningBalances(register: CashRegisterResource): {
   soldeUsd: number
   soldeCdf: number
 } {
-  const registerCurrencyCode = getCashRegisterCurrencyCode(register.currency) ?? CURRENCY.USD
-  const registerCurrency = normalizeCurrency(registerCurrencyCode)
-  const openingBalance = parseFloat(register.openingBalance) || 0
-
   return {
-    soldeUsd: registerCurrency === CURRENCY.USD ? openingBalance : 0,
-    soldeCdf: registerCurrency === CURRENCY.CDF ? openingBalance : 0,
+    soldeUsd: parseFloat(register.openingBalanceUSD) || 0,
+    soldeCdf: parseFloat(register.openingBalanceCDF) || 0,
   }
 }
 
