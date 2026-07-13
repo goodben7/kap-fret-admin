@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import axios from 'axios'
 import { Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { HydraCollection } from '@/types/hydra'
@@ -15,6 +16,7 @@ interface HydraAutocompleteProps<T extends HydraResource> {
   label?: string
   placeholder?: string
   searchParam?: string
+  searchParams?: string[]
   getLabel: (item: T) => string
   error?: string
   inputClassName?: string
@@ -28,6 +30,7 @@ export function HydraAutocomplete<T extends HydraResource>({
   label,
   placeholder = 'Rechercher...',
   searchParam = 'ticketNumber',
+  searchParams,
   getLabel,
   error,
   inputClassName,
@@ -37,6 +40,7 @@ export function HydraAutocomplete<T extends HydraResource>({
   const [results, setResults] = useState<T[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
+  const resolvedSearchParams = searchParams?.length ? searchParams : [searchParam]
 
   useEffect(() => {
     setSelectedItem(value)
@@ -49,14 +53,30 @@ export function HydraAutocomplete<T extends HydraResource>({
     }
     setIsLoading(true)
     try {
-      const { data } = await api.get<HydraCollection<T>>(endpoint, {
-        params: { [searchParam]: q, itemsPerPage: 10 },
-      })
-      setResults(extractHydraMember(data))
+      const responses = await Promise.all(
+        resolvedSearchParams.map((param) =>
+          api.get<HydraCollection<T>>(endpoint, {
+            params: { [param]: q, itemsPerPage: 10 },
+          }),
+        ),
+      )
+
+      const merged = new Map<string, T>()
+      for (const response of responses) {
+        for (const item of extractHydraMember(response.data)) {
+          merged.set(item['@id'], item)
+        }
+      }
+
+      setResults(Array.from(merged.values()))
+    } catch (error) {
+      if (!axios.isCancel(error)) {
+        setResults([])
+      }
     } finally {
       setIsLoading(false)
     }
-  }, [endpoint, searchParam])
+  }, [endpoint, resolvedSearchParams])
 
   useEffect(() => {
     if (!isOpen) return

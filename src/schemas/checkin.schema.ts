@@ -22,6 +22,7 @@ const checkInFieldsSchema = z.object({
   excessWeightKg: z.string().min(1, 'Excédent requis'),
   excessPrice: z.string().min(1, 'Prix excédent requis'),
   currency: z.enum([CURRENCY.CDF, CURRENCY.USD], { message: 'Devise requise' }),
+  paymentCurrency: z.enum([CURRENCY.CDF, CURRENCY.USD], { message: 'Devise de paiement requise' }),
   netToPay: z.string().min(1, 'Net à payer requis'),
   handBaggageWeight: z.string().optional(),
   observations: z.string().optional(),

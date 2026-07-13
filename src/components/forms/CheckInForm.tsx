@@ -30,7 +30,7 @@ import {
   getWeightForBaggageType,
   type BaggageType,
 } from '@/constants/check-in-baggage'
-import { CURRENCY, CURRENCY_OPTIONS, normalizeCurrency } from '@/constants/ticket'
+import { CURRENCY, CURRENCY_OPTIONS } from '@/constants/ticket'
 import { useAuth } from '@/hooks/useAuth'
 import { useCashRegistersForSelect } from '@/hooks/useCashRegisters'
 import { useCurrenciesForSelect } from '@/hooks/useCurrencies'
@@ -42,6 +42,7 @@ import { toIri, extractIri } from '@/lib/hydra'
 import { resolveUserIssuingOfficeIri } from '@/lib/issuing-office'
 import { getCheckpointDisplayName } from '@/lib/checkpoint'
 import {
+  computeCheckInPaymentAmount,
   computeCheckInExcessPrice,
   computeExcessWeightFromBaggages,
   computeWeightsFromBaggages,
@@ -283,6 +284,7 @@ export function CheckInForm(props: CheckInFormProps) {
       excessWeightKg: '0.00',
       excessPrice: '0',
       currency: CURRENCY.USD,
+      paymentCurrency: CURRENCY.USD,
       netToPay: '0',
       handBaggageWeight: '0.00',
       observations: '',
@@ -292,7 +294,7 @@ export function CheckInForm(props: CheckInFormProps) {
     },
   })
 
-  const { fields, prepend, remove } = useFieldArray({ control, name: 'baggages' })
+  const { fields, prepend, remove, replace } = useFieldArray({ control, name: 'baggages' })
 
   /** Lignes chargées depuis l'API au montage — les nouvelles lignes (prepend) ont un field.id différent */
   const initialBaggageFieldIdsRef = useRef<Set<string> | null>(null)
@@ -320,17 +322,16 @@ export function CheckInForm(props: CheckInFormProps) {
   )
 
   const syncDerivedWeights = useCallback(
-    (options?: { updateExcessPrice?: boolean }) => {
-      const baggages = getValues('baggages') ?? []
+    (options?: { updateExcessPrice?: boolean; baggages?: CheckInPatchFormData['baggages'] }) => {
+      const baggages = options?.baggages ?? getValues('baggages') ?? []
       const { checkInWeight: computedCheckIn, handBaggageWeight: computedHand } =
         computeWeightsFromBaggages(baggages)
       const excess = computeExcessWeightFromBaggages(baggages)
-      const formCurrency = normalizeCurrency(getValues('currency'))
       setValue('checkInWeight', computedCheckIn, { shouldValidate: true })
       setValue('handBaggageWeight', computedHand, { shouldValidate: true })
       setValue('excessWeightKg', excess, { shouldValidate: true })
       if (options?.updateExcessPrice) {
-        const price = computeCheckInExcessPrice(excess, formCurrency, exchangeRates)
+        const price = computeCheckInExcessPrice(excess, CURRENCY.USD, exchangeRates)
         setValue('excessPrice', price, { shouldValidate: true })
         setValue('netToPay', price, { shouldValidate: true })
       }
@@ -339,8 +340,7 @@ export function CheckInForm(props: CheckInFormProps) {
   )
 
   const excessWeightKg = watch('excessWeightKg')
-  const currency = watch('currency')
-  const excessPrice = watch('excessPrice')
+  const paymentCurrency = watch('paymentCurrency')
   const netToPay = watch('netToPay')
   const cashRegister = watch('cashRegister')
 
@@ -356,9 +356,23 @@ export function CheckInForm(props: CheckInFormProps) {
     [cashRegisters],
   )
 
-  const ticketCurrencyIri = resolveCurrencyIriByCode(currencies, currency ?? CURRENCY.USD)
+  const usdCurrencyIri = resolveCurrencyIriByCode(currencies, CURRENCY.USD)
+  const paymentCurrencyIri = resolveCurrencyIriByCode(currencies, paymentCurrency ?? CURRENCY.USD)
+  const fallbackPaymentAmount = useMemo(() => {
+    const converted = computeCheckInPaymentAmount(
+      parseFloat(netToPay) || 0,
+      paymentCurrency ?? CURRENCY.USD,
+      exchangeRates,
+    )
+    return converted != null ? parseFloat(converted) : undefined
+  }, [netToPay, paymentCurrency, exchangeRates])
+  const localPreviewEnabled =
+    hasExcessPayment
+    && paymentCurrency !== CURRENCY.USD
+    && (parseFloat(netToPay) || 0) > 0
+    && fallbackPaymentAmount != null
   const previewEnabled =
-    hasExcessPayment && !!cashRegister && !!ticketCurrencyIri && (parseFloat(netToPay) || 0) > 0
+    hasExcessPayment && !!cashRegister && !!usdCurrencyIri && !!paymentCurrencyIri && (parseFloat(netToPay) || 0) > 0
   const {
     data: conversionPreview,
     isLoading: conversionPreviewLoading,
@@ -366,7 +380,8 @@ export function CheckInForm(props: CheckInFormProps) {
   } = usePreviewConversion({
     cashRegister: cashRegister || undefined,
     amount: netToPay ?? '0',
-    currencyIri: ticketCurrencyIri,
+    currencyIri: usdCurrencyIri,
+    paymentCurrencyIri: paymentCurrency !== CURRENCY.USD ? paymentCurrencyIri : undefined,
     enabled: previewEnabled,
   })
 
@@ -379,14 +394,38 @@ export function CheckInForm(props: CheckInFormProps) {
     syncDerivedWeights({ updateExcessPrice: true })
   }, [exchangeRates, isEdit, syncDerivedWeights])
 
-  const handleCurrencyChange = (nextCurrency: CheckInPatchFormData['currency']) => {
-    setValue('currency', nextCurrency, { shouldValidate: true })
-    const excess = computeExcessWeightFromBaggages(getValues('baggages') ?? [])
-    setValue(
-      'excessPrice',
-      computeCheckInExcessPrice(excess, nextCurrency, exchangeRates),
-      { shouldValidate: true },
-    )
+  const handleBaggageTypeChange = (
+    index: number,
+    nextType: CheckInPatchFormData['baggages'][number]['baggageType'],
+    isExistingBaggage: boolean,
+  ) => {
+    const currentBaggages = getValues('baggages') ?? []
+
+    // `HAND_HOLD` already represents the combined baggage allowance.
+    // If separate `REGULAR` / `HAND` rows remain from a previous selection,
+    // they must be removed or the excess appears doubled.
+    const nextBaggages =
+      nextType === BAGGAGE_TYPE.HAND_HOLD
+        ? currentBaggages.filter((baggage, baggageIndex) => (
+          baggageIndex === index
+          || (
+            baggage.baggageType !== BAGGAGE_TYPE.HAND
+            && baggage.baggageType !== BAGGAGE_TYPE.REGULAR
+          )
+        ))
+        : currentBaggages
+
+    const nextIndex = Math.min(index, nextBaggages.length - 1)
+    nextBaggages[nextIndex] = {
+      ...nextBaggages[nextIndex],
+      baggageType: nextType,
+      weight: isExistingBaggage
+        ? nextBaggages[nextIndex]?.weight ?? ''
+        : getWeightForBaggageType(nextType, nextBaggages, nextIndex),
+    }
+
+    replace(nextBaggages)
+    syncDerivedWeights({ updateExcessPrice: true, baggages: nextBaggages })
   }
 
   useEffect(() => {
@@ -399,11 +438,6 @@ export function CheckInForm(props: CheckInFormProps) {
     }
   }, [excessWeightKg, isEdit, setValue])
 
-  useEffect(() => {
-    if (isEdit) return
-    setValue('netToPay', excessPrice ?? '0', { shouldValidate: true })
-  }, [excessPrice, isEdit, setValue])
-
   const handleTicketSelect = async (ticket: Ticket) => {
     setIsLoadingTicket(true)
     try {
@@ -415,10 +449,7 @@ export function CheckInForm(props: CheckInFormProps) {
         shouldValidate: true,
         shouldDirty: true,
       })
-      setValue('currency', normalizeCurrency(fullTicket.currency), {
-        shouldValidate: true,
-        shouldDirty: true,
-      })
+      setValue('currency', CURRENCY.USD, { shouldValidate: true, shouldDirty: true })
       syncDerivedWeights({ updateExcessPrice: true })
     } catch {
       setSelectedTicket(ticket)
@@ -430,12 +461,7 @@ export function CheckInForm(props: CheckInFormProps) {
           shouldDirty: true,
         })
       }
-      if (ticket.currency) {
-        setValue('currency', normalizeCurrency(ticket.currency), {
-          shouldValidate: true,
-          shouldDirty: true,
-        })
-      }
+      setValue('currency', CURRENCY.USD, { shouldValidate: true, shouldDirty: true })
       syncDerivedWeights({ updateExcessPrice: true })
     } finally {
       setIsLoadingTicket(false)
@@ -517,13 +543,13 @@ export function CheckInForm(props: CheckInFormProps) {
           <div className="space-y-4 sm:col-span-2">
             <HydraAutocomplete<Ticket>
               endpoint="/api/tickets"
-              searchParam="ticketNumber"
+              searchParams={['ticketNumber', 'passengerName']}
               value={selectedTicket}
               getLabel={(t) => `${t.ticketNumber} — ${t.passengerName}`}
               onSelect={handleTicketSelect}
               onClear={handleTicketClear}
               error={errors.ticketIri?.message}
-              label="Numéro de billet"
+              label="Numéro de billet / Nom du passager"
               placeholder="Rechercher par n° de billet ou nom..."
               inputClassName={fieldClass}
             />
@@ -582,8 +608,9 @@ export function CheckInForm(props: CheckInFormProps) {
                       size="icon"
                       className="h-9 w-9 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
                       onClick={() => {
+                        const remainingBaggages = (getValues('baggages') ?? []).filter((_, i) => i !== index)
                         remove(index)
-                        queueMicrotask(() => syncDerivedWeights({ updateExcessPrice: true }))
+                        syncDerivedWeights({ updateExcessPrice: true, baggages: remainingBaggages })
                       }}
                       disabled={!canRemoveBaggage}
                       aria-label="Supprimer bagage"
@@ -600,18 +627,11 @@ export function CheckInForm(props: CheckInFormProps) {
                     variant="filter"
                     value={baggageType}
                     disabled={typeSelectDisabled}
-                    onChange={(e) => {
-                      const nextType = e.target.value as CheckInPatchFormData['baggages'][number]['baggageType']
-                      setValue(`baggages.${index}.baggageType`, nextType, { shouldValidate: true })
-                      if (!isExistingBaggage) {
-                        setValue(
-                          `baggages.${index}.weight`,
-                          getWeightForBaggageType(nextType, watchedBaggages, index),
-                          { shouldValidate: true },
-                        )
-                      }
-                      syncDerivedWeights({ updateExcessPrice: true })
-                    }}
+                    onChange={(e) => handleBaggageTypeChange(
+                      index,
+                      e.target.value as CheckInPatchFormData['baggages'][number]['baggageType'],
+                      isExistingBaggage,
+                    )}
                     error={errors.baggages?.[index]?.baggageType?.message}
                   />
                   {(() => {
@@ -634,7 +654,13 @@ export function CheckInForm(props: CheckInFormProps) {
                         onChange={(e) => {
                           if (isExistingBaggage) return
                           void weightField.onChange(e)
-                          syncDerivedWeights({ updateExcessPrice: true })
+                          const nextBaggages = [...(getValues('baggages') ?? [])]
+                          nextBaggages[index] = {
+                            ...nextBaggages[index],
+                            baggageType: nextBaggages[index]?.baggageType ?? BAGGAGE_TYPE.REGULAR,
+                            weight: e.target.value,
+                          }
+                          syncDerivedWeights({ updateExcessPrice: true, baggages: nextBaggages })
                         }}
                       />
                     )
@@ -786,14 +812,25 @@ export function CheckInForm(props: CheckInFormProps) {
             />
           </div>
         )}
-        <Select
+        <Input
           label="Devise"
+          value="Dollar US (USD)"
+          disabled
+          readOnly
+          className={lockedFieldClass}
+        />
+        <Select
+          label="Devise de paiement"
           options={CURRENCY_OPTIONS}
-          error={errors.currency?.message}
+          error={errors.paymentCurrency?.message}
           variant="filter"
           disabled={isEdit || tarificationInactive}
-          value={currency ?? CURRENCY.USD}
-          onChange={(e) => handleCurrencyChange(e.target.value as CheckInPatchFormData['currency'])}
+          value={paymentCurrency ?? CURRENCY.USD}
+          onChange={(e) =>
+            setValue('paymentCurrency', e.target.value as CheckInPatchFormData['paymentCurrency'], {
+              shouldValidate: true,
+            })
+          }
         />
         <Input
           label="Prix excédent"
@@ -802,17 +839,16 @@ export function CheckInForm(props: CheckInFormProps) {
           step="0.01"
           min="0"
           placeholder="0,00"
-          className={isEdit || tarificationInactive ? lockedFieldClass : fieldClass}
+          className={lockedFieldClass}
           error={errors.excessPrice?.message}
-          readOnly={isEdit || tarificationInactive}
-          tabIndex={isEdit || tarificationInactive ? -1 : undefined}
+          readOnly
+          tabIndex={-1}
           {...register('excessPrice')}
         />
         {!tarificationInactive && (
           <p className="text-xs text-muted-foreground sm:col-span-2">
             Calcul auto : {CHECK_IN_EXCESS_PRICE_PER_KG_USD} $ / kg
-            {currency === CURRENCY.CDF ? ' (converti en CDF via le taux de change actif)' : ''}
-            {isEdit ? ' — mis à jour automatiquement' : ' — modifiable'}
+            {' — calculé automatiquement'}
           </p>
         )}
         <Input
@@ -832,21 +868,34 @@ export function CheckInForm(props: CheckInFormProps) {
           <div className="flex items-center justify-between rounded-xl bg-brand-orange/10 px-4 py-3 sm:col-span-2">
             <span className="text-sm font-semibold">Net à payer</span>
             <span className="text-lg font-bold tabular-nums text-brand-orange">
-              {formatMoney(parseFloat(netToPay) || 0, currency ?? CURRENCY.USD)}
+              {formatMoney(parseFloat(netToPay) || 0, CURRENCY.USD)}
             </span>
           </div>
         )}
-        {previewEnabled && (
+        {(previewEnabled || localPreviewEnabled) && (
           <ConversionPreviewCard
             preview={conversionPreview}
             isLoading={conversionPreviewLoading}
             isError={conversionPreviewError}
+            referenceAmount={parseFloat(netToPay) || 0}
+            referenceCurrency={CURRENCY.USD}
+            paymentCurrency={paymentCurrency}
+            fallbackPaymentAmount={fallbackPaymentAmount}
           />
+        )}
+        {!previewEnabled
+          && paymentCurrency !== CURRENCY.USD
+          && (parseFloat(netToPay) || 0) > 0
+          && fallbackPaymentAmount == null && (
+          <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive sm:col-span-2">
+            Aucun taux de change actif pour convertir le montant USD vers {paymentCurrency}.
+          </div>
         )}
       </FormSection>
       )}
 
       <input type="hidden" {...register('ticketIri')} />
+      <input type="hidden" {...register('currency')} />
 
       <CheckInFormActions
         formId={FORM_ID}

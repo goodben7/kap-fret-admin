@@ -8,7 +8,7 @@ export const BAGGAGE_TYPE = {
 export type BaggageType = (typeof BAGGAGE_TYPE)[keyof typeof BAGGAGE_TYPE]
 
 export const BAGGAGE_TYPE_LABELS: Record<BaggageType, string> = {
-  REGULAR: 'Bagage soute standard',
+  REGULAR: 'Bagage soute',
   HAND: 'Bagage à main',
   HAND_HOLD: 'Bagage soute + Bagage à main',
   OVERSIZE: 'Excédant',
@@ -62,8 +62,14 @@ function getHandHoldWeight(baggages: BaggageInput[]): number | null {
 /** Poids main restant dans la franchise combinée (20 kg) quand soute+main < 20 */
 export function getHandHoldHandRemainderKg(baggages: BaggageInput[]): string | null {
   const holdWeight = getHandHoldWeight(baggages)
-  if (holdWeight == null || holdWeight >= CHECK_IN_HAND_HOLD_BAGGAGE_ALLOWANCE_KG) return null
-  return (CHECK_IN_HAND_HOLD_BAGGAGE_ALLOWANCE_KG - holdWeight).toFixed(2)
+  if (holdWeight == null) return null
+  const handAlreadyUsed = Math.min(
+    Math.max(0, holdWeight - CHECK_IN_REGULAR_BAGGAGE_ALLOWANCE_KG),
+    CHECK_IN_HAND_BAGGAGE_ALLOWANCE_KG,
+  )
+  const remainingHandAllowance = CHECK_IN_HAND_BAGGAGE_ALLOWANCE_KG - handAlreadyUsed
+  if (remainingHandAllowance <= 0) return null
+  return remainingHandAllowance.toFixed(2)
 }
 
 export function getWeightForBaggageType(

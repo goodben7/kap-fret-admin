@@ -20,6 +20,7 @@ export interface CheckIn extends HydraResource {
   excessWeightKg: string
   excessPrice: string
   currency?: string
+  paymentCurrency?: string
   netToPay: string
   handBaggageWeight: string
   observations?: string
@@ -50,6 +51,7 @@ export interface CheckInCreatePayload {
   excessWeightKg: string
   excessPrice: string
   currency: string
+  paymentCurrency: string
   netToPay: string
   handBaggageWeight: string
   observations: string

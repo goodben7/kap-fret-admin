@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { CHECK_IN_STATUS, CHECK_IN_STATUS_LABELS } from '@/constants/check-in'
 import { CASH_TRANSACTION_REFERENCE_TYPE } from '@/constants/cash-transaction'
-import { CURRENCY_LABELS } from '@/constants/ticket'
+import { CURRENCY_LABELS, normalizeCurrency } from '@/constants/ticket'
 import { useCheckIn } from '@/hooks/useCheckIns'
 import { RelatedCashTransactionsPanel } from '@/components/cash-transactions/RelatedCashTransactionsPanel'
 import {
@@ -168,6 +168,7 @@ export function CheckInDetailPage() {
   }
 
   const currency = getCheckInCurrency(checkIn)
+  const paymentCurrency = normalizeCurrency(checkIn.paymentCurrency ?? checkIn.currency)
   const money = (amount: string | number) => formatMoney(parseFloat(String(amount)) || 0, currency)
   const passengerName = getCheckInPassengerName(checkIn)
   const ticketNumber = getCheckInTicketNumber(checkIn)
@@ -308,6 +309,7 @@ export function CheckInDetailPage() {
         <DetailSection title="Tarification" icon={Banknote} className="lg:col-span-2">
           <div className="grid gap-0 lg:grid-cols-2 lg:gap-x-8">
             <DetailRow label="Devise" value={CURRENCY_LABELS[currency]} />
+            <DetailRow label="Devise de paiement" value={CURRENCY_LABELS[paymentCurrency]} />
             <DetailRow label="Prix excédent" value={money(checkIn.excessPrice)} />
             <div className="mt-3 flex items-center justify-between rounded-xl bg-brand-orange/10 px-4 py-3 lg:col-span-2">
               <span className="text-sm font-semibold">Net à payer</span>

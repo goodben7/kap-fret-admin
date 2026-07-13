@@ -49,6 +49,7 @@ export interface CashTransactionCreatePayload {
   type: CashTransactionType
   amount: string
   currency: string
+  paymentCurrency?: string
   description: string
   referenceType: CashTransactionReferenceType
   referenceId: string

@@ -7,7 +7,6 @@ import {
   type CheckInFilters,
 } from '@/lib/check-in-filters'
 import {
-  getCheckInCurrency,
   getCheckInPassengerName,
   getCheckInTicketId,
   getCheckInTicketNumber,
@@ -20,7 +19,7 @@ import {
   buildManifestNumber,
   downloadBlob,
 } from '@/lib/passenger-manifest-pdf'
-import { CURRENCY, type Currency } from '@/constants/ticket'
+import { CURRENCY, normalizeCurrency, type Currency } from '@/constants/ticket'
 
 export { downloadBlob }
 
@@ -46,9 +45,7 @@ const LOGO_HEIGHT_MM = 18
 /** Largeur utile A4 paysage (297 mm − marges gauche/droite) */
 const USABLE_TABLE_WIDTH_MM = 297 - MARGIN_X * 2
 
-const MANIFEST_CURRENCY_ORDER: Currency[] = [CURRENCY.USD, CURRENCY.CDF]
-
-const COLUMN_COUNT = 11
+const COLUMN_COUNT = 13
 
 /** Largeurs colonnes (mm) — total = USABLE_TABLE_WIDTH_MM */
 const COLUMN_WIDTHS_MM = {
@@ -60,9 +57,11 @@ const COLUMN_WIDTHS_MM = {
   allowance: 18,
   hand: 18,
   excess: 19,
-  netToPay: 28,
-  balance: 25,
-  observations: 44,
+  netToPayUsd: 14,
+  netToPayCdf: 14,
+  balanceUsd: 13,
+  balanceCdf: 13,
+  observations: 43,
 } as const
 
 const TABLE_WIDTH_MM = USABLE_TABLE_WIDTH_MM
@@ -79,36 +78,69 @@ function formatManifestDate(dateInput: string): string {
 
 function formatKgCell(value: string | number | undefined): string {
   const num = typeof value === 'number' ? value : parseFloat(value ?? '')
-  if (Number.isNaN(num)) return '—'
+  if (Number.isNaN(num) || num === 0) return '—'
   return num.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-function formatManifestMoney(amount: number, currency: Currency): string {
-  const safeAmount = Number.isFinite(amount) ? amount : 0
-  const formatted = safeAmount.toLocaleString('fr-FR', {
-    minimumFractionDigits: currency === CURRENCY.USD ? 2 : 0,
-    maximumFractionDigits: currency === CURRENCY.USD ? 2 : 0,
-  })
-  // jsPDF (Helvetica) ne rend pas l'espace fine U+202F du locale fr-FR → "/" à l'écran
-  const normalized = formatted.replace(/[\u00A0\u202F]/g, ' ')
-  const symbol = currency === CURRENCY.USD ? '$' : 'Fc'
-  return `${normalized} ${symbol}`
+function formatManifestWeightPart(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return ''
+  if (Math.abs(value - Math.round(value)) < 0.001) {
+    return String(Math.round(value))
+  }
+  return value.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-function formatMoneyCell(amount: number, currency: Currency): string {
+/** Détail des poids enregistrés : soute + main + excédent (ex. « 15 + 5 + 7 »). */
+function formatCheckInWeightBreakdown(checkIn: CheckIn): string {
+  const parts: string[] = []
+  const checked = parseFloat(checkIn.checkInWeight) || 0
+  const hand = parseFloat(checkIn.handBaggageWeight) || 0
+  const excess = parseFloat(checkIn.excessWeightKg) || 0
+
+  const checkedPart = formatManifestWeightPart(checked)
+  const handPart = formatManifestWeightPart(hand)
+  const excessPart = formatManifestWeightPart(excess)
+
+  if (checkedPart) parts.push(checkedPart)
+  if (handPart) parts.push(handPart)
+  if (excessPart) parts.push(excessPart)
+
+  return parts.length > 0 ? parts.join(' + ') : '—'
+}
+
+function formatAmountCell(amount: number, currency: Currency): string {
   if (!Number.isFinite(amount) || amount === 0) return '—'
-  return formatManifestMoney(amount, currency)
+  return amount
+    .toLocaleString('fr-FR', {
+      minimumFractionDigits: currency === CURRENCY.USD ? 2 : 0,
+      maximumFractionDigits: currency === CURRENCY.USD ? 2 : 0,
+    })
+    .replace(/[\u00A0\u202F]/g, ' ')
 }
 
-function formatTotalMoneyCell(amount: number, currency: Currency): string {
-  if (!Number.isFinite(amount)) return '—'
-  return formatManifestMoney(amount, currency)
+function getCheckInPaymentCurrency(checkIn: CheckIn): Currency {
+  return normalizeCurrency(checkIn.paymentCurrency ?? checkIn.currency)
+}
+
+function formatNetToPayCells(netToPay: number, paymentCurrency: Currency): [string, string] {
+  return [
+    paymentCurrency === CURRENCY.USD ? formatAmountCell(netToPay, CURRENCY.USD) : '—',
+    paymentCurrency === CURRENCY.CDF ? formatAmountCell(netToPay, CURRENCY.CDF) : '—',
+  ]
+}
+
+function formatBalanceCells(runningUsd: number, runningCdf: number): [string, string] {
+  return [
+    runningUsd === 0 ? '—' : formatAmountCell(runningUsd, CURRENCY.USD),
+    runningCdf === 0 ? '—' : formatAmountCell(runningCdf, CURRENCY.CDF),
+  ]
 }
 
 function getTotalCheckInWeightKg(checkIn: CheckIn): number {
   const checked = parseFloat(checkIn.checkInWeight) || 0
   const hand = parseFloat(checkIn.handBaggageWeight) || 0
-  return checked + hand
+  const excess = parseFloat(checkIn.excessWeightKg) || 0
+  return checked + hand + excess
 }
 
 export function filterCheckInsForManifest(checkIns: CheckIn[]): CheckIn[] {
@@ -116,32 +148,9 @@ export function filterCheckInsForManifest(checkIns: CheckIn[]): CheckIn[] {
 }
 
 export function sortCheckInsForManifest(checkIns: CheckIn[]): CheckIn[] {
-  const currencyRank = (currency: Currency) => {
-    const index = MANIFEST_CURRENCY_ORDER.indexOf(currency)
-    return index === -1 ? MANIFEST_CURRENCY_ORDER.length : index
-  }
-
-  return [...checkIns].sort((a, b) => {
-    const currencyCompare =
-      currencyRank(getCheckInCurrency(a)) - currencyRank(getCheckInCurrency(b))
-    if (currencyCompare !== 0) return currencyCompare
-    return (getCheckInPassengerName(a) ?? '').localeCompare(getCheckInPassengerName(b) ?? '', 'fr')
-  })
-}
-
-function groupCheckInsByCurrency(checkIns: CheckIn[]): Map<Currency, CheckIn[]> {
-  const groups = new Map<Currency, CheckIn[]>(
-    MANIFEST_CURRENCY_ORDER.map((currency) => [currency, []]),
+  return [...checkIns].sort((a, b) =>
+    (getCheckInPassengerName(a) ?? '').localeCompare(getCheckInPassengerName(b) ?? '', 'fr'),
   )
-
-  for (const checkIn of checkIns) {
-    const currency = getCheckInCurrency(checkIn)
-    const list = groups.get(currency) ?? []
-    list.push(checkIn)
-    groups.set(currency, list)
-  }
-
-  return groups
 }
 
 interface ManifestTableBuildResult {
@@ -151,6 +160,68 @@ interface ManifestTableBuildResult {
 
 function emptyManifestRow(): string[] {
   return Array.from({ length: COLUMN_COUNT }, () => '')
+}
+
+function buildCheckInManifestRows(checkIns: CheckIn[]): ManifestTableBuildResult {
+  const sortedCheckIns = sortCheckInsForManifest(checkIns)
+  const rows: string[][] = []
+  const totalRowIndexes = new Set<number>()
+  let runningUsd = 0
+  let runningCdf = 0
+  let rowIndex = 0
+
+  for (let index = 0; index < sortedCheckIns.length; index += 1) {
+    const checkIn = sortedCheckIns[index]!
+    const netToPay = parseFloat(checkIn.netToPay) || 0
+    const paymentCurrency = getCheckInPaymentCurrency(checkIn)
+
+    if (paymentCurrency === CURRENCY.USD) runningUsd += netToPay
+    else runningCdf += netToPay
+
+    const [netUsd, netCdf] = formatNetToPayCells(netToPay, paymentCurrency)
+    const [balanceUsd, balanceCdf] = formatBalanceCells(runningUsd, runningCdf)
+
+    rows.push([
+      String(index + 1),
+      getCheckInPassengerName(checkIn) ?? '—',
+      getCheckInTicketNumber(checkIn),
+      formatCheckInWeightBreakdown(checkIn),
+      formatKgCell(getTotalCheckInWeightKg(checkIn)),
+      formatKgCell(checkIn.checkInWeight),
+      formatKgCell(checkIn.handBaggageWeight),
+      formatKgCell(checkIn.excessWeightKg),
+      netUsd,
+      netCdf,
+      balanceUsd,
+      balanceCdf,
+      hasCheckInObservations(checkIn.observations) ? checkIn.observations!.trim() : '',
+    ])
+    rowIndex += 1
+  }
+
+  if (sortedCheckIns.length > 0) {
+    const [totalNetUsd, totalNetCdf] = formatBalanceCells(runningUsd, runningCdf)
+    const [totalBalanceUsd, totalBalanceCdf] = formatBalanceCells(runningUsd, runningCdf)
+
+    rows.push([
+      '',
+      'TOTAL',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      totalNetUsd,
+      totalNetCdf,
+      totalBalanceUsd,
+      totalBalanceCdf,
+      '',
+    ])
+    totalRowIndexes.add(rowIndex)
+  }
+
+  return { rows, totalRowIndexes }
 }
 
 export async function fetchCheckInsForManifest(
@@ -237,68 +308,6 @@ function buildTableBodyRows(
   }
 
   return dataRows
-}
-
-function buildCheckInManifestRows(checkIns: CheckIn[]): ManifestTableBuildResult {
-  const groups = groupCheckInsByCurrency(checkIns)
-  const rows: string[][] = []
-  const totalRowIndexes = new Set<number>()
-  const totalsByCurrency = new Map<Currency, number>()
-  let rowIndex = 0
-  let globalIndex = 0
-
-  for (const currency of MANIFEST_CURRENCY_ORDER) {
-    const group = groups.get(currency) ?? []
-    if (group.length === 0) continue
-
-    let runningBalance = 0
-
-    for (const checkIn of group) {
-      globalIndex += 1
-      const netToPay = parseFloat(checkIn.netToPay) || 0
-      runningBalance += netToPay
-
-      rows.push([
-        String(globalIndex),
-        getCheckInPassengerName(checkIn) ?? '—',
-        getCheckInTicketNumber(checkIn),
-        formatKgCell(checkIn.checkInWeight),
-        formatKgCell(getTotalCheckInWeightKg(checkIn)),
-        formatKgCell(checkIn.baggageAllowanceKg),
-        formatKgCell(checkIn.handBaggageWeight),
-        formatKgCell(checkIn.excessWeightKg),
-        formatMoneyCell(netToPay, currency),
-        formatMoneyCell(runningBalance, currency),
-        hasCheckInObservations(checkIn.observations) ? checkIn.observations!.trim() : '',
-      ])
-      rowIndex += 1
-    }
-
-    totalsByCurrency.set(currency, runningBalance)
-  }
-
-  for (const currency of MANIFEST_CURRENCY_ORDER) {
-    const total = totalsByCurrency.get(currency)
-    if (total == null) continue
-
-    rows.push([
-      '',
-      `TOTAL ${currency}`,
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-      formatMoneyCell(total, currency),
-      formatTotalMoneyCell(total, currency),
-      '',
-    ])
-    totalRowIndexes.add(rowIndex)
-    rowIndex += 1
-  }
-
-  return { rows, totalRowIndexes }
 }
 
 function drawBrandTitle(doc: jsPDF, centerX: number, y: number) {
@@ -412,19 +421,22 @@ export async function generateCheckInManifestPdf(params: CheckInManifestParams):
   autoTable(doc, {
     startY: tableStartY,
     tableWidth: TABLE_WIDTH_MM,
-    head: [[
-      'N°',
-      'NOMS',
-      'N° BILLETS',
-      'POIDS\nCHECK-IN',
-      'POIDS TOTAL\nCHECK-IN',
-      'POIDS\nFRANCHISES',
-      'BAGAGES\nA MAIN',
-      'TOTAL\nEXCEDENTS',
-      'NET A PAYER\nEXCEDENT',
-      'SOLDE',
-      'OBSERVATIONS',
-    ]],
+    head: [
+      [
+        { content: 'N°', rowSpan: 2 },
+        { content: 'NOMS', rowSpan: 2 },
+        { content: 'N° BILLETS', rowSpan: 2 },
+        { content: 'POIDS\nCHECK-IN', rowSpan: 2 },
+        { content: 'POIDS TOTAL\nCHECK-IN', rowSpan: 2 },
+        { content: 'POIDS\nSOUTE', rowSpan: 2 },
+        { content: 'BAGAGES\nA MAIN', rowSpan: 2 },
+        { content: 'EXCEDENT', rowSpan: 2 },
+        { content: 'NET A PAYER\nEXCEDENT', colSpan: 2 },
+        { content: 'SOLDE', colSpan: 2 },
+        { content: 'OBSERVATIONS', rowSpan: 2 },
+      ],
+      ['USD', 'CDF', 'USD', 'CDF'],
+    ],
     body: rows,
     theme: 'grid',
     styles: {
@@ -449,14 +461,16 @@ export async function generateCheckInManifestPdf(params: CheckInManifestParams):
       0: { cellWidth: COLUMN_WIDTHS_MM.index, halign: 'center' },
       1: { cellWidth: COLUMN_WIDTHS_MM.name },
       2: { cellWidth: COLUMN_WIDTHS_MM.ticket, halign: 'center' },
-      3: { cellWidth: COLUMN_WIDTHS_MM.checkInWeight, halign: 'right' },
+      3: { cellWidth: COLUMN_WIDTHS_MM.checkInWeight, halign: 'center' },
       4: { cellWidth: COLUMN_WIDTHS_MM.totalWeight, halign: 'right' },
       5: { cellWidth: COLUMN_WIDTHS_MM.allowance, halign: 'right' },
       6: { cellWidth: COLUMN_WIDTHS_MM.hand, halign: 'right' },
       7: { cellWidth: COLUMN_WIDTHS_MM.excess, halign: 'right' },
-      8: { cellWidth: COLUMN_WIDTHS_MM.netToPay, halign: 'right' },
-      9: { cellWidth: COLUMN_WIDTHS_MM.balance, halign: 'right' },
-      10: { cellWidth: COLUMN_WIDTHS_MM.observations },
+      8: { cellWidth: COLUMN_WIDTHS_MM.netToPayUsd, halign: 'right' },
+      9: { cellWidth: COLUMN_WIDTHS_MM.netToPayCdf, halign: 'right' },
+      10: { cellWidth: COLUMN_WIDTHS_MM.balanceUsd, halign: 'right' },
+      11: { cellWidth: COLUMN_WIDTHS_MM.balanceCdf, halign: 'right' },
+      12: { cellWidth: COLUMN_WIDTHS_MM.observations },
     },
     margin: { left: MARGIN_X, right: MARGIN_X, bottom: FOOTER_HEIGHT_MM },
     showHead: singlePage ? 'firstPage' : 'everyPage',
@@ -464,7 +478,7 @@ export async function generateCheckInManifestPdf(params: CheckInManifestParams):
       if (data.section !== 'body' || !totalRowIndexes.has(data.row.index)) return
       data.cell.styles.fontStyle = 'bold'
       data.cell.styles.fillColor = [245, 245, 245]
-      if (data.column.index === 1 || data.column.index === 8 || data.column.index === 9) {
+      if (data.column.index === 1 || (data.column.index >= 8 && data.column.index <= 11)) {
         data.cell.styles.halign = data.column.index === 1 ? 'left' : 'right'
       }
     },

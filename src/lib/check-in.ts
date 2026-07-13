@@ -126,67 +126,84 @@ export function getBaggageTypeAllowanceKg(baggageType: BaggageType): number {
   return 0
 }
 
-/** Excédent = somme des dépassements par bagage ; OVERSIZE = poids saisi en excédent direct */
-export function computeExcessWeightFromBaggages(
+function parseBaggageWeight(weight?: string): number {
+  const parsed = parseFloat(weight ?? '')
+  return Number.isNaN(parsed) || parsed <= 0 ? 0 : parsed
+}
+
+function summarizeBaggages(
   baggages: Array<{ weight?: string; baggageType: BaggageType }>,
-): string {
+): { checkInWeight: string; handBaggageWeight: string; excessWeightKg: string } {
+  let checked = 0
+  let hand = 0
   let excess = 0
-  const handHoldBaggage = baggages.find((baggage) => baggage.baggageType === BAGGAGE_TYPE.HAND_HOLD)
-  const handBaggage = baggages.find((baggage) => baggage.baggageType === BAGGAGE_TYPE.HAND)
+  let handAllowanceUsed = 0
 
-  if (handHoldBaggage && handBaggage) {
-    const holdWeight = parseFloat(handHoldBaggage.weight ?? '') || 0
-    const handWeight = parseFloat(handBaggage.weight ?? '') || 0
-    excess += Math.max(0, holdWeight + handWeight - CHECK_IN_HAND_HOLD_BAGGAGE_ALLOWANCE_KG)
-  } else if (handHoldBaggage) {
-    const holdWeight = parseFloat(handHoldBaggage.weight ?? '') || 0
-    excess += Math.max(0, holdWeight - CHECK_IN_HAND_HOLD_BAGGAGE_ALLOWANCE_KG)
-  }
+  const sortedBaggages = [...baggages].sort((a, b) => {
+    const priority = (type: BaggageType) => {
+      if (type === BAGGAGE_TYPE.HAND_HOLD) return 0
+      if (type === BAGGAGE_TYPE.REGULAR) return 1
+      if (type === BAGGAGE_TYPE.HAND) return 2
+      return 3
+    }
+    return priority(a.baggageType) - priority(b.baggageType)
+  })
 
-  for (const baggage of baggages) {
-    const weight = parseFloat(baggage.weight ?? '')
-    if (Number.isNaN(weight) || weight <= 0) continue
+  for (const baggage of sortedBaggages) {
+    const weight = parseBaggageWeight(baggage.weight)
+    if (weight <= 0) continue
 
     if (baggage.baggageType === BAGGAGE_TYPE.OVERSIZE) {
       excess += weight
       continue
     }
 
-    if (baggage.baggageType === BAGGAGE_TYPE.HAND_HOLD && handBaggage) continue
-    if (baggage.baggageType === BAGGAGE_TYPE.HAND && handHoldBaggage) continue
-
     if (baggage.baggageType === BAGGAGE_TYPE.HAND) {
-      excess += Math.max(0, weight - CHECK_IN_HAND_BAGGAGE_ALLOWANCE_KG)
+      const remainingHandAllowance = Math.max(0, CHECK_IN_HAND_BAGGAGE_ALLOWANCE_KG - handAllowanceUsed)
+      const assignedToHand = Math.min(weight, remainingHandAllowance)
+      hand += assignedToHand
+      handAllowanceUsed += assignedToHand
+      excess += Math.max(0, weight - assignedToHand)
       continue
     }
 
-    const allowance = getBaggageTypeAllowanceKg(baggage.baggageType)
-    excess += Math.max(0, weight - allowance)
-  }
-
-  return excess.toFixed(2)
-}
-
-/** Poids check-in = soute ; bagage à main = type HAND ; OVERSIZE exclu des totaux */
-export function computeWeightsFromBaggages(
-  baggages: Array<{ weight?: string; baggageType: BaggageType }>,
-): { checkInWeight: string; handBaggageWeight: string } {
-  let checked = 0
-  let hand = 0
-  for (const baggage of baggages) {
-    const weight = parseFloat(baggage.weight ?? '')
-    if (Number.isNaN(weight) || weight <= 0) continue
-    if (baggage.baggageType === BAGGAGE_TYPE.OVERSIZE) continue
-    if (baggage.baggageType === BAGGAGE_TYPE.HAND) {
-      hand += weight
-    } else {
-      checked += weight
+    if (baggage.baggageType === BAGGAGE_TYPE.HAND_HOLD) {
+      const assignedToChecked = Math.min(weight, CHECK_IN_REGULAR_BAGGAGE_ALLOWANCE_KG)
+      const assignedToHand = Math.min(
+        Math.max(0, weight - CHECK_IN_REGULAR_BAGGAGE_ALLOWANCE_KG),
+        CHECK_IN_HAND_BAGGAGE_ALLOWANCE_KG,
+      )
+      checked += assignedToChecked
+      hand += assignedToHand
+      handAllowanceUsed += assignedToHand
+      excess += Math.max(0, weight - CHECK_IN_HAND_HOLD_BAGGAGE_ALLOWANCE_KG)
+      continue
     }
+
+    checked += Math.min(weight, CHECK_IN_REGULAR_BAGGAGE_ALLOWANCE_KG)
+    excess += Math.max(0, weight - CHECK_IN_REGULAR_BAGGAGE_ALLOWANCE_KG)
   }
+
   return {
     checkInWeight: checked.toFixed(2),
     handBaggageWeight: hand.toFixed(2),
+    excessWeightKg: excess.toFixed(2),
   }
+}
+
+/** Excédent calculé après répartition 15 kg soute + 5 kg main. */
+export function computeExcessWeightFromBaggages(
+  baggages: Array<{ weight?: string; baggageType: BaggageType }>,
+): string {
+  return summarizeBaggages(baggages).excessWeightKg
+}
+
+/** Poids check-in plafonné à 15 kg soute et 5 kg main ; surplus envoyé en excédent. */
+export function computeWeightsFromBaggages(
+  baggages: Array<{ weight?: string; baggageType: BaggageType }>,
+): { checkInWeight: string; handBaggageWeight: string } {
+  const { checkInWeight, handBaggageWeight } = summarizeBaggages(baggages)
+  return { checkInWeight, handBaggageWeight }
 }
 
 /** Prix excédent = 5 USD × kg, converti selon la devise du check-in */
@@ -207,6 +224,24 @@ export function computeCheckInExcessPrice(
     exchangeRates,
   )
   if (converted == null) return usdAmount.toFixed(2)
+  return converted.toFixed(2)
+}
+
+/** Montant à encaisser dans la devise de paiement (tarification check-in toujours en USD). */
+export function computeCheckInPaymentAmount(
+  totalUsd: number,
+  paymentCurrency: Currency,
+  exchangeRates: ExchangeRateResource[] = [],
+): string | null {
+  if (!Number.isFinite(totalUsd) || totalUsd <= 0) return null
+  if (paymentCurrency === CURRENCY.USD) return totalUsd.toFixed(2)
+  const converted = convertAmountBetweenCurrencyCodes(
+    totalUsd,
+    CURRENCY.USD,
+    paymentCurrency,
+    exchangeRates,
+  )
+  if (converted == null) return null
   return converted.toFixed(2)
 }
 
@@ -320,7 +355,8 @@ export function toCheckInCreatePayload(data: CheckInCreateFormData): CheckInCrea
     baggageAllowanceKg: formatDecimal(data.baggageAllowanceKg),
     excessWeightKg: formatDecimal(data.excessWeightKg),
     excessPrice: formatDecimal(data.excessPrice),
-    currency: normalizeCurrency(data.currency),
+    currency: CURRENCY.USD,
+    paymentCurrency: normalizeCurrency(data.paymentCurrency),
     netToPay: formatDecimal(data.netToPay),
     handBaggageWeight: formatDecimal(data.handBaggageWeight || '0'),
     observations: data.observations?.trim() ?? '',

@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, type ReactNode } from 'react'
+import { useMemo, useState, useEffect, useRef, type ReactNode } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Plus,
@@ -267,14 +267,18 @@ function TicketFiltersFields({
 
   const travel = (
     <FilterSection title="Voyage" icon={MapPin}>
-      <Input
-        label="Date de voyage"
-        type="date"
-        placeholder="Prochain vol si vide"
-        value={draft.travelDate}
-        onChange={(e) => onChange({ travelDate: e.target.value })}
-        className={filterInputClass}
-      />
+      <div className="space-y-1.5">
+        <Input
+          label="Date de voyage"
+          type="date"
+          value={draft.travelDate}
+          onChange={(e) => onChange({ travelDate: e.target.value })}
+          className={filterInputClass}
+        />
+        <p className="text-xs text-muted-foreground">
+          Par defaut, la liste affiche le prochain vol. Vous pouvez choisir une autre date, meme deja passee.
+        </p>
+      </div>
       <CheckpointAsyncSelect
         label="Départ"
         placeholder="Checkpoint de départ..."
@@ -392,10 +396,22 @@ export function TicketsListPage() {
     [searchParams],
   )
 
+  const defaultFlightDisabled = searchParams.get('allFlights') === '1'
   const explicitTravelDate = filters.travelDate.trim()
-  const activeFlightDate = explicitTravelDate || getUpcomingFlightTravelDateInput()
+  const activeFlightDate = explicitTravelDate || (defaultFlightDisabled ? '' : getUpcomingFlightTravelDateInput())
 
   const [searchInput, setSearchInput] = useState(filters.passengerName)
+
+  const buildSearchParams = (
+    nextFilters: TicketFiltersState,
+    nextPage?: number,
+    disableDefaultFlight = defaultFlightDisabled,
+  ) => {
+    const next = ticketFiltersToSearchParams(nextFilters, nextPage)
+    if (disableDefaultFlight) next.set('allFlights', '1')
+    else next.delete('allFlights')
+    return next
+  }
 
   useEffect(() => {
     setSearchInput(filters.passengerName)
@@ -421,7 +437,7 @@ export function TicketsListPage() {
 
   const { data, isLoading, isFetching } = useTickets({
     ...filters,
-    travelDate: activeFlightDate,
+    travelDate: activeFlightDate || undefined,
     page,
     itemsPerPage: ITEMS_PER_PAGE,
   })
@@ -454,13 +470,13 @@ export function TicketsListPage() {
   const applyPanelFilters = () => {
     const passengerName = searchInput.trim() || panelDraft.passengerName.trim()
     const next = { ...panelDraft, passengerName }
-    setSearchParams(ticketFiltersToSearchParams(next), { replace: true })
+    setSearchParams(buildSearchParams(next), { replace: true })
     setSearchInput(passengerName)
     setFiltersOpen(false)
   }
 
   const resetAllFilters = () => {
-    setSearchParams(new URLSearchParams(), { replace: true })
+    setSearchParams(buildSearchParams(emptyTicketFilters), { replace: true })
     setSearchInput('')
     setPanelDraft(emptyTicketFilters)
     setFiltersOpen(false)
@@ -469,11 +485,11 @@ export function TicketsListPage() {
   const patchFilters = (patch: Partial<TicketFiltersState>) => {
     const next = { ...filters, ...patch }
     if ('passengerName' in patch) setSearchInput(patch.passengerName ?? '')
-    setSearchParams(ticketFiltersToSearchParams(next, page), { replace: true })
+    setSearchParams(buildSearchParams(next, page), { replace: true })
   }
 
   const handlePageChange = (nextPage: number) => {
-    setSearchParams(ticketFiltersToSearchParams(filters, nextPage), { replace: true })
+    setSearchParams(buildSearchParams(filters, nextPage), { replace: true })
   }
 
   const handleViewModeChange = (mode: TicketViewMode) => {
@@ -492,7 +508,26 @@ export function TicketsListPage() {
       ...filters,
       status: reservedOnlyActive ? '' : TICKET_STATUS.RESERVED,
     }
-    setSearchParams(ticketFiltersToSearchParams(next, 1), { replace: true })
+    setSearchParams(buildSearchParams(next, 1), { replace: true })
+  }
+
+  const toggleDefaultFlightFilter = () => {
+    setSearchParams(buildSearchParams(filters, 1, !defaultFlightDisabled), { replace: true })
+  }
+
+  const flightDateInputRef = useRef<HTMLInputElement>(null)
+
+  const openFlightDatePicker = () => {
+    const input = flightDateInputRef.current
+    if (!input) return
+    if (typeof input.showPicker === 'function') input.showPicker()
+    else input.click()
+  }
+
+  const handleFlightDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const travelDate = e.target.value
+    if (!travelDate) return
+    setSearchParams(buildSearchParams({ ...filters, travelDate }, 1, false), { replace: true })
   }
 
   return (
@@ -509,7 +544,24 @@ export function TicketsListPage() {
             <p className="text-sm text-muted-foreground mt-1 pl-11">
               {data.totalItems} billet{data.totalItems !== 1 ? 's' : ''}
               {reservedOnlyActive ? ` réservé${data.totalItems !== 1 ? 's' : ''}` : ''}
-              {' · '}Vol du {formatTravelDateInput(activeFlightDate)}
+              {' · '}
+              <button
+                type="button"
+                onClick={openFlightDatePicker}
+                className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline"
+              >
+                <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
+                {activeFlightDate ? `Vol du ${formatTravelDateInput(activeFlightDate)}` : 'Tous les vols'}
+              </button>
+              <input
+                ref={flightDateInputRef}
+                type="date"
+                value={activeFlightDate || getUpcomingFlightTravelDateInput()}
+                onChange={handleFlightDateChange}
+                className="sr-only"
+                tabIndex={-1}
+                aria-hidden="true"
+              />
             </p>
           )}
         </div>
@@ -566,6 +618,16 @@ export function TicketsListPage() {
       </div>
 
       <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant={defaultFlightDisabled ? 'outline' : 'default'}
+          size="sm"
+          className="h-9 rounded-full px-3 shadow-sm"
+          onClick={toggleDefaultFlightFilter}
+          aria-pressed={!defaultFlightDisabled}
+        >
+          {defaultFlightDisabled ? 'Activer prochain vol' : 'Désactiver prochain vol'}
+        </Button>
         <Button
           type="button"
           variant={reservedOnlyActive ? 'default' : 'outline'}

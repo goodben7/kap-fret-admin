@@ -58,18 +58,45 @@ export function ConversionPreviewCard({
     )
   }
 
-  if (!preview) return null
-
-  const originalCode = preview.originalCurrency.code
-  const convertedCode = preview.convertedCurrency.code
-  const originalAmount = parseFloat(preview.originalAmount) || 0
-  const convertedAmount = parseFloat(preview.convertedAmount) || 0
-
   const crossCurrencyPayment =
     referenceAmount != null
     && referenceCurrency
     && paymentCurrency
     && referenceCurrency !== paymentCurrency
+
+  if (!preview) {
+    if (!crossCurrencyPayment || fallbackPaymentAmount == null) return null
+
+    const appliedRate = referenceAmount > 0 ? fallbackPaymentAmount / referenceAmount : 0
+
+    return (
+      <div className="space-y-2 rounded-xl border border-brand-orange/25 bg-brand-orange/5 px-4 py-3 sm:col-span-2">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Aperçu conversion caisse
+        </p>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="font-semibold tabular-nums">
+            {formatMoney(referenceAmount, referenceCurrency)}
+          </span>
+          <ArrowRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <span className="font-bold tabular-nums text-brand-orange">
+            {formatMoney(fallbackPaymentAmount, paymentCurrency)}
+          </span>
+        </div>
+        {appliedRate > 0 && (
+          <p className="text-xs text-muted-foreground">
+            Taux appliqué : 1 {referenceCurrency} ={' '}
+            {appliedRate.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} {paymentCurrency}
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  const originalCode = preview.originalCurrency.code
+  const convertedCode = preview.convertedCurrency.code
+  const originalAmount = parseFloat(preview.originalAmount) || 0
+  const convertedAmount = parseFloat(preview.convertedAmount) || 0
 
   if (crossCurrencyPayment) {
     const paymentAmount = pickAmountForCurrency(preview, paymentCurrency, fallbackPaymentAmount)

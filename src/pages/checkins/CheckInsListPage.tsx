@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Building2,
@@ -29,6 +29,7 @@ import {
   getCheckInPassengerName,
   getCheckInTicketNumber,
 } from '@/lib/check-in'
+import { formatTravelDateInput, getUpcomingFlightTravelDateInput } from '@/lib/ticket'
 import {
   checkInFiltersToSearchParams,
   countActiveCheckInFilters,
@@ -394,7 +395,22 @@ export function CheckInsListPage() {
     [searchParams],
   )
 
+  const defaultFlightDisabled = searchParams.get('allFlights') === '1'
+  const explicitTravelDate = filters.travelDate.trim()
+  const activeFlightDate = explicitTravelDate || (defaultFlightDisabled ? '' : getUpcomingFlightTravelDateInput())
+
   const [searchInput, setSearchInput] = useState(filters.passengerName)
+
+  const buildSearchParams = (
+    nextFilters: CheckInFiltersState,
+    nextPage?: number,
+    disableDefaultFlight = defaultFlightDisabled,
+  ) => {
+    const next = checkInFiltersToSearchParams(nextFilters, nextPage)
+    if (disableDefaultFlight) next.set('allFlights', '1')
+    else next.delete('allFlights')
+    return next
+  }
 
   useEffect(() => {
     setSearchInput(filters.passengerName)
@@ -420,6 +436,7 @@ export function CheckInsListPage() {
 
   const { data, isLoading, isFetching } = useCheckIns({
     ...filters,
+    travelDate: activeFlightDate || undefined,
     ...DEFAULT_CHECK_IN_LIST_ORDER,
     page,
     itemsPerPage: ITEMS_PER_PAGE,
@@ -457,13 +474,13 @@ export function CheckInsListPage() {
   const applyPanelFilters = () => {
     const passengerName = searchInput.trim() || panelDraft.passengerName.trim()
     const next = { ...panelDraft, passengerName }
-    setSearchParams(checkInFiltersToSearchParams(next), { replace: true })
+    setSearchParams(buildSearchParams(next), { replace: true })
     setSearchInput(passengerName)
     setFiltersOpen(false)
   }
 
   const resetAllFilters = () => {
-    setSearchParams(new URLSearchParams(), { replace: true })
+    setSearchParams(buildSearchParams(emptyCheckInFilters), { replace: true })
     setSearchInput('')
     setPanelDraft(emptyCheckInFilters)
     setFiltersOpen(false)
@@ -472,11 +489,11 @@ export function CheckInsListPage() {
   const patchFilters = (patch: Partial<CheckInFiltersState>) => {
     const next = { ...filters, ...patch }
     if ('passengerName' in patch) setSearchInput(patch.passengerName ?? '')
-    setSearchParams(checkInFiltersToSearchParams(next, page), { replace: true })
+    setSearchParams(buildSearchParams(next, page), { replace: true })
   }
 
   const handlePageChange = (nextPage: number) => {
-    setSearchParams(checkInFiltersToSearchParams(filters, nextPage), { replace: true })
+    setSearchParams(buildSearchParams(filters, nextPage), { replace: true })
   }
 
   const handleViewModeChange = (mode: CheckInViewMode) => {
@@ -486,6 +503,25 @@ export function CheckInsListPage() {
     } catch {
       // ignore
     }
+  }
+
+  const toggleDefaultFlightFilter = () => {
+    setSearchParams(buildSearchParams(filters, 1, !defaultFlightDisabled), { replace: true })
+  }
+
+  const flightDateInputRef = useRef<HTMLInputElement>(null)
+
+  const openFlightDatePicker = () => {
+    const input = flightDateInputRef.current
+    if (!input) return
+    if (typeof input.showPicker === 'function') input.showPicker()
+    else input.click()
+  }
+
+  const handleFlightDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const travelDate = e.target.value
+    if (!travelDate) return
+    setSearchParams(buildSearchParams({ ...filters, travelDate }, 1, false), { replace: true })
   }
 
   return (
@@ -506,6 +542,24 @@ export function CheckInsListPage() {
           {data && (
             <p className="text-sm text-muted-foreground mt-1 pl-11">
               {data.totalItems} enregistrement{data.totalItems !== 1 ? 's' : ''}
+              {' · '}
+              <button
+                type="button"
+                onClick={openFlightDatePicker}
+                className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline"
+              >
+                <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
+                {activeFlightDate ? `Vol du ${formatTravelDateInput(activeFlightDate)}` : 'Tous les vols'}
+              </button>
+              <input
+                ref={flightDateInputRef}
+                type="date"
+                value={activeFlightDate || getUpcomingFlightTravelDateInput()}
+                onChange={handleFlightDateChange}
+                className="sr-only"
+                tabIndex={-1}
+                aria-hidden="true"
+              />
             </p>
           )}
         </div>
@@ -558,6 +612,19 @@ export function CheckInsListPage() {
             )}
           </Button>
         </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant={defaultFlightDisabled ? 'outline' : 'default'}
+          size="sm"
+          className="h-9 rounded-full px-3 shadow-sm"
+          onClick={toggleDefaultFlightFilter}
+          aria-pressed={!defaultFlightDisabled}
+        >
+          {defaultFlightDisabled ? 'Activer prochain vol' : 'Désactiver prochain vol'}
+        </Button>
       </div>
 
       {filtersOpen && (
@@ -646,9 +713,9 @@ export function CheckInsListPage() {
           {filters.destination && (
             <FilterChip label="Destination" onRemove={() => patchFilters({ destination: '' })} />
           )}
-          {filters.travelDate && (
+          {explicitTravelDate && (
             <FilterChip
-              label={`Vol ${formatDate(filters.travelDate)}`}
+              label={`Vol ${formatTravelDateInput(explicitTravelDate)}`}
               onRemove={() => patchFilters({ travelDate: '' })}
             />
           )}
@@ -680,11 +747,15 @@ export function CheckInsListPage() {
       ) : !data?.items.length ? (
         <EmptyState
           icon={UserCheck}
-          title="Aucun check-in trouvé"
+          title={activeFlightDate ? 'Aucun check-in pour ce vol' : 'Aucun check-in trouvé'}
           description={
             activeCount > 0
-              ? 'Aucun résultat pour ces filtres.'
-              : 'Enregistrez le premier check-in passager.'
+              ? activeFlightDate
+                ? `Aucun check-in pour le vol du ${formatTravelDateInput(activeFlightDate)} avec ces filtres.`
+                : 'Aucun résultat pour ces filtres.'
+              : activeFlightDate
+                ? `Aucun check-in pour le vol du ${formatTravelDateInput(activeFlightDate)}.`
+                : 'Enregistrez le premier check-in passager.'
           }
           action={{ label: 'Nouveau check-in', onClick: () => { window.location.href = '/checkins/new' } }}
         />

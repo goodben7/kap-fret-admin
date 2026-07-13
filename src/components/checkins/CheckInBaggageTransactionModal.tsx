@@ -12,16 +12,18 @@ import {
   checkInBaggageTransactionSchema,
   type CheckInBaggageTransactionFormData,
 } from '@/schemas/check-in-baggage-transaction.schema'
-import { CURRENCY_LABELS } from '@/constants/ticket'
+import { CURRENCY, CURRENCY_LABELS, CURRENCY_OPTIONS } from '@/constants/ticket'
 import { useAuth } from '@/hooks/useAuth'
 import { useCashRegistersForSelect } from '@/hooks/useCashRegisters'
 import { useCurrenciesForSelect } from '@/hooks/useCurrencies'
+import { useExchangeRates } from '@/hooks/useExchangeRates'
 import { usePreviewConversion } from '@/hooks/usePreviewConversion'
 import { formatCashRegisterSelectLabel } from '@/lib/cash-register'
 import { resolveCurrencyIriByCode } from '@/lib/currency-resource'
 import { extractIri } from '@/lib/hydra'
 import { resolveUserIssuingOfficeIri } from '@/lib/issuing-office'
 import {
+  computeCheckInPaymentAmount,
   formatCheckInWeight,
   getBaggageTypeLabel,
   type CheckInAddedBaggagePaymentDelta,
@@ -64,8 +66,10 @@ export function CheckInBaggageTransactionModal({
     issuingOfficeIri,
   )
   const { data: currencies = [] } = useCurrenciesForSelect()
+  const { data: exchangeRatesData } = useExchangeRates({ pagination: false })
+  const exchangeRates = exchangeRatesData?.items ?? []
 
-  const currencyIri = resolveCurrencyIriByCode(currencies, delta.currency) ?? ''
+  const usdCurrencyIri = resolveCurrencyIriByCode(currencies, CURRENCY.USD) ?? ''
   const defaultDescription = `Check-in ${checkIn.id} — ${
     delta.newBaggages.length > 1
       ? `${delta.newBaggages.length} bagages ajoutés`
@@ -84,21 +88,37 @@ export function CheckInBaggageTransactionModal({
     defaultValues: {
       cashRegister: '',
       amount: delta.deltaAmount,
+      paymentCurrency: checkIn.paymentCurrency === CURRENCY.CDF ? CURRENCY.CDF : CURRENCY.USD,
       description: defaultDescription,
     },
   })
 
   const cashRegister = watch('cashRegister')
   const amount = watch('amount')
+  const paymentCurrency = watch('paymentCurrency')
+  const paymentCurrencyIri = resolveCurrencyIriByCode(currencies, paymentCurrency ?? CURRENCY.USD) ?? ''
+  const fallbackPaymentAmount = (() => {
+    const converted = computeCheckInPaymentAmount(
+      parseFloat(amount) || 0,
+      paymentCurrency ?? CURRENCY.USD,
+      exchangeRates,
+    )
+    return converted != null ? parseFloat(converted) : undefined
+  })()
+  const localPreviewEnabled =
+    paymentCurrency !== CURRENCY.USD
+    && (parseFloat(amount) || 0) > 0
+    && fallbackPaymentAmount != null
 
   useEffect(() => {
     if (!open) return
     reset({
       cashRegister: '',
       amount: delta.deltaAmount,
+      paymentCurrency: checkIn.paymentCurrency === CURRENCY.CDF ? CURRENCY.CDF : CURRENCY.USD,
       description: defaultDescription,
     })
-  }, [open, delta.deltaAmount, defaultDescription, reset])
+  }, [open, delta.deltaAmount, defaultDescription, reset, checkIn.paymentCurrency])
 
   const cashRegisterOptions = useMemo(
     () =>
@@ -109,7 +129,7 @@ export function CheckInBaggageTransactionModal({
     [cashRegisters],
   )
 
-  const previewEnabled = !!cashRegister && !!currencyIri && (parseFloat(amount) || 0) > 0
+  const previewEnabled = !!cashRegister && !!usdCurrencyIri && !!paymentCurrencyIri && (parseFloat(amount) || 0) > 0
   const {
     data: conversionPreview,
     isLoading: conversionPreviewLoading,
@@ -117,7 +137,8 @@ export function CheckInBaggageTransactionModal({
   } = usePreviewConversion({
     cashRegister: cashRegister || undefined,
     amount: amount ?? '0',
-    currencyIri,
+    currencyIri: usdCurrencyIri,
+    paymentCurrencyIri: paymentCurrency !== CURRENCY.USD ? paymentCurrencyIri : undefined,
     enabled: previewEnabled && open,
   })
 
@@ -126,13 +147,14 @@ export function CheckInBaggageTransactionModal({
   }
 
   const submit = handleSubmit(async (data) => {
-    if (!currencyIri) return
+    if (!usdCurrencyIri || !paymentCurrencyIri) return
     await onConfirm({
       transaction: {
         cashRegister: data.cashRegister,
         type: CASH_TRANSACTION_TYPE.ENTRY,
         amount: data.amount,
-        currency: currencyIri,
+        currency: usdCurrencyIri,
+        paymentCurrency: data.paymentCurrency !== CURRENCY.USD ? paymentCurrencyIri : undefined,
         description: data.description.trim(),
         referenceType: CASH_TRANSACTION_REFERENCE_TYPE.CHECKIN,
         referenceId: checkIn.id,
@@ -220,12 +242,26 @@ export function CheckInBaggageTransactionModal({
           />
           <Input
             label="Devise"
-            value={CURRENCY_LABELS[delta.currency]}
+            value={CURRENCY_LABELS[CURRENCY.USD]}
             disabled
             readOnly
             className={fieldClass}
           />
         </div>
+
+        <Select
+          label="Devise de paiement"
+          options={CURRENCY_OPTIONS}
+          error={errors.paymentCurrency?.message}
+          disabled={isLoading}
+          variant="filter"
+          value={paymentCurrency ?? CURRENCY.USD}
+          onChange={(e) =>
+            setValue('paymentCurrency', e.target.value as CheckInBaggageTransactionFormData['paymentCurrency'], {
+              shouldValidate: true,
+            })
+          }
+        />
 
         <Input
           label="Description"
@@ -235,11 +271,15 @@ export function CheckInBaggageTransactionModal({
           {...register('description')}
         />
 
-        {previewEnabled && (
+        {(previewEnabled || localPreviewEnabled) && (
           <ConversionPreviewCard
             preview={conversionPreview}
             isLoading={conversionPreviewLoading}
             isError={conversionPreviewError}
+            referenceAmount={parseFloat(amount) || 0}
+            referenceCurrency={CURRENCY.USD}
+            paymentCurrency={paymentCurrency}
+            fallbackPaymentAmount={fallbackPaymentAmount}
           />
         )}
 
@@ -253,7 +293,7 @@ export function CheckInBaggageTransactionModal({
           >
             Annuler
           </Button>
-          <Button type="submit" className="h-11 flex-1 rounded-xl" disabled={isLoading || !currencyIri}>
+          <Button type="submit" className="h-11 flex-1 rounded-xl" disabled={isLoading || !usdCurrencyIri || !paymentCurrencyIri}>
             {isLoading ? (
               <>
                 <LoaderIcon />
