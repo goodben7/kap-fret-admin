@@ -89,6 +89,26 @@ export function sortCheckInsByNewestFirst<
   return [...checkIns].sort(compareByNewestFirst)
 }
 
+function getCheckInRegistrationTime(checkIn: {
+  createdAt?: string
+  encodedAt?: string
+}): number {
+  const raw = checkIn.createdAt ?? checkIn.encodedAt
+  const time = raw ? Date.parse(raw) : Number.NaN
+  return Number.isNaN(time) ? Number.POSITIVE_INFINITY : time
+}
+
+/** Premier check-in enregistré en premier (N° 1). */
+export function sortCheckInsByRegistrationOrder<
+  T extends { createdAt?: string; encodedAt?: string; id?: string | number },
+>(checkIns: T[]): T[] {
+  return [...checkIns].sort((a, b) => {
+    const timeCompare = getCheckInRegistrationTime(a) - getCheckInRegistrationTime(b)
+    if (timeCompare !== 0) return timeCompare
+    return String(a.id ?? '').localeCompare(String(b.id ?? ''), undefined, { numeric: true })
+  })
+}
+
 /** Bagages les plus récemment ajoutés en premier */
 export function sortCheckInBaggagesByNewestFirst<
   T extends { createdAt?: string; id?: string | number },

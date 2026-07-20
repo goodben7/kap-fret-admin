@@ -48,7 +48,7 @@ export function CashRegisterReportModal({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null)
   const [transactionCount, setTransactionCount] = useState(0)
-  const [fileName, setFileName] = useState('RAPPORT_CAISSE.pdf')
+  const [fileName, setFileName] = useState('RAPPORT_MOUVEMENTS_FINANCIERS.pdf')
 
   const {
     register: registerField,
@@ -131,7 +131,7 @@ export function CashRegisterReportModal({
       if (isAxiosError(error)) {
         toast.error(extractApiErrorMessage(error.response?.data, error.response?.status))
       } else {
-        toast.error('Impossible de générer le rapport de caisse')
+        toast.error('Impossible de générer le rapport de mouvements financiers')
       }
     } finally {
       setIsGenerating(false)
@@ -151,7 +151,7 @@ export function CashRegisterReportModal({
     <Modal
       open={open}
       onOpenChange={handleOpenChange}
-      title="Rapport de caisse"
+      title="Rapport de mouvements financiers"
       description="Choisissez la période, générez l'aperçu puis téléchargez le PDF."
       className={cn(
         'rounded-2xl',
@@ -169,7 +169,7 @@ export function CashRegisterReportModal({
             <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
               <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <Wallet className="h-3.5 w-3.5 text-brand-orange" aria-hidden="true" />
-                Caisse
+                Registre
               </p>
               <div className="space-y-1">
                 <p className="font-semibold">{register.name}</p>
@@ -209,7 +209,7 @@ export function CashRegisterReportModal({
                   {formatDate(startDate)} → {formatDate(endDate)}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Le solde d&apos;ouverture inclut le solde initial de la caisse et les transactions antérieures à la date de début.
+                  Le solde d&apos;ouverture inclut le solde initial du registre et les transactions antérieures à la date de début.
                 </p>
               </div>
             )}
@@ -257,14 +257,14 @@ export function CashRegisterReportModal({
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-4 py-3">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <FileText className="h-4 w-4 text-brand-orange" aria-hidden="true" />
-                  Aperçu du rapport de caisse
+                  Aperçu du rapport de mouvements financiers
                 </div>
                 <span className="rounded-full bg-brand-orange/10 px-3 py-1 text-xs font-semibold text-brand-orange">
                   {transactionCount} transaction{transactionCount !== 1 ? 's' : ''}
                 </span>
               </div>
               <iframe
-                title="Aperçu rapport de caisse"
+                title="Aperçu rapport mouvements financiers"
                 src={previewUrl}
                 className="h-[min(82vh,860px)] w-full bg-white"
               />

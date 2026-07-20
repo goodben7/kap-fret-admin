@@ -172,7 +172,10 @@ function applyCashReportAmount(
   else if (code === CURRENCY.CDF) target.cdf += value
 }
 
-/** Répartit une transaction caisse en colonnes USD / CDF pour le rapport. */
+/**
+ * Répartit une transaction caisse en colonnes USD / CDF pour le rapport.
+ * Une opération n'apparaît que dans sa devise d'encaissement (pas de conversion croisée).
+ */
 export function splitCashTransactionForReport(
   transaction: Pick<
     CashTransaction,
@@ -184,15 +187,14 @@ export function splitCashTransactionForReport(
   const sortie: CashReportCurrencySplit = { usd: 0, cdf: 0 }
   const target = isEntry ? entry : sortie
 
-  const amount = parseFloat(transaction.amount) || 0
-  const txAmount = parseFloat(transaction.transactionAmount) || 0
-  const amountCode = getCashTransactionCurrencyCode(transaction.currency)
   const txCode = getCashTransactionCurrencyCode(transaction.transactionCurrency)
+  const amountCode = getCashTransactionCurrencyCode(transaction.currency)
+  const code = txCode ?? amountCode
+  const amount = txCode
+    ? parseFloat(transaction.transactionAmount) || 0
+    : parseFloat(transaction.amount) || 0
 
-  applyCashReportAmount(target, amountCode, amount)
-  if (txCode && txCode !== amountCode && Math.abs(txAmount - amount) > 0.0001) {
-    applyCashReportAmount(target, txCode, txAmount)
-  }
+  applyCashReportAmount(target, code, amount)
 
   return { entry, sortie }
 }

@@ -2,7 +2,7 @@ import { resolveCheckpointIri } from '@/lib/checkpoint'
 import { extractIri, toIri } from '@/lib/hydra'
 import { convertAmountBetweenCurrencyCodes } from '@/lib/exchange-rate'
 import type { ExchangeRateResource } from '@/types/exchange-rate'
-import { GENDER, PAYMENT_MODE, CURRENCY, TICKET_CATEGORY_BASE_PRICE_USD, normalizeCurrency } from '@/constants/ticket'
+import { GENDER, PAYMENT_MODE, CURRENCY, TICKET_CATEGORY_BASE_PRICE_USD, TICKET_STATUS, normalizeCurrency } from '@/constants/ticket'
 import type { Currency, Gender, TicketCategory } from '@/constants/ticket'
 import type { Ticket, TicketCreatePayload, TicketPatchPayload, TicketReportTravelDatePayload, TicketPaymentPayload } from '@/types/ticket'
 import type { TicketFormData, TicketPatchFormData } from '@/schemas/ticket.schema'
@@ -111,6 +111,14 @@ export function filterTicketsByTravelDateInput<T extends Pick<Ticket, 'travelDat
   const day = dateInput.trim()
   if (!day) return tickets
   return tickets.filter((ticket) => ticketMatchesTravelDateInput(ticket, day))
+}
+
+/** Billets visibles en billetterie : hors annulés et remboursés. */
+export function filterTicketsForList<T extends Pick<Ticket, 'status'>>(tickets: T[]): T[] {
+  return tickets.filter(
+    (ticket) =>
+      ticket.status !== TICKET_STATUS.CANCELLED && ticket.status !== TICKET_STATUS.REFUNDED,
+  )
 }
 
 export function getTicketTotal(ticket: Pick<Ticket, 'basePrice' | 'tva' | 'fpt' | 'rva'>): number {

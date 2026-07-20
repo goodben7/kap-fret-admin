@@ -82,7 +82,8 @@ function formatReportMoney(amount: number, currency: Currency): string {
 }
 
 function formatMoneyCell(amount: number, currency: Currency): string {
-  if (!Number.isFinite(amount) || amount === 0) return '—'
+  // Pas de montant dans cette devise → tiret (pas de conversion USD↔CDF)
+  if (!Number.isFinite(amount) || amount === 0) return '-'
   return formatReportMoney(amount, currency)
 }
 
@@ -216,10 +217,10 @@ function buildCashRegisterReportRows(
   rows.push([
     formatReportDate(dateRange.startDate),
     openingLabel,
-    '—',
-    '—',
-    '—',
-    '—',
+    '-',
+    '-',
+    '-',
+    '-',
     formatBalanceCell(soldeUsd, CURRENCY.USD),
     formatBalanceCell(soldeCdf, CURRENCY.CDF),
     '',
@@ -285,7 +286,7 @@ function drawHeader(doc: jsPDF, params: CashRegisterReportParams, logoDataUrl: s
   doc.text(`DATE DU RAPPORT : ${formatReportDate(params.reportDate)}`, rightX, topY + 3, {
     align: 'right',
   })
-  doc.text(`CAISSE : ${params.register.code}`, rightX, topY + 9, { align: 'right' })
+  doc.text(`REGISTRE : ${params.register.code}`, rightX, topY + 9, { align: 'right' })
   doc.text(
     `PÉRIODE : ${formatReportDate(params.dateRange.startDate)} – ${formatReportDate(params.dateRange.endDate)}`,
     rightX,
@@ -296,9 +297,9 @@ function drawHeader(doc: jsPDF, params: CashRegisterReportParams, logoDataUrl: s
   drawBrandTitle(doc, centerX, topY + 10)
 
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(10)
+  doc.setFontSize(9)
   doc.setTextColor(NAVY.r, NAVY.g, NAVY.b)
-  doc.text('RAPPORT DE CAISSE', centerX, topY + 18, { align: 'center' })
+  doc.text('RAPPORT DE MOUVEMENTS FINANCIERS', centerX, topY + 18, { align: 'center' })
 
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(9.5)
@@ -422,7 +423,7 @@ export function buildCashRegisterReportFileName(
   const start = dateRange.startDate.replace(/-/g, '')
   const end = dateRange.endDate.replace(/-/g, '')
   const code = register.code.trim().replace(/\s+/g, '_').toUpperCase()
-  return `RAPPORT_CAISSE_${code}_${start}_${end}.pdf`
+  return `RAPPORT_MOUVEMENTS_FINANCIERS_${code}_${start}_${end}.pdf`
 }
 
 export async function fetchAndGenerateCashRegisterReportPdf(

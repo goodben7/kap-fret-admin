@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { ArrowRight, Calendar, Download, FileText, LoaderIcon, MapPin, Users } from 'lucide-react'
+import { ArrowRight, Calendar, Download, FileText, LoaderIcon, MapPin, Receipt } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,7 @@ import {
   passengerManifestSchema,
   type PassengerManifestFormData,
 } from '@/schemas/passenger-manifest.schema'
+import { ticketService } from '@/services/ticket.service'
 import { checkpointService } from '@/services/checkpoint.service'
 import { getCheckpointId } from '@/lib/checkpoint'
 import { isAxiosError } from 'axios'
@@ -17,30 +18,30 @@ import { extractApiErrorMessage } from '@/services/api'
 import { getTodayTravelDateInput } from '@/lib/ticket'
 import { formatDate, cn } from '@/lib/utils'
 import {
-  buildManifestFileName,
-  buildManifestNumber,
+  buildTicketSalesManifestFileName,
   downloadBlob,
-  fetchPassengersForManifest,
-  generatePassengerManifestPdf,
+  filterTicketsForManifest,
+  generateTicketSalesManifestPdf,
   getCheckpointManifestName,
   getCheckpointRouteCode,
-} from '@/lib/passenger-manifest-pdf'
+  resolveTicketSalesManifestFlightNumber,
+} from '@/lib/ticket-sales-manifest-pdf'
 import { toast } from 'sonner'
 
 const fieldClass =
   'h-11 rounded-xl border-transparent bg-muted/40 focus-visible:bg-background focus-visible:border-input'
 
-interface PassengerManifestModalProps {
+interface TicketSalesManifestModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-export function PassengerManifestModal({ open, onOpenChange }: PassengerManifestModalProps) {
+export function TicketSalesManifestModal({ open, onOpenChange }: TicketSalesManifestModalProps) {
   const [isGenerating, setIsGenerating] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null)
-  const [passengerCount, setPassengerCount] = useState(0)
-  const [fileName, setFileName] = useState('MANIFESTE_PASSAGERS.pdf')
+  const [ticketCount, setTicketCount] = useState(0)
+  const [fileName, setFileName] = useState('MANIFESTE_VENTE_BILLETS.pdf')
   const [departureLabel, setDepartureLabel] = useState('')
   const [destinationLabel, setDestinationLabel] = useState('')
 
@@ -88,8 +89,8 @@ export function PassengerManifestModal({ open, onOpenChange }: PassengerManifest
       return null
     })
     setPdfBlob(null)
-    setPassengerCount(0)
-    setFileName('MANIFESTE_PASSAGERS.pdf')
+    setTicketCount(0)
+    setFileName('MANIFESTE_VENTE_BILLETS.pdf')
   }, [open, reset])
 
   useEffect(() => {
@@ -137,31 +138,39 @@ export function PassengerManifestModal({ open, onOpenChange }: PassengerManifest
         resolveCheckpoint(data.destination),
       ])
 
-      const passengers = await fetchPassengersForManifest(
-        data.departure,
-        data.destination,
-        data.travelDate,
-      )
-      if (passengers.length === 0) {
-        toast.error('Aucun check-in trouvé pour ce trajet et cette date')
+      const { items } = await ticketService.getAll({
+        departure: data.departure,
+        destination: data.destination,
+        travelDate: data.travelDate,
+        itemsPerPage: 500,
+        page: 1,
+      })
+
+      const tickets = filterTicketsForManifest(items)
+      if (tickets.length === 0) {
+        toast.error('Aucun billet trouvé pour ce trajet et cette date')
         return
       }
 
       const departureCode = getCheckpointRouteCode(departureCheckpoint)
       const destinationCode = getCheckpointRouteCode(destinationCheckpoint)
-      const manifestNumber = buildManifestNumber(data.travelDate, departureCode, destinationCode)
+      const flightNumber = resolveTicketSalesManifestFlightNumber(
+        data.travelDate,
+        departureCode,
+        destinationCode,
+      )
 
-      const blob = await generatePassengerManifestPdf({
+      const blob = await generateTicketSalesManifestPdf({
         departureLabel: getCheckpointManifestName(departureCheckpoint),
         destinationLabel: getCheckpointManifestName(destinationCheckpoint),
         departureCode,
         destinationCode,
         travelDate: data.travelDate,
-        manifestNumber,
-        passengers,
+        flightNumber,
+        tickets,
       })
 
-      const nextFileName = buildManifestFileName({
+      const nextFileName = buildTicketSalesManifestFileName({
         departureCode,
         destinationCode,
         travelDate: data.travelDate,
@@ -172,14 +181,14 @@ export function PassengerManifestModal({ open, onOpenChange }: PassengerManifest
         return URL.createObjectURL(blob)
       })
       setPdfBlob(blob)
-      setPassengerCount(passengers.length)
+      setTicketCount(tickets.length)
       setFileName(nextFileName)
-      toast.success(`Manifeste généré (${passengers.length} passager${passengers.length !== 1 ? 's' : ''})`)
+      toast.success(`Manifeste vente généré (${tickets.length} billet${tickets.length !== 1 ? 's' : ''})`)
     } catch (error) {
       if (isAxiosError(error)) {
         toast.error(extractApiErrorMessage(error.response?.data, error.response?.status))
       } else {
-        toast.error('Impossible de générer le manifeste')
+        toast.error('Impossible de générer le manifeste vente')
       }
     } finally {
       setIsGenerating(false)
@@ -199,8 +208,8 @@ export function PassengerManifestModal({ open, onOpenChange }: PassengerManifest
     <Modal
       open={open}
       onOpenChange={handleOpenChange}
-      title="Manifeste passagers"
-      description="Générez le PDF du vol à partir du départ, de la destination et de la date de voyage."
+      title="Manifeste vente billets"
+      description="Générez le PDF commercial du vol : montants, modes de paiement et sponsors."
       className={cn(
         'rounded-2xl',
         previewUrl ? 'sm:max-w-[min(96vw,72rem)]' : 'sm:max-w-xl',
@@ -309,15 +318,15 @@ export function PassengerManifestModal({ open, onOpenChange }: PassengerManifest
             <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-border/80 bg-muted/20">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-4 py-3">
                 <div className="flex items-center gap-2 text-sm font-medium">
-                  <Users className="h-4 w-4 text-brand-orange" aria-hidden="true" />
-                  Aperçu du manifeste
+                  <Receipt className="h-4 w-4 text-brand-orange" aria-hidden="true" />
+                  Aperçu du manifeste vente
                 </div>
                 <span className="rounded-full bg-brand-orange/10 px-3 py-1 text-xs font-semibold text-brand-orange">
-                  {passengerCount} passager{passengerCount !== 1 ? 's' : ''}
+                  {ticketCount} billet{ticketCount !== 1 ? 's' : ''}
                 </span>
               </div>
               <iframe
-                title="Aperçu manifeste passagers"
+                title="Aperçu manifeste vente billets"
                 src={previewUrl}
                 className="h-[min(82vh,860px)] w-full bg-white"
               />
@@ -327,7 +336,7 @@ export function PassengerManifestModal({ open, onOpenChange }: PassengerManifest
               <FileText className="mb-3 h-10 w-10 text-muted-foreground/40" aria-hidden="true" />
               <p className="text-sm font-medium text-muted-foreground">Aperçu du PDF</p>
               <p className="mt-1 max-w-xs text-xs text-muted-foreground/80">
-                Le manifeste s&apos;affichera ici après génération.
+                Le manifeste vente s&apos;affichera ici après génération.
               </p>
             </div>
           )}

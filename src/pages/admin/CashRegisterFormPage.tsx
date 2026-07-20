@@ -40,7 +40,7 @@ export function CashRegisterFormPage() {
         className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-        {isEdit ? 'Détail caisse' : 'Caisses'}
+        {isEdit ? 'Détail' : 'Mouvements Financiers'}
       </Link>
 
       <div className="space-y-1">
@@ -49,19 +49,19 @@ export function CashRegisterFormPage() {
             <Wallet className="h-5 w-5" aria-hidden="true" />
           </span>
           <h1 className="text-2xl font-bold tracking-tight">
-            {isEdit ? 'Modifier la caisse' : 'Nouvelle caisse'}
+            {isEdit ? 'Modifier le registre' : 'Nouveau registre'}
           </h1>
         </div>
         <p className="pl-11 text-sm text-muted-foreground">
           {isEdit
             ? (register?.name ?? 'Mettre à jour le code, le nom et le statut')
-            : 'Définissez la caisse, sa devise et le solde d\'ouverture'}
+            : 'Définissez le registre, ses soldes d\'ouverture USD et CDF'}
         </p>
       </div>
 
       {showLoader ? (
         <div className="flex justify-center py-16">
-          <LoadingSpinner label="Chargement de la caisse..." />
+          <LoadingSpinner label="Chargement..." />
         </div>
       ) : isEdit && register ? (
         <CashRegisterPatchForm

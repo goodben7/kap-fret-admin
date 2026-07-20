@@ -177,8 +177,9 @@ export function serializeCheckInFilterParams(params: Record<string, string | num
 }
 
 export const DEFAULT_CHECK_IN_LIST_ORDER = {
-  orderDirection: 'desc',
-} as const satisfies Pick<CheckInFilters, 'orderDirection'>
+  orderField: 'createdAt',
+  orderDirection: 'asc',
+} as const satisfies Pick<CheckInFilters, 'orderField' | 'orderDirection'>
 
 export function buildCheckInManifestFilters(
   departure: string,
@@ -192,7 +193,7 @@ export function buildCheckInManifestFilters(
     status: CHECK_IN_STATUS.CREATED,
     itemsPerPage: 500,
     page: 1,
-    orderField: 'ticket.passengerName',
+    orderField: 'createdAt',
     orderDirection: 'asc',
   }
 }

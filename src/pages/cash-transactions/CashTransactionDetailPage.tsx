@@ -107,7 +107,7 @@ export function CashTransactionDetailPage() {
         className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-        Transactions caisse
+        Mouvements Financiers
       </Link>
 
       <Card className="overflow-hidden rounded-2xl border-border/80 shadow-sm">

@@ -15,8 +15,10 @@ import {
   Table2,
   FileText,
   Bookmark,
+  Pencil,
+  Trash2,
 } from 'lucide-react'
-import { useTickets } from '@/hooks/useTickets'
+import { useTickets, useUpdateTicketStatus } from '@/hooks/useTickets'
 import {
   GENDER_LABELS,
   PAYMENT_MODE_LABELS,
@@ -37,6 +39,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Pagination } from '@/components/ui/pagination'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { CheckpointAsyncSelect } from '@/components/ui/checkpoint-async-select'
 import { formatMoney, cn } from '@/lib/utils'
 import { getTicketTotal, getUpcomingFlightTravelDateInput, formatTicketTravelDate, formatTravelDateInput } from '@/lib/ticket'
@@ -50,6 +53,7 @@ import {
 import type { Ticket as TicketType } from '@/types/ticket'
 import { STORAGE_KEYS } from '@/constants/storage'
 import { PassengerManifestModal } from '@/components/tickets/PassengerManifestModal'
+import { TicketSalesManifestModal } from '@/components/tickets/TicketSalesManifestModal'
 
 const ITEMS_PER_PAGE = 15
 
@@ -75,11 +79,30 @@ function statusVariant(status: TicketStatus) {
   return 'destructive'
 }
 
-function TicketCard({ ticket }: { ticket: TicketType }) {
+function canEditTicket(ticket: TicketType) {
+  return ticket.status === TICKET_STATUS.ISSUED
+}
+
+function canCancelTicket(ticket: TicketType) {
+  return ticket.status === TICKET_STATUS.ISSUED || ticket.status === TICKET_STATUS.RESERVED
+}
+
+function TicketCard({
+  ticket,
+  onCancel,
+  cancelPending,
+}: {
+  ticket: TicketType
+  onCancel: (ticket: TicketType) => void
+  cancelPending: boolean
+}) {
+  const editable = canEditTicket(ticket)
+  const cancellable = canCancelTicket(ticket)
+
   return (
-    <Link to={`/tickets/${ticket.id}`} className="block group">
-      <Card className="overflow-hidden border-border/80 shadow-sm transition-all active:scale-[0.99] group-hover:border-brand-orange/40 group-hover:shadow-md">
-        <CardContent className="p-4">
+    <Card className="overflow-hidden border-border/80 shadow-sm transition-all group-hover:border-brand-orange/40 group-hover:shadow-md">
+      <CardContent className="p-4">
+        <Link to={`/tickets/${ticket.id}`} className="block group">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
@@ -109,13 +132,51 @@ function TicketCard({ ticket }: { ticket: TicketType }) {
               <ChevronRight className="h-5 w-5 text-muted-foreground/50 group-hover:text-brand-orange transition-colors" />
             </div>
           </div>
-        </CardContent>
-      </Card>
-    </Link>
+        </Link>
+
+        {(editable || cancellable) && (
+          <div className="mt-3 flex gap-2 border-t border-border/60 pt-3">
+            {editable && (
+              <Button
+                variant="outline"
+                size="icon"
+                asChild
+                className="h-10 w-10 shrink-0 rounded-xl"
+              >
+                <Link to={`/tickets/${ticket.id}/edit`} aria-label={`Modifier le billet ${ticket.ticketNumber}`}>
+                  <Pencil className="h-4 w-4" />
+                </Link>
+              </Button>
+            )}
+            {cancellable && (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-10 w-10 shrink-0 rounded-xl text-destructive hover:text-destructive"
+                aria-label={`Annuler le billet ${ticket.ticketNumber}`}
+                onClick={() => onCancel(ticket)}
+                disabled={cancelPending}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
-function TicketTable({ tickets }: { tickets: TicketType[] }) {
+function TicketTable({
+  tickets,
+  onCancel,
+  cancelPending,
+}: {
+  tickets: TicketType[]
+  onCancel: (ticket: TicketType) => void
+  cancelPending: boolean
+}) {
   const navigate = useNavigate()
 
   const openTicket = (id: string) => {
@@ -133,48 +194,88 @@ function TicketTable({ tickets }: { tickets: TicketType[] }) {
             <TableHead className="hidden sm:table-cell font-semibold text-foreground/80">Date</TableHead>
             <TableHead className="hidden md:table-cell font-semibold text-foreground/80">Téléphone</TableHead>
             <TableHead className="text-right font-semibold text-foreground/80">Montant</TableHead>
-            <TableHead className="w-10" />
+            <TableHead className="w-[88px] text-right font-semibold text-foreground/80">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {tickets.map((ticket) => (
-            <TableRow
-              key={ticket['@id']}
-              className="cursor-pointer transition-colors hover:bg-brand-orange/5 active:bg-brand-orange/10"
-              onClick={() => openTicket(ticket.id)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault()
-                  openTicket(ticket.id)
-                }
-              }}
-              tabIndex={0}
-              role="link"
-              aria-label={`Voir le billet ${ticket.ticketNumber}`}
-            >
-              <TableCell className="font-mono text-xs font-semibold text-primary whitespace-nowrap">
-                {ticket.ticketNumber}
-              </TableCell>
-              <TableCell className="font-medium max-w-[180px] truncate">{ticket.passengerName}</TableCell>
-              <TableCell>
-                <Badge variant={statusVariant(ticket.status) as 'default'} className="whitespace-nowrap">
-                  {TICKET_STATUS_LABELS[ticket.status]}
-                </Badge>
-              </TableCell>
-              <TableCell className="hidden sm:table-cell text-muted-foreground whitespace-nowrap">
-                {formatTicketTravelDate(ticket.travelDate)}
-              </TableCell>
-              <TableCell className="hidden md:table-cell text-muted-foreground whitespace-nowrap">
-                {ticket.phone ?? '—'}
-              </TableCell>
-              <TableCell className="text-right font-semibold tabular-nums whitespace-nowrap">
-                {formatMoney(getTicketTotal(ticket), ticket.currency)}
-              </TableCell>
-              <TableCell className="text-muted-foreground/50">
-                <ChevronRight className="h-4 w-4" aria-hidden="true" />
-              </TableCell>
-            </TableRow>
-          ))}
+          {tickets.map((ticket) => {
+            const editable = canEditTicket(ticket)
+            const cancellable = canCancelTicket(ticket)
+
+            return (
+              <TableRow
+                key={ticket['@id']}
+                className="cursor-pointer transition-colors hover:bg-brand-orange/5 active:bg-brand-orange/10"
+                onClick={() => openTicket(ticket.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    openTicket(ticket.id)
+                  }
+                }}
+                tabIndex={0}
+                role="link"
+                aria-label={`Voir le billet ${ticket.ticketNumber}`}
+              >
+                <TableCell className="font-mono text-xs font-semibold text-primary whitespace-nowrap">
+                  {ticket.ticketNumber}
+                </TableCell>
+                <TableCell className="font-medium max-w-[180px] truncate">{ticket.passengerName}</TableCell>
+                <TableCell>
+                  <Badge variant={statusVariant(ticket.status) as 'default'} className="whitespace-nowrap">
+                    {TICKET_STATUS_LABELS[ticket.status]}
+                  </Badge>
+                </TableCell>
+                <TableCell className="hidden sm:table-cell text-muted-foreground whitespace-nowrap">
+                  {formatTicketTravelDate(ticket.travelDate)}
+                </TableCell>
+                <TableCell className="hidden md:table-cell text-muted-foreground whitespace-nowrap">
+                  {ticket.phone ?? '—'}
+                </TableCell>
+                <TableCell className="text-right font-semibold tabular-nums whitespace-nowrap">
+                  {formatMoney(getTicketTotal(ticket), ticket.currency)}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="inline-flex items-center justify-end gap-1">
+                    {editable && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 rounded-lg"
+                        aria-label={`Modifier le billet ${ticket.ticketNumber}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void navigate(`/tickets/${ticket.id}/edit`)
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {cancellable && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 rounded-lg text-destructive hover:text-destructive"
+                        aria-label={`Annuler le billet ${ticket.ticketNumber}`}
+                        disabled={cancelPending}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onCancel(ticket)
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {!editable && !cancellable && (
+                      <ChevronRight className="h-4 w-4 text-muted-foreground/50" aria-hidden="true" />
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            )
+          })}
         </TableBody>
       </Table>
     </div>
@@ -303,7 +404,9 @@ function TicketFiltersFields({
         variant="filter"
         options={[
           { value: '', label: 'Tous les statuts' },
-          ...Object.entries(TICKET_STATUS_LABELS).map(([value, label]) => ({ value, label })),
+          { value: TICKET_STATUS.RESERVED, label: TICKET_STATUS_LABELS[TICKET_STATUS.RESERVED] },
+          { value: TICKET_STATUS.ISSUED, label: TICKET_STATUS_LABELS[TICKET_STATUS.ISSUED] },
+          { value: TICKET_STATUS.USED, label: TICKET_STATUS_LABELS[TICKET_STATUS.USED] },
         ]}
         value={draft.status}
         onChange={(e) => onChange({ status: e.target.value })}
@@ -386,8 +489,11 @@ export function TicketsListPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [manifestOpen, setManifestOpen] = useState(false)
+  const [salesManifestOpen, setSalesManifestOpen] = useState(false)
+  const [ticketToCancel, setTicketToCancel] = useState<TicketType | null>(null)
   const [panelDraft, setPanelDraft] = useState<TicketFiltersState>(emptyTicketFilters)
   const [viewMode, setViewMode] = useState<TicketViewMode>(readTicketsViewMode)
+  const updateStatus = useUpdateTicketStatus()
 
   const page = Math.max(1, Number(searchParams.get('page')) || 1)
 
@@ -530,6 +636,12 @@ export function TicketsListPage() {
     setSearchParams(buildSearchParams({ ...filters, travelDate }, 1, false), { replace: true })
   }
 
+  const handleConfirmCancel = async () => {
+    if (!ticketToCancel) return
+    await updateStatus.mutateAsync({ id: ticketToCancel.id, status: TICKET_STATUS.CANCELLED })
+    setTicketToCancel(null)
+  }
+
   return (
     <div className="mx-auto max-w-3xl space-y-4 lg:max-w-5xl">
       <div className="flex items-center justify-between gap-3">
@@ -574,7 +686,17 @@ export function TicketsListPage() {
             onClick={() => setManifestOpen(true)}
           >
             <FileText className="h-4 w-4 sm:mr-1.5" />
-            <span className="hidden sm:inline">Manifeste PDF</span>
+            <span className="hidden sm:inline">Manifeste passagers</span>
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0 rounded-full px-3 shadow-sm"
+            onClick={() => setSalesManifestOpen(true)}
+          >
+            <FileText className="h-4 w-4 sm:mr-1.5" />
+            <span className="hidden sm:inline">Manifeste vente</span>
           </Button>
           <Button asChild size="sm" className="shrink-0 rounded-full px-4 shadow-sm">
             <Link to="/tickets/new">
@@ -770,7 +892,12 @@ export function TicketsListPage() {
             )}
           >
             {data.items.map((ticket) => (
-              <TicketCard key={ticket['@id']} ticket={ticket} />
+              <TicketCard
+                key={ticket['@id']}
+                ticket={ticket}
+                onCancel={setTicketToCancel}
+                cancelPending={updateStatus.isPending}
+              />
             ))}
           </div>
           <div
@@ -780,7 +907,11 @@ export function TicketsListPage() {
               isFetching && 'opacity-60 pointer-events-none transition-opacity',
             )}
           >
-            <TicketTable tickets={data.items} />
+            <TicketTable
+              tickets={data.items}
+              onCancel={setTicketToCancel}
+              cancelPending={updateStatus.isPending}
+            />
           </div>
           <Pagination
             page={page}
@@ -792,6 +923,40 @@ export function TicketsListPage() {
       )}
 
       <PassengerManifestModal open={manifestOpen} onOpenChange={setManifestOpen} />
+      <TicketSalesManifestModal open={salesManifestOpen} onOpenChange={setSalesManifestOpen} />
+
+      <ConfirmDialog
+        open={ticketToCancel != null}
+        onOpenChange={(open) => {
+          if (!open && !updateStatus.isPending) setTicketToCancel(null)
+        }}
+        variant="destructive"
+        title="Annuler ce billet ?"
+        description="Le billet sera annulé. Cette action est irréversible et le passager ne pourra plus voyager avec ce billet."
+        confirmLabel="Oui, annuler le billet"
+        cancelLabel="Non, revenir"
+        onConfirm={handleConfirmCancel}
+        loading={updateStatus.isPending}
+      >
+        {ticketToCancel && (
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground">Billet</span>
+              <span className="font-mono font-semibold">{ticketToCancel.ticketNumber}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground">Passager</span>
+              <span className="font-medium truncate">{ticketToCancel.passengerName}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-muted-foreground">Montant</span>
+              <span className="font-bold tabular-nums text-brand-orange">
+                {formatMoney(getTicketTotal(ticketToCancel), ticketToCancel.currency)}
+              </span>
+            </div>
+          </div>
+        )}
+      </ConfirmDialog>
     </div>
   )
 }

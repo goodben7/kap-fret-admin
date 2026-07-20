@@ -30,7 +30,7 @@ import { CashRegistersSection } from '@/components/dashboard/CashRegistersSectio
 import { DashboardRecentActivity } from '@/components/dashboard/DashboardRecentActivity'
 import { useAppStats } from '@/hooks/useStats'
 import { useIssuingOffices } from '@/hooks/useIssuingOffices'
-import { getStartOfMonthInput, getTodayDateInput, computeTotalRevenue, computeRevenueBreakdown, computeConsolidatedRevenueCdf, formatFreightRevenue, formatStatsRevenueByCurrency, formatTotalRevenueAllCurrencies } from '@/lib/stats'
+import { getStartOfMonthInput, getTodayDateInput, computeTotalRevenue, computeRevenueBreakdown, computeConsolidatedRevenueCdf, formatFreightRevenue, formatStatsRevenueByCurrency, formatTotalRevenueAllCurrencies, formatFinanceAmountByCurrency } from '@/lib/stats'
 import { useExchangeRates } from '@/hooks/useExchangeRates'
 import type { ExchangeRateResource } from '@/types/exchange-rate'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -116,11 +116,15 @@ function buildKpiItems(
     },
     {
       label: 'Net finance',
-      value: formatKpiMoney(current.finance.netAmount, currencyFilter ?? CURRENCY.CDF),
+      value: formatFinanceAmountByCurrency(current.byCurrency, 'net', currencyFilter),
       subValue: `${current.finance.entriesCount} entrées · ${current.finance.exitsCount} sorties`,
       icon: Activity,
-      currentRaw: current.finance.netAmount,
-      previousRaw: previous?.finance.netAmount,
+      currentRaw: currencyFilter
+        ? (current.byCurrency.find((row) => row.currency === currencyFilter)?.net ?? 0)
+        : undefined,
+      previousRaw: currencyFilter && previous
+        ? (previous.byCurrency.find((row) => row.currency === currencyFilter)?.net ?? 0)
+        : undefined,
     },
   ]
 
@@ -262,7 +266,13 @@ export function DashboardPage() {
             </div>
           )}
 
-          {showFinance && <FinanceFlowChart finance={stats.finance} currency={currencyFilter} />}
+          {showFinance && (
+            <FinanceFlowChart
+              finance={stats.finance}
+              byCurrency={stats.byCurrency}
+              currency={currencyFilter}
+            />
+          )}
 
           {showFinance && (
             <div className="grid gap-6 xl:grid-cols-2">
@@ -278,7 +288,7 @@ export function DashboardPage() {
 
           {showCashRegisters && (
             <section className="space-y-4">
-              <h2 className="text-lg font-semibold">Caisses</h2>
+              <h2 className="text-lg font-semibold">Mouvements Financiers</h2>
               <CashRegistersSection cashRegisters={stats.cashRegisters} />
             </section>
           )}

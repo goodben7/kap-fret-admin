@@ -21,7 +21,7 @@ export function CashTransactionCreatePage() {
         className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-        Transactions caisse
+        Mouvements Financiers
       </Link>
 
       <div className="space-y-1">
@@ -32,7 +32,7 @@ export function CashTransactionCreatePage() {
           <h1 className="text-2xl font-bold tracking-tight">Nouvelle transaction</h1>
         </div>
         <p className="pl-11 text-sm text-muted-foreground">
-          Enregistrez une entrée ou sortie de caisse manuelle
+          Enregistrez une entrée ou sortie manuelle
         </p>
       </div>
 

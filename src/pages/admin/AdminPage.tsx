@@ -67,8 +67,8 @@ const adminSections: AdminSection[] = [
         icon: ArrowLeftRight,
       },
       {
-        title: 'Transactions',
-        description: 'Mouvements caisse, encaissements et décaissements',
+        title: 'Mouvements Financiers',
+        description: 'Encaissements, décaissements et soldes multi-devises',
         path: '/cash-transactions',
         icon: Receipt,
       },

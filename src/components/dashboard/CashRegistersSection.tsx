@@ -1,5 +1,7 @@
+import { Link } from 'react-router-dom'
 import { Wallet } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { formatMoney } from '@/lib/utils'
 import { CURRENCY, type Currency } from '@/constants/ticket'
 import type { AppStats } from '@/types/stats'
@@ -10,6 +12,7 @@ interface CashRegistersSectionProps {
 
 export function CashRegistersSection({ cashRegisters }: CashRegistersSectionProps) {
   const { totalsByCurrency, registers } = cashRegisters
+  const activeRegisters = registers.filter((register) => register.active !== false)
   const visibleCurrencies = (
     Object.keys(totalsByCurrency).length > 0
       ? (Object.keys(totalsByCurrency) as Currency[])
@@ -44,26 +47,32 @@ export function CashRegistersSection({ cashRegisters }: CashRegistersSectionProp
 
       <Card className="rounded-2xl border-border/80 shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base font-semibold">Caisses actives</CardTitle>
+          <CardTitle className="text-base font-semibold">
+            Registres actifs ({activeRegisters.length})
+          </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
-          {registers.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">Aucune caisse active</p>
+          {activeRegisters.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">Aucun registre actif</p>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
-              {registers.map((register) => {
+              {activeRegisters.map((register) => {
                 const usd = parseFloat(register.currentBalanceUSD) || 0
                 const cdf = parseFloat(register.currentBalanceCDF) || 0
                 return (
-                  <div
+                  <Link
                     key={register.id}
-                    className="rounded-xl border border-border/60 bg-muted/20 p-4"
+                    to={`/admin/cash-registers/${register.id}`}
+                    className="rounded-xl border border-border/60 bg-muted/20 p-4 transition-colors hover:border-brand-orange/40 hover:bg-brand-orange/5"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate font-semibold">{register.name}</p>
-                        <p className="mt-0.5 font-mono text-xs text-muted-foreground">{register.id}</p>
+                        <p className="mt-0.5 font-mono text-xs text-muted-foreground">
+                          {register.code ?? register.id}
+                        </p>
                       </div>
+                      <Badge variant="success">Actif</Badge>
                     </div>
                     <div className="mt-3 space-y-1">
                       <p className="text-lg font-bold tabular-nums text-brand-orange">
@@ -73,7 +82,7 @@ export function CashRegistersSection({ cashRegisters }: CashRegistersSectionProp
                         {formatMoney(cdf, CURRENCY.CDF)}
                       </p>
                     </div>
-                  </div>
+                  </Link>
                 )
               })}
             </div>

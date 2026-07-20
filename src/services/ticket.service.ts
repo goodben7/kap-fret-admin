@@ -1,10 +1,11 @@
 import { api } from './api'
 import { extractHydraMember, extractHydraTotalItems } from '@/lib/hydra'
-import { filterTicketsByTravelDateInput } from '@/lib/ticket'
+import { filterTicketsByTravelDateInput, filterTicketsForList } from '@/lib/ticket'
+import { orderTicketsByCheckInRegistration } from '@/lib/ticket-check-in-order'
 import { buildTicketFilterParams, type TicketFilters } from '@/lib/ticket-filters'
 import type { HydraCollection } from '@/types/hydra'
 import type { Ticket, TicketCreatePayload, TicketStatusPayload, TicketPatchPayload, TicketReportTravelDatePayload, TicketPaymentPayload } from '@/types/ticket'
-import type { TicketStatus } from '@/constants/ticket'
+import { TICKET_STATUS, type TicketStatus } from '@/constants/ticket'
 
 export type { TicketFilters } from '@/lib/ticket-filters'
 
@@ -15,11 +16,17 @@ const JSON_HEADERS = {
 
 const TRAVEL_DATE_FETCH_CAP = 500
 
+function shouldIncludeInactiveTickets(status?: string): boolean {
+  const trimmed = status?.trim()
+  return trimmed === TICKET_STATUS.CANCELLED || trimmed === TICKET_STATUS.REFUNDED
+}
+
 export const ticketService = {
   async getAll(filters: TicketFilters = {}) {
     const travelDay = filters.travelDate?.trim()
     const page = filters.page ?? 1
     const itemsPerPage = filters.itemsPerPage ?? 15
+    const includeInactive = shouldIncludeInactiveTickets(filters.status)
 
     const requestFilters: TicketFilters = travelDay
       ? { ...filters, page: 1, itemsPerPage: TRAVEL_DATE_FETCH_CAP }
@@ -27,10 +34,22 @@ export const ticketService = {
 
     const params = buildTicketFilterParams(requestFilters)
     const { data } = await api.get<HydraCollection<Ticket>>('/api/tickets', { params })
-    let items = extractHydraMember(data)
+    const rawItems = extractHydraMember(data)
+    let items = rawItems
 
     if (travelDay) {
       items = filterTicketsByTravelDateInput(items, travelDay)
+    }
+
+    if (!includeInactive) {
+      items = filterTicketsForList(items)
+    }
+
+    if (travelDay) {
+      items = await orderTicketsByCheckInRegistration(items, travelDay, {
+        departure: filters.departure,
+        destination: filters.destination,
+      })
       const start = (page - 1) * itemsPerPage
       return {
         items: items.slice(start, start + itemsPerPage),
@@ -38,9 +57,10 @@ export const ticketService = {
       }
     }
 
+    const removedOnPage = rawItems.length - items.length
     return {
       items,
-      totalItems: extractHydraTotalItems(data),
+      totalItems: Math.max(0, extractHydraTotalItems(data) - removedOnPage),
     }
   },
 

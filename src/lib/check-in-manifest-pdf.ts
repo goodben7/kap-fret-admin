@@ -11,6 +11,7 @@ import {
   getCheckInTicketId,
   getCheckInTicketNumber,
   hasCheckInObservations,
+  sortCheckInsByRegistrationOrder,
 } from '@/lib/check-in'
 import { checkInService } from '@/services/checkin.service'
 import { ticketService } from '@/services/ticket.service'
@@ -148,9 +149,7 @@ export function filterCheckInsForManifest(checkIns: CheckIn[]): CheckIn[] {
 }
 
 export function sortCheckInsForManifest(checkIns: CheckIn[]): CheckIn[] {
-  return [...checkIns].sort((a, b) =>
-    (getCheckInPassengerName(a) ?? '').localeCompare(getCheckInPassengerName(b) ?? '', 'fr'),
-  )
+  return sortCheckInsByRegistrationOrder(checkIns)
 }
 
 interface ManifestTableBuildResult {

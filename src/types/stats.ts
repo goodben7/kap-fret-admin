@@ -14,15 +14,22 @@ export interface StatsFilters {
 
 export interface StatsSummary {
   ticketsTotal: number
-  checkInsTotal: number
+  /** Billets utilisés (statut USED) — index API summary[1] */
+  usedTicketsTotal: number
   freightTotal: number
-  cashRegistersCount: number
+  sentFreightTotal: number
+  /** Somme brute API (peut mélanger devises) — préférer byCurrency / enrichment */
   totalRevenue: number
   transactionsTotal: number
   activeUsersCount: number
+  checkInWeight: number
+  sentFreightWeight: number
+  cashBalances: Partial<Record<Currency, string>>
+  /** Rempli par l'enrichissement client */
+  checkInsTotal: number
+  cashRegistersCount: number
   checkInRevenue: number
   freightRevenue: number
-  cashBalances: Partial<Record<Currency, string>>
 }
 
 export interface StatsTickets {
@@ -36,6 +43,8 @@ export interface StatsTickets {
 export interface StatsCheckIn {
   byStatus: Record<string, number>
   total: number
+  /** Poids total check-in (kg) — index API checkIn[2] */
+  totalWeight: number
   revenue: number
   revenueCdf: number
   revenueUsd: number
@@ -44,6 +53,8 @@ export interface StatsCheckIn {
 export interface StatsFreight {
   byStatus: Record<string, number>
   total: number
+  revenue: number
+  totalWeight: number
   revenueCdf: number
   revenueUsd: number
 }
@@ -52,6 +63,7 @@ export interface StatsFinance {
   byType: Record<string, number>
   entriesCount: number
   exitsCount: number
+  /** Montants agrégés (filtre devise ou somme mixte API) */
   entriesAmount: number
   exitsAmount: number
   netAmount: number
@@ -60,8 +72,10 @@ export interface StatsFinance {
 export interface StatsCashRegisterItem {
   id: string
   name: string
+  code?: string
   currentBalanceCDF: string
   currentBalanceUSD: string
+  active?: boolean
 }
 
 export interface StatsCashRegisters {

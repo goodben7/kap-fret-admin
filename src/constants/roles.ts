@@ -30,7 +30,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Billetterie', path: '/tickets', icon: 'Ticket', roles: [ROLES.SPADM, ROLES.ADM, ROLES.TKT] },
   { label: 'Check-In', path: '/checkins', icon: 'UserCheck', roles: [ROLES.SPADM, ROLES.ADM, ROLES.CHK] },
   { label: 'Fret', path: '/freight', icon: 'Package', roles: [ROLES.SPADM, ROLES.ADM, ROLES.FRT] },
-  { label: 'Caisses', path: '/admin/cash-registers', icon: 'Wallet', roles: [ROLES.SPADM, ROLES.ADM, ROLES.MGR, ROLES.TKT, ROLES.CHK, ROLES.FRT] },
+  { label: 'Mouvements Financiers', path: '/admin/cash-registers', icon: 'Wallet', roles: [ROLES.SPADM, ROLES.ADM, ROLES.MGR, ROLES.TKT, ROLES.CHK, ROLES.FRT] },
   { label: 'Administration', path: '/admin', icon: 'Settings', roles: [ROLES.SPADM, ROLES.ADM] },
 ]
 
@@ -39,7 +39,7 @@ export const MOBILE_ACTION_NAV_ITEMS: NavItem[] = [
   { label: 'Tickets', path: '/tickets', icon: 'Ticket', roles: [ROLES.SPADM, ROLES.ADM, ROLES.TKT] },
   { label: 'Check-In', path: '/checkins', icon: 'UserCheck', roles: [ROLES.SPADM, ROLES.ADM, ROLES.CHK] },
   { label: 'Fret', path: '/freight', icon: 'Package', roles: [ROLES.SPADM, ROLES.ADM, ROLES.FRT] },
-  { label: 'Caisses', path: '/admin/cash-registers', icon: 'Wallet', roles: [ROLES.SPADM, ROLES.ADM, ROLES.MGR, ROLES.TKT, ROLES.CHK, ROLES.FRT] },
+  { label: 'Mouvements Financiers', path: '/admin/cash-registers', icon: 'Wallet', roles: [ROLES.SPADM, ROLES.ADM, ROLES.MGR, ROLES.TKT, ROLES.CHK, ROLES.FRT] },
   { label: 'Administration', path: '/admin', icon: 'Settings', roles: [ROLES.SPADM, ROLES.ADM] },
 ]
 

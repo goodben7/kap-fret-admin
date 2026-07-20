@@ -86,7 +86,7 @@ function sumCheckInRevenueByCurrency(checkIns: CheckIn[]): StatsRevenueByCurrenc
   let usd = 0
   for (const checkIn of checkIns) {
     const amount = parseFloat(checkIn.netToPay) || 0
-    const currency = normalizeCurrency(checkIn.currency)
+    const currency = normalizeCurrency(checkIn.paymentCurrency ?? checkIn.currency)
     if (currency === CURRENCY.CDF) cdf += amount
     else usd += amount
   }
@@ -110,19 +110,33 @@ function sumCashTransactions(transactions: CashTransaction[], currencyFilter?: s
   let exits = 0
   let entriesAmount = 0
   let exitsAmount = 0
+  const byCurrencyMap = new Map<string, { entries: number; exits: number; net: number; count: number }>()
 
   for (const tx of transactions) {
-    const code = getCashTransactionCurrencyCode(tx.currency) ?? CURRENCY.USD
+    const amountCode = getCashTransactionCurrencyCode(tx.currency)
+    const txCode = getCashTransactionCurrencyCode(tx.transactionCurrency)
+    const code = txCode ?? amountCode ?? CURRENCY.USD
     if (currencyFilter && code !== currencyFilter) continue
 
-    const amount = parseFloat(tx.amount) || 0
+    const amount = txCode
+      ? parseFloat(tx.transactionAmount) || 0
+      : parseFloat(tx.amount) || 0
+
+    const bucket = byCurrencyMap.get(code) ?? { entries: 0, exits: 0, net: 0, count: 0 }
+    bucket.count += 1
+
     if (tx.type === CASH_TRANSACTION_TYPE.ENTRY) {
       entries += 1
       entriesAmount += amount
+      bucket.entries += amount
+      bucket.net += amount
     } else {
       exits += 1
       exitsAmount += amount
+      bucket.exits += amount
+      bucket.net -= amount
     }
+    byCurrencyMap.set(code, bucket)
   }
 
   return {
@@ -131,6 +145,13 @@ function sumCashTransactions(transactions: CashTransaction[], currencyFilter?: s
     entriesAmount,
     exitsAmount,
     netAmount: entriesAmount - exitsAmount,
+    byCurrency: Array.from(byCurrencyMap.entries()).map(([currency, row]) => ({
+      currency: normalizeCurrency(currency),
+      entries: row.entries,
+      exits: row.exits,
+      net: row.net,
+      count: row.count,
+    })),
   }
 }
 
@@ -146,6 +167,15 @@ function countTicketsByStatus(tickets: Ticket[]): Record<string, number> {
   const counts: Record<string, number> = {}
   for (const ticket of tickets) {
     counts[ticket.status] = (counts[ticket.status] ?? 0) + 1
+  }
+  return counts
+}
+
+function countCheckInsByStatus(checkIns: CheckIn[]): Record<string, number> {
+  const counts: Record<string, number> = {}
+  for (const checkIn of checkIns) {
+    const status = checkIn.status || 'CREATED'
+    counts[status] = (counts[status] ?? 0) + 1
   }
   return counts
 }
@@ -216,8 +246,9 @@ export async function enrichStatsWithEntityFilters(
       )
       const checkInRevenue = sumCheckInRevenueByCurrency(items)
       enriched.checkIn = {
-        byStatus: { CREATED: totalItems },
+        byStatus: countCheckInsByStatus(items),
         total: totalItems,
+        totalWeight: items.reduce((sum, item) => sum + (parseFloat(item.checkInWeight) || 0), 0),
         revenue: checkInRevenue.cdf + checkInRevenue.usd,
         revenueCdf: checkInRevenue.cdf,
         revenueUsd: checkInRevenue.usd,
@@ -239,6 +270,8 @@ export async function enrichStatsWithEntityFilters(
       enriched.freight = {
         byStatus: countFreightByStatus(items),
         total: totalItems,
+        revenue: paid.cdf + paid.usd,
+        totalWeight: items.reduce((sum, item) => sum + (parseFloat(item.totalWeight) || 0), 0),
         revenueCdf: paid.cdf,
         revenueUsd: paid.usd,
       }
@@ -260,6 +293,9 @@ export async function enrichStatsWithEntityFilters(
         exitsAmount: totals.exitsAmount,
         netAmount: totals.netAmount,
       }
+      if (totals.byCurrency.length > 0) {
+        enriched.byCurrency = totals.byCurrency
+      }
       enriched.summary = {
         ...enriched.summary,
         transactionsTotal: totalItems,
@@ -276,6 +312,10 @@ export async function enrichStatsWithEntityFilters(
     freightTotal: enriched.freight.total,
     checkInRevenue: enriched.checkIn.revenue,
     freightRevenue: enriched.freight.revenueCdf + enriched.freight.revenueUsd,
+    cashRegistersCount: enriched.cashRegisters.registers.filter((r) => r.active !== false).length,
+    cashBalances: Object.keys(enriched.summary.cashBalances).length > 0
+      ? enriched.summary.cashBalances
+      : { ...enriched.cashRegisters.totalsByCurrency },
     totalRevenue:
       enriched.tickets.revenueCdf
       + enriched.tickets.revenueUsd

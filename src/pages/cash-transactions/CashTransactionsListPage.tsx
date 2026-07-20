@@ -279,7 +279,7 @@ export function CashTransactionsListPage() {
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-orange/10 text-brand-orange">
               <Receipt className="h-5 w-5" />
             </span>
-            <h1 className="text-2xl font-bold tracking-tight">Transactions caisse</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Mouvements Financiers</h1>
           </div>
           {data && (
             <p className="pl-11 text-sm text-muted-foreground">
@@ -410,7 +410,7 @@ export function CashTransactionsListPage() {
           description={
             activeCount > 0
               ? 'Aucun résultat pour ces filtres.'
-              : 'Créez une transaction manuelle pour enregistrer un mouvement de caisse.'
+              : 'Créez une transaction manuelle pour enregistrer un mouvement financier.'
           }
           action={
             activeCount === 0

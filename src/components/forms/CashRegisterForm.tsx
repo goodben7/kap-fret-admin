@@ -126,7 +126,7 @@ export function CashRegisterCreateForm({
   defaultValues,
   onSubmit,
   isLoading,
-  submitLabel = 'Créer la caisse',
+  submitLabel = 'Créer le registre',
   cancelHref = '/admin/cash-registers',
 }: CashRegisterCreateFormProps) {
   const {
@@ -149,7 +149,7 @@ export function CashRegisterCreateForm({
 
   return (
     <form id={CREATE_FORM_ID} onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <FormSection title="Caisse" icon={Wallet}>
+      <FormSection title="Registre" icon={Wallet}>
         <Input
           label="Code"
           placeholder="Ex. CASH-001"
@@ -159,7 +159,7 @@ export function CashRegisterCreateForm({
         />
         <Input
           label="Nom"
-          placeholder="Ex. Caisse principale"
+          placeholder="Ex. Guichet principal"
           className={fieldClass}
           error={errors.name?.message}
           {...register('name')}
@@ -188,8 +188,8 @@ export function CashRegisterCreateForm({
             )}
           >
             <div>
-              <p className="text-sm font-medium">Caisse active</p>
-              <p className="text-xs text-muted-foreground">Une caisse inactive ne peut plus être utilisée</p>
+              <p className="text-sm font-medium">Registre actif</p>
+              <p className="text-xs text-muted-foreground">Un registre inactif ne peut plus être utilisé</p>
             </div>
             <input
               type="checkbox"
@@ -236,7 +236,7 @@ export function CashRegisterPatchForm({
 
   return (
     <form id={PATCH_FORM_ID} onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <FormSection title="Caisse" icon={Wallet}>
+      <FormSection title="Registre" icon={Wallet}>
         <Input
           label="Code"
           placeholder="Ex. CASH-001"
@@ -246,7 +246,7 @@ export function CashRegisterPatchForm({
         />
         <Input
           label="Nom"
-          placeholder="Ex. Caisse principale"
+          placeholder="Ex. Guichet principal"
           className={fieldClass}
           error={errors.name?.message}
           {...register('name')}
@@ -259,7 +259,7 @@ export function CashRegisterPatchForm({
             )}
           >
             <div>
-              <p className="text-sm font-medium">Caisse active</p>
+              <p className="text-sm font-medium">Registre actif</p>
               <p className="text-xs text-muted-foreground">Les soldes d'ouverture ne sont pas modifiables ici</p>
             </div>
             <input

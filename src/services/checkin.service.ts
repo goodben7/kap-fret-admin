@@ -1,7 +1,7 @@
 import { api } from './api'
 import { buildCheckInFilterParams, type CheckInFilters } from '@/lib/check-in-filters'
 import { extractHydraMember, extractHydraTotalItems } from '@/lib/hydra'
-import { normalizeCheckInResource, sortCheckInsByNewestFirst } from '@/lib/check-in'
+import { normalizeCheckInResource, sortCheckInsByNewestFirst, sortCheckInsByRegistrationOrder } from '@/lib/check-in'
 import type { HydraCollection } from '@/types/hydra'
 import type { CheckIn, CheckInCreatePayload, CheckInPatchPayload } from '@/types/check-in'
 
@@ -23,14 +23,22 @@ async function fetchCheckInCollection(
   return data
 }
 
-function mapAndSortCheckIns(data: HydraCollection<CheckIn>): CheckIn[] {
-  return sortCheckInsByNewestFirst(extractHydraMember(data).map(normalizeCheckInResource))
+function mapAndSortCheckIns(
+  data: HydraCollection<CheckIn>,
+  sortMode: 'newest' | 'registration',
+): CheckIn[] {
+  const items = extractHydraMember(data).map(normalizeCheckInResource)
+  return sortMode === 'registration'
+    ? sortCheckInsByRegistrationOrder(items)
+    : sortCheckInsByNewestFirst(items)
 }
 
 export const checkInService = {
   async getAll(filters: CheckInFilters = {}) {
     const page = filters.page ?? 1
     const itemsPerPage = filters.itemsPerPage ?? 15
+    // Date de vol active → ordre d'enregistrement (1er check-in = N° 1)
+    const sortMode = filters.travelDate?.trim() ? 'registration' : 'newest'
 
     const probeData = await fetchCheckInCollection({
       ...filters,
@@ -47,9 +55,9 @@ export const checkInService = {
         page: 1,
         itemsPerPage: totalItems,
       })
-      sortedItems = mapAndSortCheckIns(fullData)
+      sortedItems = mapAndSortCheckIns(fullData, sortMode)
     } else {
-      sortedItems = mapAndSortCheckIns(probeData)
+      sortedItems = mapAndSortCheckIns(probeData, sortMode)
     }
 
     const start = (page - 1) * itemsPerPage

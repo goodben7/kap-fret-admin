@@ -50,9 +50,9 @@ function ChartTooltip({
   valueFormatter,
 }: {
   active?: boolean
-  payload?: { name?: string; value?: number; color?: string }[]
+  payload?: { name?: string; value?: number; color?: string; payload?: Record<string, unknown> }[]
   label?: string
-  valueFormatter?: (value: number, name?: string) => string
+  valueFormatter?: (value: number, name?: string, row?: Record<string, unknown>) => string
 }) {
   if (!active || !payload?.length) return null
 
@@ -64,7 +64,9 @@ function ChartTooltip({
           <span className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
           <span>{entry.name}:</span>
           <span className="font-semibold">
-            {valueFormatter ? valueFormatter(entry.value ?? 0, entry.name) : entry.value}
+            {valueFormatter
+              ? valueFormatter(entry.value ?? 0, entry.name, entry.payload)
+              : entry.value}
           </span>
         </p>
       ))}
@@ -269,10 +271,14 @@ export function CheckInStatusChart({
     value,
   }))
 
+  const weightLabel = stats.checkIn.totalWeight > 0
+    ? ` · ${stats.checkIn.totalWeight.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} kg`
+    : ''
+
   return (
     <StatusBarChart
       title="Check-in"
-      description={`${stats.checkIn.total} check-ins · ${formatStatsRevenueByCurrency(stats.checkIn.revenueCdf, stats.checkIn.revenueUsd, currency)}`}
+      description={`${stats.checkIn.total} check-ins${weightLabel} · ${formatStatsRevenueByCurrency(stats.checkIn.revenueCdf, stats.checkIn.revenueUsd, currency)}`}
       data={data}
     />
   )
@@ -311,8 +317,11 @@ export function CurrencyDistributionChart({ byCurrency }: { byCurrency: AppStats
             <Tooltip
               content={
                 <ChartTooltip
-                  valueFormatter={(value, name) =>
-                    formatMoney(value, name === 'USD' || name?.includes('USD') ? CURRENCY.USD : CURRENCY.CDF)
+                  valueFormatter={(value, _name, row) =>
+                    formatMoney(
+                      value,
+                      typeof row?.currency === 'string' ? (row.currency as Currency) : CURRENCY.CDF,
+                    )
                   }
                 />
               }
@@ -382,19 +391,29 @@ export function CurrencyPieChart({ byCurrency }: { byCurrency: AppStats['byCurre
 
 export function FinanceFlowChart({
   finance,
+  byCurrency,
   currency,
 }: {
   finance: AppStats['finance']
+  byCurrency: AppStats['byCurrency']
   currency?: Currency
 }) {
-  const displayCurrency = currency ?? CURRENCY.CDF
   const categoryData = financeCategoryChartData(finance.byType)
+  const rows = currency
+    ? byCurrency.filter((row) => row.currency === currency)
+    : byCurrency
 
-  const summaryData = [
-    { label: 'Entrées', value: finance.entriesAmount, color: CHART_COLORS.entry },
-    { label: 'Sorties', value: finance.exitsAmount, color: CHART_COLORS.exit },
-    { label: 'Net', value: finance.netAmount, color: CHART_COLORS.navy },
-  ]
+  const summaryData = rows.length > 0
+    ? rows.flatMap((row) => [
+        { label: `Entrées ${row.currency}`, value: row.entries, color: CHART_COLORS.entry, currency: row.currency },
+        { label: `Sorties ${row.currency}`, value: row.exits, color: CHART_COLORS.exit, currency: row.currency },
+        { label: `Net ${row.currency}`, value: row.net, color: CHART_COLORS.navy, currency: row.currency },
+      ])
+    : [
+        { label: 'Entrées', value: finance.entriesAmount, color: CHART_COLORS.entry, currency: currency ?? CURRENCY.CDF },
+        { label: 'Sorties', value: finance.exitsAmount, color: CHART_COLORS.exit, currency: currency ?? CURRENCY.CDF },
+        { label: 'Net', value: finance.netAmount, color: CHART_COLORS.navy, currency: currency ?? CURRENCY.CDF },
+      ]
 
   return (
     <ChartCard
@@ -406,7 +425,7 @@ export function FinanceFlowChart({
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={summaryData} margin={chartMargin}>
               <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
               <YAxis
                 tick={{ fontSize: 11 }}
                 tickLine={false}
@@ -414,7 +433,18 @@ export function FinanceFlowChart({
                 width={48}
                 tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`}
               />
-              <Tooltip content={<ChartTooltip valueFormatter={(v) => formatMoney(v, displayCurrency)} />} />
+              <Tooltip
+                content={
+                  <ChartTooltip
+                    valueFormatter={(value, _name, row) => {
+                      const rowCurrency = typeof row?.currency === 'string'
+                        ? (row.currency as Currency)
+                        : CURRENCY.CDF
+                      return formatMoney(value, rowCurrency)
+                    }}
+                  />
+                }
+              />
               <Bar dataKey="value" name="Montant" radius={[6, 6, 0, 0]}>
                 {summaryData.map((entry) => (
                   <Cell key={entry.label} fill={entry.color} />

@@ -90,7 +90,7 @@ function CashRegisterFiltersFields({
 }) {
   return (
     <div className="space-y-6">
-      <FilterSection title="Caisse" icon={Wallet}>
+      <FilterSection title="Registre" icon={Wallet}>
         <Input label="Code" placeholder="Ex. CASH-001" value={draft.code} onChange={(e) => onChange({ code: e.target.value })} className={filterInputClass} />
         <Input label="Nom" placeholder="Recherche partielle..." value={draft.name} onChange={(e) => onChange({ name: e.target.value })} className={filterInputClass} />
         <Select label="Statut" options={activeFilterOptions()} value={draft.active} onChange={(e) => onChange({ active: e.target.value as CashRegisterFiltersState['active'] })} variant="filter" />
@@ -237,9 +237,9 @@ export function CashRegistersPage() {
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-orange/10 text-brand-orange">
               <Wallet className="h-5 w-5" />
             </span>
-            <h1 className="text-2xl font-bold tracking-tight">Caisses</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Mouvements Financiers</h1>
           </div>
-          {data && <p className="pl-11 text-sm text-muted-foreground">{data.totalItems} caisse{data.totalItems !== 1 ? 's' : ''}</p>}
+          {data && <p className="pl-11 text-sm text-muted-foreground">{data.totalItems} registre{data.totalItems !== 1 ? 's' : ''}</p>}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <ViewModeToggle value={viewMode} onChange={(m) => { setViewMode(m); try { localStorage.setItem(STORAGE_KEYS.CASH_REGISTERS_VIEW, m) } catch { /* ignore */ } }} />
@@ -283,9 +283,9 @@ export function CashRegistersPage() {
       )}
 
       {isLoading ? (
-        <div className="flex justify-center py-16"><LoadingSpinner label="Chargement des caisses..." /></div>
+        <div className="flex justify-center py-16"><LoadingSpinner label="Chargement..." /></div>
       ) : !data?.items.length ? (
-        <EmptyState icon={Wallet} title="Aucune caisse" description={activeCount > 0 ? 'Aucun résultat pour ces filtres.' : 'Créez une caisse pour gérer les encaissements.'} action={{ label: 'Nouvelle caisse', onClick: () => { window.location.href = '/admin/cash-registers/new' } }} />
+        <EmptyState icon={Wallet} title="Aucun registre" description={activeCount > 0 ? 'Aucun résultat pour ces filtres.' : 'Créez un registre pour gérer les mouvements financiers.'} action={{ label: 'Nouveau registre', onClick: () => { window.location.href = '/admin/cash-registers/new' } }} />
       ) : (
         <>
           <div className={cn('space-y-3', viewMode === 'table' && 'lg:hidden', isFetching && 'opacity-60 pointer-events-none')}>

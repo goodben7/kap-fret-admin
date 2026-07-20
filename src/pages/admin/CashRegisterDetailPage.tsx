@@ -138,7 +138,7 @@ export function CashRegisterDetailPage() {
   if (isLoading) {
     return (
       <div className="flex justify-center py-16">
-        <LoadingSpinner label="Chargement de la caisse..." />
+        <LoadingSpinner label="Chargement..." />
       </div>
     )
   }
@@ -147,8 +147,8 @@ export function CashRegisterDetailPage() {
     return (
       <EmptyState
         icon={Wallet}
-        title="Caisse introuvable"
-        description="Cette caisse n'existe pas ou a été supprimée."
+        title="Registre introuvable"
+        description="Ce registre n'existe pas ou a été supprimé."
         action={{ label: 'Retour à la liste', onClick: () => { window.location.href = '/admin/cash-registers' } }}
       />
     )
@@ -167,61 +167,8 @@ export function CashRegisterDetailPage() {
         className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-        Caisses
+        Mouvements Financiers
       </Link>
-
-      <Card className="overflow-hidden rounded-2xl border-border/80 shadow-sm">
-        <CardContent className="p-5">
-          <div className="space-y-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Caisse</p>
-              <h1 className="mt-0.5 text-xl font-bold tracking-tight sm:text-2xl">{register.name}</h1>
-              <p className="mt-1 font-mono text-xs text-muted-foreground">{register.code}</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Badge variant={register.active ? 'success' : 'destructive'}>
-                {register.active ? 'Actif' : 'Inactif'}
-              </Badge>
-              {register.deleted && <Badge variant="destructive">Supprimé</Badge>}
-            </div>
-            <div className="rounded-xl bg-brand-orange/10 px-4 py-3 space-y-2">
-              <p className="text-xs text-muted-foreground">Soldes actuels</p>
-              <p className="text-xl font-bold tabular-nums text-brand-orange">{moneyUsd(usdBalance)}</p>
-              <p className="text-lg font-semibold tabular-nums text-brand-orange">{moneyCdf(cdfBalance)}</p>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-11 w-full rounded-xl border-brand-orange/30 text-brand-orange hover:bg-brand-orange/5"
-              onClick={() => setReportModalOpen(true)}
-            >
-              <FileText className="h-4 w-4" />
-              Rapport de caisse PDF
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="rounded-2xl border-border/80 shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base font-semibold">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-orange/10 text-brand-orange">
-              <Wallet className="h-4 w-4" aria-hidden="true" />
-            </span>
-            Informations
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pt-0">
-          <DetailRow label="Code" value={register.code} mono />
-          <DetailRow label="Nom" value={register.name} />
-          <DetailRow label="Solde d'ouverture USD" value={moneyUsd(parseCashRegisterBalance(register.openingBalanceUSD))} />
-          <DetailRow label="Solde d'ouverture CDF" value={moneyCdf(parseCashRegisterBalance(register.openingBalanceCDF))} />
-          <DetailRow label="Solde actuel USD" value={moneyUsd(usdBalance)} />
-          <DetailRow label="Solde actuel CDF" value={moneyCdf(cdfBalance)} />
-          {register.createdAt && <DetailRow label="Créé le" value={formatDateTime(register.createdAt)} />}
-          {register.updatedAt && <DetailRow label="Modifié le" value={formatDateTime(register.updatedAt)} />}
-        </CardContent>
-      </Card>
 
       <Card className="rounded-2xl border-border/80 shadow-sm">
         <CardHeader className="pb-3">
@@ -245,7 +192,7 @@ export function CashRegisterDetailPage() {
               <LoadingSpinner label="Chargement des transactions..." />
             </div>
           ) : transactions.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">Aucune transaction pour cette caisse.</p>
+            <p className="py-6 text-center text-sm text-muted-foreground">Aucune transaction pour ce registre.</p>
           ) : (
             <>
               <div className="space-y-3">
@@ -262,7 +209,7 @@ export function CashRegisterDetailPage() {
                       <TableHead>Type</TableHead>
                       <TableHead>Description</TableHead>
                       <TableHead>Référence</TableHead>
-                      <TableHead className="text-right">Montant caisse</TableHead>
+                      <TableHead className="text-right">Montant encaissé</TableHead>
                       <TableHead>Statut</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -310,6 +257,59 @@ export function CashRegisterDetailPage() {
         </CardContent>
       </Card>
 
+      <Card className="overflow-hidden rounded-2xl border-border/80 shadow-sm">
+        <CardContent className="p-5">
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Registre</p>
+              <h1 className="mt-0.5 text-xl font-bold tracking-tight sm:text-2xl">{register.name}</h1>
+              <p className="mt-1 font-mono text-xs text-muted-foreground">{register.code}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant={register.active ? 'success' : 'destructive'}>
+                {register.active ? 'Actif' : 'Inactif'}
+              </Badge>
+              {register.deleted && <Badge variant="destructive">Supprimé</Badge>}
+            </div>
+            <div className="rounded-xl bg-brand-orange/10 px-4 py-3 space-y-2">
+              <p className="text-xs text-muted-foreground">Soldes actuels</p>
+              <p className="text-xl font-bold tabular-nums text-brand-orange">{moneyUsd(usdBalance)}</p>
+              <p className="text-lg font-semibold tabular-nums text-brand-orange">{moneyCdf(cdfBalance)}</p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 w-full rounded-xl border-brand-orange/30 text-brand-orange hover:bg-brand-orange/5"
+              onClick={() => setReportModalOpen(true)}
+            >
+              <FileText className="h-4 w-4" />
+              Rapport mouvements financiers PDF
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl border-border/80 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base font-semibold">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-orange/10 text-brand-orange">
+              <Wallet className="h-4 w-4" aria-hidden="true" />
+            </span>
+            Informations
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <DetailRow label="Code" value={register.code} mono />
+          <DetailRow label="Nom" value={register.name} />
+          <DetailRow label="Solde d'ouverture USD" value={moneyUsd(parseCashRegisterBalance(register.openingBalanceUSD))} />
+          <DetailRow label="Solde d'ouverture CDF" value={moneyCdf(parseCashRegisterBalance(register.openingBalanceCDF))} />
+          <DetailRow label="Solde actuel USD" value={moneyUsd(usdBalance)} />
+          <DetailRow label="Solde actuel CDF" value={moneyCdf(cdfBalance)} />
+          {register.createdAt && <DetailRow label="Créé le" value={formatDateTime(register.createdAt)} />}
+          {register.updatedAt && <DetailRow label="Modifié le" value={formatDateTime(register.updatedAt)} />}
+        </CardContent>
+      </Card>
+
       <div className="hidden flex-wrap justify-end gap-2 pt-2 lg:flex">
         <Button
           type="button"
@@ -323,7 +323,7 @@ export function CashRegisterDetailPage() {
         <Button asChild className="h-11 rounded-xl px-8">
           <Link to={`/admin/cash-registers/${register.id}/edit`}>
             <Pencil className="h-4 w-4 mr-1.5" />
-            Modifier la caisse
+            Modifier
           </Link>
         </Button>
       </div>
@@ -337,7 +337,7 @@ export function CashRegisterDetailPage() {
             onClick={() => setReportModalOpen(true)}
           >
             <FileText className="h-4 w-4" />
-            Rapport de caisse PDF
+            Rapport mouvements financiers PDF
           </Button>
           <Button asChild className="h-11 w-full rounded-xl bg-brand-orange font-semibold hover:bg-brand-orange/90">
             <Link to={`/admin/cash-registers/${register.id}/edit`}>

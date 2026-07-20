@@ -120,7 +120,7 @@ export function RelatedCashTransactionsPanel({
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-orange/10 text-brand-orange">
               <Receipt className="h-4 w-4" aria-hidden="true" />
             </span>
-            Transactions caisse
+            Transactions
           </CardTitle>
           <span className="text-sm text-muted-foreground">
             {data?.totalItems ?? transactions.length} transaction

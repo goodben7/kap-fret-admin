@@ -1,10 +1,30 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { BRAND } from '@/constants/brand'
+import { CHECK_IN_STATUS } from '@/constants/check-in'
 import { GENDER, TICKET_STATUS } from '@/constants/ticket'
 import { getCheckpointDisplayName } from '@/lib/checkpoint'
+import {
+  getCheckInTicketId,
+  getCheckInTicketNumber,
+  hasCheckInObservations,
+} from '@/lib/check-in'
+import {
+  buildCheckInManifestFilters,
+  type CheckInFilters,
+} from '@/lib/check-in-filters'
+import { sortCheckInsByRegistrationOrder } from '@/lib/check-in'
+import { normalizeGender } from '@/lib/ticket'
+import { checkInService } from '@/services/checkin.service'
+import { ticketService } from '@/services/ticket.service'
+import type { CheckIn } from '@/types/check-in'
 import type { Ticket } from '@/types/ticket'
 import type { Checkpoint } from '@/types/checkpoint'
+
+export interface PassengerManifestEntry {
+  ticket: Ticket
+  observation: string
+}
 
 export interface PassengerManifestParams {
   departureLabel: string
@@ -13,7 +33,8 @@ export interface PassengerManifestParams {
   destinationCode: string
   travelDate: string
   manifestNumber: string
-  tickets: Ticket[]
+  /** Passagers ordonnés par date d'enregistrement check-in (plus ancien = N° 1). */
+  passengers: PassengerManifestEntry[]
 }
 
 const NAVY = { r: 11, g: 33, b: 61 }
@@ -45,12 +66,121 @@ export function buildManifestNumber(travelDate: string, departureCode: string, d
 }
 
 export function filterTicketsForManifest(tickets: Ticket[]): Ticket[] {
-  return tickets
-    .filter(
-      (ticket) =>
-        ticket.status !== TICKET_STATUS.CANCELLED && ticket.status !== TICKET_STATUS.REFUNDED,
-    )
-    .sort((a, b) => a.passengerName.localeCompare(b.passengerName, 'fr'))
+  return tickets.filter(
+    (ticket) =>
+      ticket.status !== TICKET_STATUS.CANCELLED && ticket.status !== TICKET_STATUS.REFUNDED,
+  )
+}
+
+function getEmbeddedTicket(checkIn: CheckIn): Ticket | null {
+  if (typeof checkIn.ticket === 'object' && checkIn.ticket && 'ticketNumber' in checkIn.ticket) {
+    return checkIn.ticket
+  }
+  return null
+}
+
+function filterActiveCheckIns(checkIns: CheckIn[]): CheckIn[] {
+  return checkIns.filter((checkIn) => checkIn.status !== CHECK_IN_STATUS.CANCELLED)
+}
+
+/**
+ * Passagers du manifeste : check-ins du vol, triés par ordre d'enregistrement.
+ * Le premier check-in créé devient le N° 1.
+ */
+export async function fetchPassengersForManifest(
+  departure: string,
+  destination: string,
+  travelDate: string,
+): Promise<PassengerManifestEntry[]> {
+  const filters = buildCheckInManifestFilters(departure, destination, travelDate)
+
+  let checkIns: CheckIn[] = []
+
+  try {
+    const { items } = await checkInService.getAll(filters)
+    checkIns = filterActiveCheckIns(items)
+  } catch {
+    checkIns = []
+  }
+
+  if (checkIns.length === 0) {
+    const { items: tickets } = await ticketService.getAll({
+      departure,
+      destination,
+      travelDate,
+      itemsPerPage: 500,
+      page: 1,
+    })
+
+    if (tickets.length === 0) return []
+
+    const ticketIds = new Set(tickets.map((ticket) => String(ticket.id)))
+    const ticketNumbers = new Set(tickets.map((ticket) => ticket.ticketNumber))
+
+    const { items: allCheckIns } = await checkInService.getAll({
+      itemsPerPage: 500,
+      page: 1,
+      status: CHECK_IN_STATUS.CREATED,
+    } satisfies CheckInFilters)
+
+    checkIns = filterActiveCheckIns(allCheckIns).filter((checkIn) => {
+      const ticketId = getCheckInTicketId(checkIn)
+      if (ticketId && ticketIds.has(String(ticketId))) return true
+      return ticketNumbers.has(getCheckInTicketNumber(checkIn))
+    })
+  }
+
+  const orderedCheckIns = sortCheckInsByRegistrationOrder(checkIns)
+  if (orderedCheckIns.length === 0) return []
+
+  // Le ticket embarqué dans le check-in est souvent partiel (sans category/gender).
+  // On recharge toujours les billets du vol pour compléter ces champs.
+  const { items: routeTickets } = await ticketService.getAll({
+    departure,
+    destination,
+    travelDate,
+    itemsPerPage: 500,
+    page: 1,
+  })
+  const ticketsById = new Map(routeTickets.map((ticket) => [String(ticket.id), ticket]))
+  const ticketsByNumber = new Map(routeTickets.map((ticket) => [ticket.ticketNumber, ticket]))
+
+  const passengers: PassengerManifestEntry[] = []
+
+  for (const checkIn of orderedCheckIns) {
+    const embedded = getEmbeddedTicket(checkIn)
+    const ticketId = getCheckInTicketId(checkIn) ?? embedded?.id ?? null
+    const ticketNumber = embedded?.ticketNumber || getCheckInTicketNumber(checkIn)
+    let ticket =
+      (ticketId ? ticketsById.get(String(ticketId)) : undefined)
+      ?? ticketsByNumber.get(ticketNumber)
+      ?? embedded
+      ?? null
+
+    // Complète category / gender si le billet embarqué est incomplet.
+    if (ticket && ticketId && (ticket.category == null || ticket.gender == null || ticket.gender === '')) {
+      try {
+        const fullTicket = await ticketService.getById(String(ticketId))
+        ticket = fullTicket
+        ticketsById.set(String(fullTicket.id), fullTicket)
+        ticketsByNumber.set(fullTicket.ticketNumber, fullTicket)
+      } catch {
+        // garde le billet partiel
+      }
+    }
+
+    if (!ticket) continue
+    if (ticket.status === TICKET_STATUS.CANCELLED || ticket.status === TICKET_STATUS.REFUNDED) continue
+
+    passengers.push({
+      ticket,
+      observation: hasCheckInObservations(checkIn.observations)
+        ? checkIn.observations!.trim()
+        : '',
+    })
+  }
+
+  return passengers
 }
 
 async function loadImageDataUrl(src: string): Promise<string | null> {
@@ -135,10 +265,11 @@ function buildTableBodyRows(passengerRows: string[][], pageHeight: number): stri
   return passengerRows
 }
 
-function formatGender(gender: string): string {
-  if (gender === GENDER.MALE) return 'M'
-  if (gender === GENDER.FEMALE) return 'F'
-  return gender
+function formatGender(gender: string | undefined): string {
+  const normalized = normalizeGender(gender)
+  if (normalized === GENDER.MALE) return 'M'
+  if (normalized === GENDER.FEMALE) return 'F'
+  return '—'
 }
 
 function drawClosure(doc: jsPDF, passengerCount: number) {
@@ -171,13 +302,13 @@ export async function generatePassengerManifestPdf(params: PassengerManifestPara
 
   drawHeader(doc, params, logoDataUrl)
 
-  const passengerRows = params.tickets.map((ticket, index) => [
+  const passengerRows = params.passengers.map((entry, index) => [
     String(index + 1),
-    ticket.passengerName,
-    ticket.ticketNumber,
-    ticket.category ?? '—',
-    formatGender(ticket.gender),
-    ticket.phone?.trim() || '—',
+    entry.ticket.passengerName,
+    entry.ticket.ticketNumber,
+    entry.ticket.category?.trim() || '—',
+    formatGender(entry.ticket.gender),
+    entry.observation,
   ])
 
   const rows = buildTableBodyRows(passengerRows, pageHeight)
@@ -185,7 +316,7 @@ export async function generatePassengerManifestPdf(params: PassengerManifestPara
 
   autoTable(doc, {
     startY: TABLE_START_Y,
-    head: [['N°', 'NOMS PASSAGERS', 'N° BILLET', 'CATEGORIES', 'SEXE', 'TELEPHONE']],
+    head: [['N°', 'NOMS PASSAGERS', 'N° BILLET', 'CATEGORIES', 'SEXE', 'OBSERVATIONS']],
     body: rows,
     theme: 'grid',
     styles: {
@@ -216,7 +347,7 @@ export async function generatePassengerManifestPdf(params: PassengerManifestPara
   })
 
   doc.setPage(singlePageManifest ? 1 : doc.getNumberOfPages())
-  drawClosure(doc, params.tickets.length)
+  drawClosure(doc, params.passengers.length)
 
   return doc.output('blob')
 }

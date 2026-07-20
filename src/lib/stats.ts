@@ -93,17 +93,22 @@ function parseCurrencyBalances(value: unknown): Partial<Record<Currency, string>
 }
 
 function parseSummary(member: unknown[]): StatsSummary {
+  // Ordre StatsManager::getSummaryStats (clés perdues par Hydra Collection)
   return {
     ticketsTotal: toNumber(member[0]),
-    checkInsTotal: toNumber(member[1]),
+    usedTicketsTotal: toNumber(member[1]),
     freightTotal: toNumber(member[2]),
-    cashRegistersCount: toNumber(member[3]),
+    sentFreightTotal: toNumber(member[3]),
     totalRevenue: toNumber(member[4]),
     transactionsTotal: toNumber(member[5]),
     activeUsersCount: toNumber(member[6]),
-    checkInRevenue: toNumber(member[7]),
-    freightRevenue: toNumber(member[8]),
+    checkInWeight: toNumber(member[7]),
+    sentFreightWeight: toNumber(member[8]),
     cashBalances: parseCurrencyBalances(member[9]),
+    checkInsTotal: 0,
+    cashRegistersCount: 0,
+    checkInRevenue: 0,
+    freightRevenue: 0,
   }
 }
 
@@ -119,22 +124,25 @@ function parseTickets(member: unknown[]): StatsTickets {
 }
 
 function parseCheckIn(member: unknown[]): StatsCheckIn {
+  return {
+    byStatus: parseStatusRecord(member[0]),
+    total: toNumber(member[1]),
+    totalWeight: toNumber(member[2]),
+    revenue: 0,
+    revenueCdf: 0,
+    revenueUsd: 0,
+  }
+}
+
+function parseFreight(member: unknown[]): StatsFreight {
   const revenue = toNumber(member[2])
   return {
     byStatus: parseStatusRecord(member[0]),
     total: toNumber(member[1]),
     revenue,
+    totalWeight: toNumber(member[3]),
     revenueCdf: 0,
     revenueUsd: revenue,
-  }
-}
-
-function parseFreight(member: unknown[]): StatsFreight {
-  return {
-    byStatus: parseStatusRecord(member[0]),
-    total: toNumber(member[1]),
-    revenueCdf: toNumber(member[2]),
-    revenueUsd: toNumber(member[3]),
   }
 }
 
@@ -162,8 +170,10 @@ function parseCashRegisters(member: unknown[]): StatsCashRegisters {
       registers.push({
         id: String(item.id ?? ''),
         name: String(item.name ?? '—'),
+        code: item.code != null ? String(item.code) : undefined,
         currentBalanceCDF: String(item.currentBalanceCDF ?? item.currentBalance ?? '0'),
         currentBalanceUSD: String(item.currentBalanceUSD ?? '0'),
+        active: typeof item.active === 'boolean' ? item.active : true,
       })
     }
   }
@@ -222,13 +232,20 @@ function parseByIssuingOffice(member: unknown[]): StatsByIssuingOffice[] {
 }
 
 export function parseStatsResponse(data: StatsApiResponse): AppStats {
+  const cashRegisters = parseCashRegisters(extractMember(data.cashRegisters))
+  const summary = parseSummary(extractMember(data.summary))
+  summary.cashRegistersCount = cashRegisters.registers.filter((r) => r.active !== false).length
+  if (Object.keys(summary.cashBalances).length === 0) {
+    summary.cashBalances = { ...cashRegisters.totalsByCurrency }
+  }
+
   return {
-    summary: parseSummary(extractMember(data.summary)),
+    summary,
     tickets: parseTickets(extractMember(data.tickets)),
     checkIn: parseCheckIn(extractMember(data.checkIn)),
     freight: parseFreight(extractMember(data.freight)),
     finance: parseFinance(extractMember(data.finance)),
-    cashRegisters: parseCashRegisters(extractMember(data.cashRegisters)),
+    cashRegisters,
     timeline: parseTimeline(extractMember(data.timeline)),
     byCurrency: parseByCurrency(extractMember(data.byCurrency)),
     byIssuingOffice: parseByIssuingOffice(extractMember(data.byIssuingOffice)),
@@ -499,5 +516,52 @@ export function formatStatsRevenueByCurrency(
   const parts: string[] = []
   if (revenueUsd > 0) parts.push(formatMoney(revenueUsd, CURRENCY.USD))
   if (revenueCdf > 0) parts.push(formatMoney(revenueCdf, CURRENCY.CDF))
+  return parts.length > 0 ? parts.join(' · ') : formatMoney(0, CURRENCY.USD)
+}
+
+/** Net / entrées / sorties finance à partir de byCurrency (sans mélange USD+CDF). */
+export function getFinanceTotalsFromByCurrency(
+  byCurrency: StatsByCurrency[],
+  currency?: Currency,
+): { entries: number; exits: number; net: number; entriesCount: number; exitsCount: number } {
+  const rows = currency
+    ? byCurrency.filter((row) => row.currency === currency)
+    : byCurrency
+
+  if (currency) {
+    const row = rows[0]
+    return {
+      entries: row?.entries ?? 0,
+      exits: row?.exits ?? 0,
+      net: row?.net ?? 0,
+      entriesCount: 0,
+      exitsCount: 0,
+    }
+  }
+
+  // Sans filtre : on ne somme pas les devises entre elles — net affiché séparément.
+  return {
+    entries: rows.reduce((sum, row) => sum + row.entries, 0),
+    exits: rows.reduce((sum, row) => sum + row.exits, 0),
+    net: rows.reduce((sum, row) => sum + row.net, 0),
+    entriesCount: 0,
+    exitsCount: 0,
+  }
+}
+
+export function formatFinanceAmountByCurrency(
+  byCurrency: StatsByCurrency[],
+  field: 'entries' | 'exits' | 'net',
+  currency?: Currency,
+): string {
+  if (currency) {
+    const row = byCurrency.find((item) => item.currency === currency)
+    return formatMoney(row?.[field] ?? 0, currency)
+  }
+
+  const parts = byCurrency
+    .filter((row) => Math.abs(row[field]) > 0.0001)
+    .map((row) => formatMoney(row[field], row.currency))
+
   return parts.length > 0 ? parts.join(' · ') : formatMoney(0, CURRENCY.USD)
 }
