@@ -158,7 +158,7 @@ export async function fetchPassengersForManifest(
       ?? null
 
     // Complète category / gender si le billet embarqué est incomplet.
-    if (ticket && ticketId && (ticket.category == null || ticket.gender == null || ticket.gender === '')) {
+    if (ticket && ticketId && (ticket.category == null || ticket.gender == null)) {
       try {
         const fullTicket = await ticketService.getById(String(ticketId))
         ticket = fullTicket
