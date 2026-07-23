@@ -102,7 +102,8 @@ export function buildTicketFilterParams(filters: TicketFilters): Record<string, 
   if (filters.departure?.trim()) params.departure = normalizeIri(filters.departure.trim())
   if (filters.destination?.trim()) params.destination = normalizeIri(filters.destination.trim())
 
-  params['order[createdAt]'] = 'desc'
+  params['order[createdAt]'] = 'asc'
+  params['order[ticketNumber]'] = 'asc'
 
   return params
 }

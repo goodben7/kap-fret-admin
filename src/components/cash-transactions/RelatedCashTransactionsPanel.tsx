@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { ArrowDownLeft, ArrowUpRight, ChevronRight, Receipt } from 'lucide-react'
 import { useCashTransactions } from '@/hooks/useCashTransactions'
+import { CashTransactionStatusBadge } from '@/components/cash-transactions/CashTransactionStatusBadge'
 import {
   getCashTransactionCashRegisterLabel,
   getCashTransactionCurrencyCode,
@@ -40,9 +41,7 @@ function TransactionRow({ transaction }: { transaction: CashTransaction }) {
             <div className="min-w-0 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <TypeBadge type={transaction.type} />
-                <Badge variant={transaction.validated ? 'secondary' : 'outline'}>
-                  {transaction.validated ? 'Validée' : 'En attente'}
-                </Badge>
+                <CashTransactionStatusBadge transaction={transaction} />
               </div>
               <p className="line-clamp-2 text-sm font-medium leading-snug">{transaction.description}</p>
               <p className="text-xs text-muted-foreground">

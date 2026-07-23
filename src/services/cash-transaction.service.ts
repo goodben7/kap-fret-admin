@@ -100,6 +100,15 @@ export const cashTransactionService = {
     return data
   },
 
+  async changeStatus(id: string, status: string) {
+    const { data } = await api.post<CashTransaction>(
+      `/api/cash_transactions/${id}/change-status`,
+      { status },
+      { headers: JSON_HEADERS },
+    )
+    return data
+  },
+
   async previewConversion(payload: PreviewConversionPayload) {
     const { data } = await api.post<PreviewConversionOutput>(
       '/api/cash_transactions/preview-conversion',

@@ -1,7 +1,6 @@
 import { api } from './api'
 import { extractHydraMember, extractHydraTotalItems } from '@/lib/hydra'
-import { filterTicketsByTravelDateInput, filterTicketsForList } from '@/lib/ticket'
-import { orderTicketsByCheckInRegistration } from '@/lib/ticket-check-in-order'
+import { filterTicketsByTravelDateInput, filterTicketsForList, sortTicketsByCreatedAtAsc } from '@/lib/ticket'
 import { buildTicketFilterParams, type TicketFilters } from '@/lib/ticket-filters'
 import type { HydraCollection } from '@/types/hydra'
 import type { Ticket, TicketCreatePayload, TicketStatusPayload, TicketPatchPayload, TicketReportTravelDatePayload, TicketPaymentPayload } from '@/types/ticket'
@@ -45,11 +44,9 @@ export const ticketService = {
       items = filterTicketsForList(items)
     }
 
+    items = sortTicketsByCreatedAtAsc(items)
+
     if (travelDay) {
-      items = await orderTicketsByCheckInRegistration(items, travelDay, {
-        departure: filters.departure,
-        destination: filters.destination,
-      })
       const start = (page - 1) * itemsPerPage
       return {
         items: items.slice(start, start + itemsPerPage),

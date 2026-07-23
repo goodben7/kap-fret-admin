@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { ArrowRight, Calendar, Download, FileText, LoaderIcon, MapPin, Receipt } from 'lucide-react'
@@ -10,17 +10,22 @@ import {
   passengerManifestSchema,
   type PassengerManifestFormData,
 } from '@/schemas/passenger-manifest.schema'
+import { useAuth } from '@/hooks/useAuth'
+import { useIssuingOffice } from '@/hooks/useIssuingOffices'
 import { ticketService } from '@/services/ticket.service'
 import { checkpointService } from '@/services/checkpoint.service'
 import { getCheckpointId } from '@/lib/checkpoint'
+import { extractResourceId } from '@/lib/hydra'
+import { resolveUserIssuingOfficeIri } from '@/lib/issuing-office'
+import { getCheckpointIri } from '@/services/issuing-office.service'
 import { isAxiosError } from 'axios'
 import { extractApiErrorMessage } from '@/services/api'
-import { getTodayTravelDateInput } from '@/lib/ticket'
+import { getDefaultWednesdayTravelDateInput } from '@/lib/ticket'
 import { formatDate, cn } from '@/lib/utils'
 import {
   buildTicketSalesManifestFileName,
   downloadBlob,
-  filterTicketsForManifest,
+  prepareTicketsForSalesManifest,
   generateTicketSalesManifestPdf,
   getCheckpointManifestName,
   getCheckpointRouteCode,
@@ -44,6 +49,16 @@ export function TicketSalesManifestModal({ open, onOpenChange }: TicketSalesMani
   const [fileName, setFileName] = useState('MANIFESTE_VENTE_BILLETS.pdf')
   const [departureLabel, setDepartureLabel] = useState('')
   const [destinationLabel, setDestinationLabel] = useState('')
+  const departurePrefillDone = useRef(false)
+
+  const { user } = useAuth()
+  const issuingOfficeIri = resolveUserIssuingOfficeIri(user)
+  const issuingOfficeId = extractResourceId(issuingOfficeIri) ?? ''
+  const { data: issuingOffice } = useIssuingOffice(issuingOfficeId)
+  const userCheckpointIri = useMemo(
+    () => (issuingOffice ? getCheckpointIri(issuingOffice) : ''),
+    [issuingOffice],
+  )
 
   const {
     register,
@@ -57,7 +72,7 @@ export function TicketSalesManifestModal({ open, onOpenChange }: TicketSalesMani
     defaultValues: {
       departure: '',
       destination: '',
-      travelDate: getTodayTravelDateInput(),
+      travelDate: getDefaultWednesdayTravelDateInput(),
     },
   })
 
@@ -76,11 +91,14 @@ export function TicketSalesManifestModal({ open, onOpenChange }: TicketSalesMani
   }, [])
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      departurePrefillDone.current = false
+      return
+    }
     reset({
       departure: '',
       destination: '',
-      travelDate: getTodayTravelDateInput(),
+      travelDate: getDefaultWednesdayTravelDateInput(),
     })
     setDepartureLabel('')
     setDestinationLabel('')
@@ -92,6 +110,12 @@ export function TicketSalesManifestModal({ open, onOpenChange }: TicketSalesMani
     setTicketCount(0)
     setFileName('MANIFESTE_VENTE_BILLETS.pdf')
   }, [open, reset])
+
+  useEffect(() => {
+    if (!open || !userCheckpointIri || departurePrefillDone.current) return
+    setValue('departure', userCheckpointIri, { shouldValidate: true })
+    departurePrefillDone.current = true
+  }, [open, userCheckpointIri, setValue])
 
   useEffect(() => {
     return () => {
@@ -146,7 +170,7 @@ export function TicketSalesManifestModal({ open, onOpenChange }: TicketSalesMani
         page: 1,
       })
 
-      const tickets = filterTicketsForManifest(items)
+      const tickets = prepareTicketsForSalesManifest(items)
       if (tickets.length === 0) {
         toast.error('Aucun billet trouvé pour ce trajet et cette date')
         return
@@ -232,6 +256,7 @@ export function TicketSalesManifestModal({ open, onOpenChange }: TicketSalesMani
                 <CheckpointAsyncSelect
                   label="Départ"
                   value={departure}
+                  initialCheckpointIri={userCheckpointIri || undefined}
                   onChange={(iri) => setValue('departure', iri, { shouldValidate: true })}
                   error={errors.departure?.message}
                   placeholder="Choisir le point de départ..."

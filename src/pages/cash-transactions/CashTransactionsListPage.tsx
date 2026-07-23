@@ -27,11 +27,13 @@ import {
 import {
   getCashTransactionCurrencyCode,
   getCashTransactionReferenceTypeLabel,
+  getCashTransactionStatusLabel,
   getCashTransactionTypeLabel,
 } from '@/lib/cash-transaction'
 import {
   CASH_TRANSACTION_REFERENCE_TYPE_LABELS,
   CASH_TRANSACTION_REFERENCE_TYPE_OPTIONS,
+  CASH_TRANSACTION_STATUS_OPTIONS,
   CASH_TRANSACTION_TYPE,
   CASH_TRANSACTION_TYPE_LABELS,
   CASH_TRANSACTION_TYPE_OPTIONS,
@@ -46,6 +48,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Pagination } from '@/components/ui/pagination'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
+import { CashTransactionStatusBadge } from '@/components/cash-transactions/CashTransactionStatusBadge'
 import { extractIri } from '@/lib/hydra'
 import { formatDate, formatDateTime, formatMoney, cn } from '@/lib/utils'
 
@@ -58,8 +61,13 @@ type ViewMode = 'cards' | 'table'
 
 const validatedFilterOptions = () => [
   { value: '', label: 'Tous' },
-  { value: 'true', label: 'Validée' },
-  { value: 'false', label: 'En attente' },
+  { value: 'false', label: 'Nécessite validation' },
+  { value: 'true', label: 'Sans validation' },
+]
+
+const statusFilterOptions = () => [
+  { value: '', label: 'Tous' },
+  ...CASH_TRANSACTION_STATUS_OPTIONS,
 ]
 
 function FilterSection({ title, icon: Icon, children }: { title: string; icon: typeof Receipt; children: ReactNode }) {
@@ -109,9 +117,7 @@ function TransactionCard({ transaction }: { transaction: CashTransaction }) {
             <div className="min-w-0 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <TypeBadge type={transaction.type} />
-                <Badge variant={transaction.validated ? 'secondary' : 'outline'}>
-                  {transaction.validated ? 'Validée' : 'En attente'}
-                </Badge>
+                <CashTransactionStatusBadge transaction={transaction} />
               </div>
               <p className="text-sm font-medium leading-snug line-clamp-2">{transaction.description}</p>
               <p className="text-xs text-muted-foreground">
@@ -158,10 +164,17 @@ function CashTransactionFiltersFields({
           variant="filter"
         />
         <Select
-          label="Statut validation"
+          label="Nécessite validation"
           options={validatedFilterOptions()}
           value={draft.validated}
           onChange={(e) => onChange({ validated: e.target.value as CashTransactionFiltersState['validated'] })}
+          variant="filter"
+        />
+        <Select
+          label="Statut"
+          options={statusFilterOptions()}
+          value={draft.status}
+          onChange={(e) => onChange({ status: e.target.value as CashTransactionFiltersState['status'] })}
           variant="filter"
         />
         <Select
@@ -369,8 +382,14 @@ export function CashTransactionsListPage() {
           )}
           {filters.validated && (
             <FilterChip
-              label={filters.validated === 'true' ? 'Validée' : 'En attente'}
+              label={filters.validated === 'false' ? 'Nécessite validation' : 'Sans validation'}
               onRemove={() => patchFilters({ validated: '' })}
+            />
+          )}
+          {filters.status && (
+            <FilterChip
+              label={getCashTransactionStatusLabel(filters.status)}
+              onRemove={() => patchFilters({ status: '' })}
             />
           )}
           {filters.cashRegister && (
@@ -462,9 +481,7 @@ export function CashTransactionsListPage() {
                         {formatMoney(parseFloat(tx.amount) || 0, currencyCode)}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={tx.validated ? 'secondary' : 'outline'}>
-                          {tx.validated ? 'Validée' : 'En attente'}
-                        </Badge>
+                        <CashTransactionStatusBadge transaction={tx} />
                       </TableCell>
                     </TableRow>
                   )

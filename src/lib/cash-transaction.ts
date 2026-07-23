@@ -2,9 +2,12 @@ import type { CashTransactionCurrencyRef, CashTransactionCashRegisterRef, CashTr
 import {
   CASH_TRANSACTION_REFERENCE_TYPE,
   CASH_TRANSACTION_REFERENCE_TYPE_LABELS,
+  CASH_TRANSACTION_STATUS,
+  CASH_TRANSACTION_STATUS_LABELS,
   CASH_TRANSACTION_TYPE,
   CASH_TRANSACTION_TYPE_LABELS,
   type CashTransactionReferenceType,
+  type CashTransactionStatus,
   type CashTransactionType,
 } from '@/constants/cash-transaction'
 import { CURRENCY } from '@/constants/ticket'
@@ -89,6 +92,76 @@ export function getCashTransactionTypeLabel(type: CashTransactionType): string {
 
 export function getCashTransactionReferenceTypeLabel(referenceType: CashTransactionReferenceType): string {
   return CASH_TRANSACTION_REFERENCE_TYPE_LABELS[referenceType] ?? referenceType
+}
+
+export function getCashTransactionStatus(transaction: Pick<CashTransaction, 'status' | 'validated'>): CashTransactionStatus {
+  if (
+    transaction.status === CASH_TRANSACTION_STATUS.PENDING
+    || transaction.status === CASH_TRANSACTION_STATUS.IN_REVIEW
+    || transaction.status === CASH_TRANSACTION_STATUS.VALIDATED
+    || transaction.status === CASH_TRANSACTION_STATUS.REJECTED
+  ) {
+    return transaction.status
+  }
+  // Anciennes données : `validated === false` → nécessite une validation
+  return transaction.validated === false
+    ? CASH_TRANSACTION_STATUS.PENDING
+    : CASH_TRANSACTION_STATUS.VALIDATED
+}
+
+export function getCashTransactionStatusLabel(status: CashTransactionStatus | string): string {
+  return CASH_TRANSACTION_STATUS_LABELS[status as CashTransactionStatus] ?? status
+}
+
+export function cashTransactionStatusBadgeVariant(
+  status: CashTransactionStatus,
+): 'outline' | 'warning' | 'success' | 'destructive' {
+  switch (status) {
+    case CASH_TRANSACTION_STATUS.IN_REVIEW:
+      return 'warning'
+    case CASH_TRANSACTION_STATUS.VALIDATED:
+      return 'success'
+    case CASH_TRANSACTION_STATUS.REJECTED:
+      return 'destructive'
+    case CASH_TRANSACTION_STATUS.PENDING:
+    default:
+      return 'outline'
+  }
+}
+
+/** `validated === false` → l'opération doit passer par le workflow de validation. */
+export function cashTransactionRequiresValidation(
+  transaction: Pick<CashTransaction, 'validated'>,
+): boolean {
+  return transaction.validated === false
+}
+
+/** Transitions possibles — une fois VALIDATED ou REJECTED, plus aucun changement. */
+export function getAvailableCashTransactionStatusActions(
+  status: CashTransactionStatus,
+): CashTransactionStatus[] {
+  switch (status) {
+    case CASH_TRANSACTION_STATUS.PENDING:
+      return [
+        CASH_TRANSACTION_STATUS.IN_REVIEW,
+        CASH_TRANSACTION_STATUS.VALIDATED,
+        CASH_TRANSACTION_STATUS.REJECTED,
+      ]
+    case CASH_TRANSACTION_STATUS.IN_REVIEW:
+      return [CASH_TRANSACTION_STATUS.VALIDATED, CASH_TRANSACTION_STATUS.REJECTED]
+    case CASH_TRANSACTION_STATUS.VALIDATED:
+    case CASH_TRANSACTION_STATUS.REJECTED:
+    default:
+      return []
+  }
+}
+
+/** Actions de statut disponibles tant que le statut n'est pas final (indépendant de `validated`). */
+export function canChangeCashTransactionStatus(
+  transaction: Pick<CashTransaction, 'status' | 'validated'>,
+): boolean {
+  const status = getCashTransactionStatus(transaction)
+  return getAvailableCashTransactionStatusActions(status).length > 0
 }
 
 export function cashTransactionReferencePath(

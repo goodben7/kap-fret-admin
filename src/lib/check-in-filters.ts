@@ -153,7 +153,7 @@ export function appendCheckInOrderParams(
   params: Record<string, string | number>,
   filters: Pick<CheckInFilters, 'orderField' | 'orderDirection'>,
 ) {
-  const direction = filters.orderDirection ?? 'desc'
+  const direction = filters.orderDirection ?? 'asc'
 
   if (filters.orderField) {
     params[`order[${filters.orderField}]`] = direction
@@ -163,8 +163,8 @@ export function appendCheckInOrderParams(
     return
   }
 
-  params['order[createdAt]'] = 'desc'
-  params['order[id]'] = 'desc'
+  params['order[createdAt]'] = 'asc'
+  params['order[id]'] = 'asc'
 }
 
 /** Sérialise les paramètres API Platform (préserve order[createdAt], ticket.travelDate[after], etc.) */

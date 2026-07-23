@@ -10,8 +10,8 @@ export function CheckInCreatePage() {
   const createCheckIn = useCreateCheckIn()
 
   const handleSubmit = async (data: CheckInCreateFormData) => {
-    const checkIn = await createCheckIn.mutateAsync(toCheckInCreatePayload(data))
-    void navigate(`/checkins/${checkIn.id}`)
+    await createCheckIn.mutateAsync(toCheckInCreatePayload(data))
+    void navigate('/checkins')
   }
 
   return (

@@ -12,8 +12,8 @@ export function TicketCreatePage() {
   const { issuingOfficeName } = useAuth()
 
   const handleSubmit = async (data: TicketFormData) => {
-    const ticket = await createTicket.mutateAsync(toTicketCreatePayload(data))
-    void navigate(`/tickets/${ticket.id}`)
+    await createTicket.mutateAsync(toTicketCreatePayload(data))
+    void navigate('/tickets')
   }
 
   return (

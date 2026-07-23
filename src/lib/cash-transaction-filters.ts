@@ -1,5 +1,10 @@
 import { normalizeIri } from '@/lib/hydra'
-import type { CashTransactionReferenceType, CashTransactionType } from '@/constants/cash-transaction'
+import type {
+  CashTransactionReferenceType,
+  CashTransactionStatus,
+  CashTransactionType,
+} from '@/constants/cash-transaction'
+import { CASH_TRANSACTION_STATUS } from '@/constants/cash-transaction'
 
 export interface CashTransactionFilters {
   page?: number
@@ -10,7 +15,9 @@ export interface CashTransactionFilters {
   type?: CashTransactionType
   referenceType?: CashTransactionReferenceType
   referenceId?: string
+  /** False = opération qui nécessite une validation. */
   validated?: boolean
+  status?: CashTransactionStatus
   createdBy?: string
   transactionDate?: string
   transactionDateFrom?: string
@@ -25,6 +32,7 @@ export type CashTransactionFiltersState = {
   referenceId: string
   cashRegister: string
   validated: '' | 'true' | 'false'
+  status: '' | CashTransactionStatus
   transactionDate: string
   createdAt: string
 }
@@ -36,6 +44,7 @@ export const emptyCashTransactionFilters: CashTransactionFiltersState = {
   referenceId: '',
   cashRegister: '',
   validated: '',
+  status: '',
   transactionDate: '',
   createdAt: '',
 }
@@ -47,6 +56,7 @@ const FILTER_PARAM_KEYS = [
   'referenceId',
   'cashRegister',
   'validated',
+  'status',
   'transactionDate',
   'createdAt',
 ] as const satisfies readonly (keyof CashTransactionFiltersState)[]
@@ -60,6 +70,18 @@ function addDay(isoDate: string, days: number): string {
 function parseValidated(value: string | undefined): boolean | undefined {
   if (value === 'true') return true
   if (value === 'false') return false
+  return undefined
+}
+
+function parseStatus(value: string | undefined): CashTransactionStatus | undefined {
+  if (
+    value === CASH_TRANSACTION_STATUS.PENDING
+    || value === CASH_TRANSACTION_STATUS.IN_REVIEW
+    || value === CASH_TRANSACTION_STATUS.VALIDATED
+    || value === CASH_TRANSACTION_STATUS.REJECTED
+  ) {
+    return value
+  }
   return undefined
 }
 
@@ -90,6 +112,8 @@ export function buildCashTransactionFilterParams(
   if (referenceId) params.referenceId = referenceId
 
   if (filters.validated != null) params.validated = filters.validated
+
+  if (filters.status) params.status = filters.status
 
   const createdBy = filters.createdBy?.trim()
   if (createdBy) params.createdBy = normalizeIri(createdBy)
@@ -133,6 +157,7 @@ export function cashTransactionFiltersStateToApi(
     referenceId: state.referenceId.trim() || undefined,
     cashRegister: state.cashRegister.trim() || undefined,
     validated: parseValidated(state.validated),
+    status: parseStatus(state.status) || undefined,
     transactionDate: state.transactionDate.trim() || undefined,
     createdAt: state.createdAt.trim() || undefined,
   }
@@ -145,6 +170,7 @@ export function parseCashTransactionFiltersFromSearchParams(
   const validated = get('validated')
   const type = get('type')
   const referenceType = get('referenceType')
+  const status = parseStatus(get('status'))
 
   return {
     id: get('id'),
@@ -159,6 +185,7 @@ export function parseCashTransactionFiltersFromSearchParams(
     referenceId: get('referenceId'),
     cashRegister: get('cashRegister'),
     validated: validated === 'true' || validated === 'false' ? validated : '',
+    status: status ?? '',
     transactionDate: get('transactionDate'),
     createdAt: get('createdAt'),
   }

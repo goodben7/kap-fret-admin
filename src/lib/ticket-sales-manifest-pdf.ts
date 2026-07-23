@@ -4,21 +4,34 @@ import { BRAND } from '@/constants/brand'
 import {
   CURRENCY,
   PAYMENT_MODE_LABELS,
+  TICKET_STATUS,
   normalizeCurrency,
   type Currency,
   type PaymentMode,
 } from '@/constants/ticket'
-import { getTicketTotal } from '@/lib/ticket'
+import { getTicketTotal, sortTicketsByCreatedAtAsc } from '@/lib/ticket'
 import {
   buildManifestNumber,
   downloadBlob,
-  filterTicketsForManifest,
   getCheckpointManifestName,
   getCheckpointRouteCode,
 } from '@/lib/passenger-manifest-pdf'
 import type { Ticket } from '@/types/ticket'
 
-export { downloadBlob, filterTicketsForManifest, getCheckpointManifestName, getCheckpointRouteCode, buildManifestNumber }
+export { downloadBlob, getCheckpointManifestName, getCheckpointRouteCode, buildManifestNumber }
+
+/** Billets vendus uniquement (hors annulés / remboursés) — indépendant du check-in. */
+export function filterTicketsForSalesManifest(tickets: Ticket[]): Ticket[] {
+  return tickets.filter(
+    (ticket) =>
+      ticket.status !== TICKET_STATUS.CANCELLED && ticket.status !== TICKET_STATUS.REFUNDED,
+  )
+}
+
+/** Prépare la liste vente : billets vendus, ordre createdAt croissant. */
+export function prepareTicketsForSalesManifest(tickets: Ticket[]): Ticket[] {
+  return sortTicketsByCreatedAtAsc(filterTicketsForSalesManifest(tickets))
+}
 
 export interface TicketSalesManifestParams {
   departureLabel: string
@@ -107,7 +120,8 @@ interface ManifestTableBuildResult {
 }
 
 function buildTicketSalesManifestRows(tickets: Ticket[]): ManifestTableBuildResult {
-  // Conserve l'ordre reçu (ordre d'enregistrement check-in).
+  // Ordre createdAt croissant (indépendant du check-in).
+  const orderedTickets = prepareTicketsForSalesManifest(tickets)
   const rows: string[][] = []
   const totalRowIndexes = new Set<number>()
   const totalsByCurrency = new Map<Currency, number>([
@@ -120,8 +134,8 @@ function buildTicketSalesManifestRows(tickets: Ticket[]): ManifestTableBuildResu
   ])
   let rowIndex = 0
 
-  for (let index = 0; index < tickets.length; index += 1) {
-    const ticket = tickets[index]!
+  for (let index = 0; index < orderedTickets.length; index += 1) {
+    const ticket = orderedTickets[index]!
     const currency = getTicketPaymentCurrency(ticket)
     const amount = getTicketTotal(ticket)
     const running = (runningByCurrency.get(currency) ?? 0) + amount

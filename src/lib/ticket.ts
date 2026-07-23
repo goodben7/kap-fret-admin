@@ -121,6 +121,31 @@ export function filterTicketsForList<T extends Pick<Ticket, 'status'>>(tickets: 
   )
 }
 
+/** Plus anciens en premier (createdAt croissant, puis n° billet). */
+export function sortTicketsByCreatedAtAsc<
+  T extends Pick<Ticket, 'createdAt' | 'id' | 'ticketNumber'>,
+>(tickets: T[]): T[] {
+  return [...tickets].sort((a, b) => {
+    const timeA = a.createdAt ? Date.parse(a.createdAt) : Number.NaN
+    const timeB = b.createdAt ? Date.parse(b.createdAt) : Number.NaN
+    const hasA = Number.isFinite(timeA)
+    const hasB = Number.isFinite(timeB)
+
+    if (hasA && hasB && timeA !== timeB) return timeA - timeB
+    if (hasA && !hasB) return -1
+    if (!hasA && hasB) return 1
+
+    const numberCmp = String(a.ticketNumber ?? '').localeCompare(
+      String(b.ticketNumber ?? ''),
+      undefined,
+      { numeric: true },
+    )
+    if (numberCmp !== 0) return numberCmp
+
+    return String(a.id ?? '').localeCompare(String(b.id ?? ''), undefined, { numeric: true })
+  })
+}
+
 export function getTicketTotal(ticket: Pick<Ticket, 'basePrice' | 'tva' | 'fpt' | 'rva'>): number {
   return [ticket.basePrice, ticket.tva, ticket.fpt, ticket.rva]
     .map((v) => parseFloat(String(v)) || 0)

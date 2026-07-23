@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { ArrowRight, Calendar, Download, FileText, LoaderIcon, MapPin, UserCheck } from 'lucide-react'
@@ -10,11 +10,16 @@ import {
   checkInManifestSchema,
   type CheckInManifestFormData,
 } from '@/schemas/check-in-manifest.schema'
+import { useAuth } from '@/hooks/useAuth'
+import { useIssuingOffice } from '@/hooks/useIssuingOffices'
 import { checkpointService } from '@/services/checkpoint.service'
 import { getCheckpointId } from '@/lib/checkpoint'
+import { extractResourceId } from '@/lib/hydra'
+import { resolveUserIssuingOfficeIri } from '@/lib/issuing-office'
+import { getCheckpointIri } from '@/services/issuing-office.service'
 import { isAxiosError } from 'axios'
 import { extractApiErrorMessage } from '@/services/api'
-import { getTodayTravelDateInput } from '@/lib/ticket'
+import { getUpcomingFlightTravelDateInput } from '@/lib/ticket'
 import { formatDate, cn } from '@/lib/utils'
 import {
   buildCheckInManifestFileName,
@@ -45,6 +50,16 @@ export function CheckInManifestModal({ open, onOpenChange }: CheckInManifestModa
   const [fileName, setFileName] = useState('MANIFESTE_CHECKIN.pdf')
   const [departureLabel, setDepartureLabel] = useState('')
   const [destinationLabel, setDestinationLabel] = useState('')
+  const departurePrefillDone = useRef(false)
+
+  const { user } = useAuth()
+  const issuingOfficeIri = resolveUserIssuingOfficeIri(user)
+  const issuingOfficeId = extractResourceId(issuingOfficeIri) ?? ''
+  const { data: issuingOffice } = useIssuingOffice(issuingOfficeId)
+  const userCheckpointIri = useMemo(
+    () => (issuingOffice ? getCheckpointIri(issuingOffice) : ''),
+    [issuingOffice],
+  )
 
   const {
     register,
@@ -58,7 +73,7 @@ export function CheckInManifestModal({ open, onOpenChange }: CheckInManifestModa
     defaultValues: {
       departure: '',
       destination: '',
-      travelDate: getTodayTravelDateInput(),
+      travelDate: getUpcomingFlightTravelDateInput(),
       flightNumber: '',
     },
   })
@@ -78,11 +93,14 @@ export function CheckInManifestModal({ open, onOpenChange }: CheckInManifestModa
   }, [])
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      departurePrefillDone.current = false
+      return
+    }
     reset({
       departure: '',
       destination: '',
-      travelDate: getTodayTravelDateInput(),
+      travelDate: getUpcomingFlightTravelDateInput(),
       flightNumber: '',
     })
     setDepartureLabel('')
@@ -95,6 +113,12 @@ export function CheckInManifestModal({ open, onOpenChange }: CheckInManifestModa
     setCheckInCount(0)
     setFileName('MANIFESTE_CHECKIN.pdf')
   }, [open, reset])
+
+  useEffect(() => {
+    if (!open || !userCheckpointIri || departurePrefillDone.current) return
+    setValue('departure', userCheckpointIri, { shouldValidate: true })
+    departurePrefillDone.current = true
+  }, [open, userCheckpointIri, setValue])
 
   useEffect(() => {
     return () => {

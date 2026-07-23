@@ -97,6 +97,7 @@ export function CashTransactionForm({
   const amount = watch('amount')
   const currency = watch('currency')
   const referenceType = watch('referenceType')
+  const validated = watch('validated')
   const showReferenceId = referenceType !== CASH_TRANSACTION_REFERENCE_TYPE.MANUAL
 
   const previewEnabled = !!cashRegister && !!currency && (parseFloat(amount) || 0) > 0
@@ -211,8 +212,15 @@ export function CashTransactionForm({
             {...register('transactionTime')}
           />
           <label className="flex items-center gap-3 rounded-xl border border-border/60 bg-muted/25 px-4 py-3 sm:col-span-2">
-            <input type="checkbox" className="h-4 w-4 rounded border-input" {...register('validated')} />
-            <span className="text-sm font-medium">Valider immédiatement la transaction</span>
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-input"
+              checked={validated === false}
+              onChange={(e) =>
+                setValue('validated', !e.target.checked, { shouldValidate: true })
+              }
+            />
+            <span className="text-sm font-medium">Cette opération nécessite une validation</span>
           </label>
         </CardContent>
       </Card>

@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { getCashTransactionStatusLabel } from '@/lib/cash-transaction'
 import { cashTransactionService, type CashTransactionFilters } from '@/services/cash-transaction.service'
+import type { CashTransactionStatus } from '@/constants/cash-transaction'
 import type { CashTransactionCreatePayload } from '@/types/cash-transaction'
 import { toast } from 'sonner'
 
@@ -50,6 +52,20 @@ export function useValidateCashTransaction() {
       void queryClient.invalidateQueries({ queryKey: cashTransactionKeys.detail(id) })
       void queryClient.invalidateQueries({ queryKey: ['cashRegisters'] })
       toast.success('Transaction validée')
+    },
+  })
+}
+
+export function useChangeCashTransactionStatus() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: CashTransactionStatus }) =>
+      cashTransactionService.changeStatus(id, status),
+    onSuccess: (_, { id, status }) => {
+      void queryClient.invalidateQueries({ queryKey: cashTransactionKeys.lists() })
+      void queryClient.invalidateQueries({ queryKey: cashTransactionKeys.detail(id) })
+      void queryClient.invalidateQueries({ queryKey: ['cashRegisters'] })
+      toast.success(`Statut mis à jour : ${getCashTransactionStatusLabel(status)}`)
     },
   })
 }

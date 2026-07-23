@@ -98,15 +98,41 @@ function getCheckInRegistrationTime(checkIn: {
   return Number.isNaN(time) ? Number.POSITIVE_INFINITY : time
 }
 
-/** Premier check-in enregistré en premier (N° 1). */
+/** Premier check-in enregistré en premier (N° 1 / plus ancien en haut). */
 export function sortCheckInsByRegistrationOrder<
-  T extends { createdAt?: string; encodedAt?: string; id?: string | number },
+  T extends {
+    createdAt?: string
+    encodedAt?: string
+    id?: string | number
+    ticket?: { ticketNumber?: string }
+  },
 >(checkIns: T[]): T[] {
   return [...checkIns].sort((a, b) => {
-    const timeCompare = getCheckInRegistrationTime(a) - getCheckInRegistrationTime(b)
-    if (timeCompare !== 0) return timeCompare
+    const timeA = getCheckInRegistrationTime(a)
+    const timeB = getCheckInRegistrationTime(b)
+    if (timeA !== timeB) return timeA - timeB
+
+    const numberCmp = String(a.ticket?.ticketNumber ?? '').localeCompare(
+      String(b.ticket?.ticketNumber ?? ''),
+      undefined,
+      { numeric: true },
+    )
+    if (numberCmp !== 0) return numberCmp
+
     return String(a.id ?? '').localeCompare(String(b.id ?? ''), undefined, { numeric: true })
   })
+}
+
+/** Alias — même ordre que la billetterie (createdAt croissant). */
+export function sortCheckInsByCreatedAtAsc<
+  T extends {
+    createdAt?: string
+    encodedAt?: string
+    id?: string | number
+    ticket?: { ticketNumber?: string }
+  },
+>(checkIns: T[]): T[] {
+  return sortCheckInsByRegistrationOrder(checkIns)
 }
 
 /** Bagages les plus récemment ajoutés en premier */

@@ -1,5 +1,9 @@
 import type { HydraResource } from './hydra'
-import type { CashTransactionReferenceType, CashTransactionType } from '@/constants/cash-transaction'
+import type {
+  CashTransactionReferenceType,
+  CashTransactionStatus,
+  CashTransactionType,
+} from '@/constants/cash-transaction'
 import type { TicketUserRef } from './ticket'
 
 export interface CashTransactionCurrencyRef extends HydraResource {
@@ -41,7 +45,11 @@ export interface CashTransaction extends HydraResource {
   issuingOffice?: string | CashTransactionIssuingOfficeRef
   createdBy?: string | TicketUserRef
   createdAt?: string
+  /** False si l'opération nécessite une validation (workflow `status`). */
   validated: boolean
+  status?: CashTransactionStatus
+  statusChangedBy?: string | TicketUserRef
+  statusChangedAt?: string
 }
 
 export interface CashTransactionCreatePayload {

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import {
   ArrowDownLeft,
@@ -13,10 +13,13 @@ import {
 import { useCashRegister } from '@/hooks/useCashRegisters'
 import { useCashTransactions } from '@/hooks/useCashTransactions'
 import { CashRegisterReportModal } from '@/components/cash-registers/CashRegisterReportModal'
+import { CashTransactionStatusActions } from '@/components/cash-transactions/CashTransactionStatusActions'
+import { CashTransactionStatusBadge } from '@/components/cash-transactions/CashTransactionStatusBadge'
 import { parseCashRegisterBalance } from '@/lib/cash-register'
 import { CURRENCY } from '@/constants/ticket'
 import {
   cashTransactionReferencePath,
+  canChangeCashTransactionStatus,
   getCashTransactionCurrencyCode,
   getCashTransactionReferenceTypeLabel,
   getCashTransactionTypeLabel,
@@ -31,7 +34,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Pagination } from '@/components/ui/pagination'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { cn, formatDateTime, formatMoney } from '@/lib/utils'
+import { cn, formatDate, formatDateTime, formatMoney } from '@/lib/utils'
 
 const ITEMS_PER_PAGE = 20
 
@@ -46,6 +49,13 @@ function DetailRow({ label, value, mono }: { label: string; value: ReactNode; mo
   )
 }
 
+function formatTransactionTime(date: string): string {
+  return new Intl.DateTimeFormat('fr-FR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(date))
+}
+
 function TransactionTypeBadge({ type }: { type: CashTransaction['type'] }) {
   const isEntry = type === CASH_TRANSACTION_TYPE.ENTRY
   return (
@@ -57,6 +67,7 @@ function TransactionTypeBadge({ type }: { type: CashTransaction['type'] }) {
 }
 
 function TransactionAmounts({ transaction }: { transaction: CashTransaction }) {
+  const isEntry = transaction.type === CASH_TRANSACTION_TYPE.ENTRY
   const amountCode = getCashTransactionCurrencyCode(transaction.currency) ?? 'USD'
   const txCode = getCashTransactionCurrencyCode(transaction.transactionCurrency) ?? amountCode
   const amount = parseFloat(transaction.amount) || 0
@@ -65,9 +76,17 @@ function TransactionAmounts({ transaction }: { transaction: CashTransaction }) {
 
   return (
     <div className="space-y-0.5 text-right">
-      <p className="font-semibold tabular-nums">{formatMoney(amount, amountCode)}</p>
+      <p
+        className={cn(
+          'text-sm font-bold tabular-nums tracking-tight',
+          isEntry ? 'text-emerald-700' : 'text-destructive',
+        )}
+      >
+        {isEntry ? '+' : '−'}
+        {formatMoney(amount, amountCode)}
+      </p>
       {showTxLine && (
-        <p className="text-xs text-muted-foreground tabular-nums">
+        <p className="text-[11px] text-muted-foreground tabular-nums">
           Opération : {formatMoney(txAmount, txCode)}
         </p>
       )}
@@ -82,36 +101,74 @@ function TransactionReference({ transaction }: { transaction: CashTransaction })
   if (!path) {
     return (
       <span className="text-xs text-muted-foreground">
-        {label} · <span className="font-mono">{transaction.referenceId}</span>
+        {label}
+        {transaction.referenceId ? (
+          <>
+            {' · '}
+            <span className="font-mono">{transaction.referenceId}</span>
+          </>
+        ) : null}
       </span>
     )
   }
 
   return (
-    <Link to={path} className="text-xs font-medium text-primary hover:underline">
-      {label} · <span className="font-mono">{transaction.referenceId}</span>
+    <Link
+      to={path}
+      className="text-xs font-medium text-muted-foreground transition-colors hover:text-brand-orange"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {label}
+      {transaction.referenceId ? (
+        <>
+          {' · '}
+          <span className="font-mono">{transaction.referenceId}</span>
+        </>
+      ) : null}
     </Link>
   )
 }
 
-function TransactionCard({ transaction }: { transaction: CashTransaction }) {
+function TransactionOperationCell({ transaction }: { transaction: CashTransaction }) {
   return (
-    <Card className="rounded-2xl border-border/80 shadow-sm lg:hidden">
+    <div className="min-w-0 space-y-1.5">
+      <TransactionTypeBadge type={transaction.type} />
+      <p className="truncate text-sm font-semibold leading-snug" title={transaction.description}>
+        {transaction.description}
+      </p>
+      <TransactionReference transaction={transaction} />
+    </div>
+  )
+}
+
+function TransactionCard({ transaction }: { transaction: CashTransaction }) {
+  const navigate = useNavigate()
+
+  return (
+    <Card
+      className="cursor-pointer rounded-2xl border-border/80 shadow-sm transition-colors hover:border-brand-orange/30 lg:hidden"
+      onClick={() => void navigate(`/cash-transactions/${transaction.id}`)}
+    >
       <CardContent className="space-y-3 p-4">
         <div className="flex items-start justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <TransactionTypeBadge type={transaction.type} />
-            <Badge variant={transaction.validated ? 'secondary' : 'outline'}>
-              {transaction.validated ? 'Validée' : 'Non validée'}
-            </Badge>
+          <div className="min-w-0 space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <TransactionTypeBadge type={transaction.type} />
+              <CashTransactionStatusBadge transaction={transaction} />
+            </div>
+            <p className="text-sm font-semibold leading-snug">{transaction.description}</p>
           </div>
           <TransactionAmounts transaction={transaction} />
         </div>
-        <p className="text-sm font-medium leading-snug">{transaction.description}</p>
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3 text-xs text-muted-foreground">
           <TransactionReference transaction={transaction} />
           <span>{formatDateTime(transaction.transactionDate)}</span>
         </div>
+        {canChangeCashTransactionStatus(transaction) && (
+          <div className="border-t border-border/60 pt-3" onClick={(e) => e.stopPropagation()}>
+            <CashTransactionStatusActions transaction={transaction} layout="buttons" />
+          </div>
+        )}
       </CardContent>
     </Card>
   )
@@ -119,6 +176,7 @@ function TransactionCard({ transaction }: { transaction: CashTransaction }) {
 
 export function CashRegisterDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const registerId = id ?? ''
   const [page, setPage] = useState(1)
   const [reportModalOpen, setReportModalOpen] = useState(false)
@@ -159,9 +217,10 @@ export function CashRegisterDetailPage() {
   const moneyUsd = (amount: number) => formatMoney(amount, CURRENCY.USD)
   const moneyCdf = (amount: number) => formatMoney(amount, CURRENCY.CDF)
   const transactions = transactionsData?.items ?? []
+  const totalTransactions = transactionsData?.totalItems ?? 0
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 pb-44 lg:max-w-5xl lg:pb-6">
+    <div className="mx-auto max-w-3xl space-y-4 pb-44 lg:max-w-6xl lg:pb-6">
       <Link
         to="/admin/cash-registers"
         className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
@@ -173,16 +232,16 @@ export function CashRegisterDetailPage() {
       <Card className="rounded-2xl border-border/80 shadow-sm">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-3">
-            <CardTitle className="flex items-center gap-2 text-base font-semibold">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+            <CardTitle className="flex items-center gap-2.5 text-base font-semibold">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-orange/10 text-brand-orange">
                 <Receipt className="h-4 w-4" aria-hidden="true" />
               </span>
               Transactions
             </CardTitle>
             {transactionsData && (
-              <span className="text-sm text-muted-foreground">
-                {transactionsData.totalItems} transaction{transactionsData.totalItems !== 1 ? 's' : ''}
-              </span>
+              <Badge variant="secondary" className="rounded-lg px-2.5 py-1 font-medium tabular-nums">
+                {totalTransactions}
+              </Badge>
             )}
           </div>
         </CardHeader>
@@ -192,7 +251,9 @@ export function CashRegisterDetailPage() {
               <LoadingSpinner label="Chargement des transactions..." />
             </div>
           ) : transactions.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">Aucune transaction pour ce registre.</p>
+            <div className="rounded-2xl border border-dashed border-border/80 bg-muted/20 px-4 py-10 text-center">
+              <p className="text-sm font-medium text-muted-foreground">Aucune transaction pour ce registre.</p>
+            </div>
           ) : (
             <>
               <div className="space-y-3">
@@ -201,42 +262,49 @@ export function CashRegisterDetailPage() {
                 ))}
               </div>
 
-              <div className="hidden overflow-hidden rounded-2xl border border-border/80 lg:block">
+              <div className="hidden overflow-hidden rounded-2xl border border-border/70 bg-card lg:block">
                 <Table>
                   <TableHeader>
-                    <TableRow className="hover:bg-transparent">
-                      <TableHead>Date</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Référence</TableHead>
-                      <TableHead className="text-right">Montant encaissé</TableHead>
-                      <TableHead>Statut</TableHead>
+                    <TableRow className="border-border/70 bg-muted/30 hover:bg-muted/30">
+                      <TableHead className="h-11 w-[7.5rem] text-[11px] font-semibold uppercase tracking-wider">
+                        Date
+                      </TableHead>
+                      <TableHead className="h-11 text-[11px] font-semibold uppercase tracking-wider">
+                        Opération
+                      </TableHead>
+                      <TableHead className="h-11 w-[9rem] text-right text-[11px] font-semibold uppercase tracking-wider">
+                        Montant
+                      </TableHead>
+                      <TableHead className="h-11 w-[12rem] text-[11px] font-semibold uppercase tracking-wider">
+                        Statut
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {transactions.map((transaction) => (
-                      <TableRow key={transaction.id}>
-                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                          {formatDateTime(transaction.transactionDate)}
+                      <TableRow
+                        key={transaction.id}
+                        className="cursor-pointer border-border/60"
+                        onClick={() => void navigate(`/cash-transactions/${transaction.id}`)}
+                      >
+                        <TableCell className="align-top">
+                          <div className="space-y-0.5">
+                            <p className="text-sm font-medium tabular-nums">
+                              {formatDate(transaction.transactionDate)}
+                            </p>
+                            <p className="text-xs text-muted-foreground tabular-nums">
+                              {formatTransactionTime(transaction.transactionDate)}
+                            </p>
+                          </div>
                         </TableCell>
-                        <TableCell>
-                          <TransactionTypeBadge type={transaction.type} />
+                        <TableCell className="max-w-[28rem] align-top">
+                          <TransactionOperationCell transaction={transaction} />
                         </TableCell>
-                        <TableCell className="max-w-[240px]">
-                          <p className="truncate text-sm font-medium" title={transaction.description}>
-                            {transaction.description}
-                          </p>
-                        </TableCell>
-                        <TableCell>
-                          <TransactionReference transaction={transaction} />
-                        </TableCell>
-                        <TableCell>
+                        <TableCell className="align-top">
                           <TransactionAmounts transaction={transaction} />
                         </TableCell>
-                        <TableCell>
-                          <Badge variant={transaction.validated ? 'secondary' : 'outline'}>
-                            {transaction.validated ? 'Validée' : 'En attente'}
-                          </Badge>
+                        <TableCell className="align-top" onClick={(e) => e.stopPropagation()}>
+                          <CashTransactionStatusActions transaction={transaction} layout="menu" />
                         </TableCell>
                       </TableRow>
                     ))}
@@ -244,10 +312,10 @@ export function CashRegisterDetailPage() {
                 </Table>
               </div>
 
-              {transactionsData && transactionsData.totalItems > ITEMS_PER_PAGE && (
+              {totalTransactions > ITEMS_PER_PAGE && (
                 <Pagination
                   page={page}
-                  totalItems={transactionsData.totalItems}
+                  totalItems={totalTransactions}
                   itemsPerPage={ITEMS_PER_PAGE}
                   onPageChange={setPage}
                 />
@@ -271,7 +339,7 @@ export function CashRegisterDetailPage() {
               </Badge>
               {register.deleted && <Badge variant="destructive">Supprimé</Badge>}
             </div>
-            <div className="rounded-xl bg-brand-orange/10 px-4 py-3 space-y-2">
+            <div className="space-y-2 rounded-xl bg-brand-orange/10 px-4 py-3">
               <p className="text-xs text-muted-foreground">Soldes actuels</p>
               <p className="text-xl font-bold tabular-nums text-brand-orange">{moneyUsd(usdBalance)}</p>
               <p className="text-lg font-semibold tabular-nums text-brand-orange">{moneyCdf(cdfBalance)}</p>

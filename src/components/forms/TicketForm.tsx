@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import { LoaderIcon } from '@/components/ui/loading-spinner'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -17,11 +17,13 @@ import { useAuth } from '@/hooks/useAuth'
 import { useCashRegistersForSelect } from '@/hooks/useCashRegisters'
 import { useCurrenciesForSelect } from '@/hooks/useCurrencies'
 import { useExchangeRates } from '@/hooks/useExchangeRates'
+import { useIssuingOffice } from '@/hooks/useIssuingOffices'
 import { usePreviewConversion } from '@/hooks/usePreviewConversion'
 import { formatCashRegisterSelectLabel } from '@/lib/cash-register'
 import { resolveCurrencyIriByCode } from '@/lib/currency-resource'
-import { extractIri } from '@/lib/hydra'
+import { extractIri, extractResourceId } from '@/lib/hydra'
 import { resolveUserIssuingOfficeIri } from '@/lib/issuing-office'
+import { getCheckpointIri } from '@/services/issuing-office.service'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
@@ -29,7 +31,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CheckpointAsyncSelect } from '@/components/ui/checkpoint-async-select'
 import { ConversionPreviewCard } from '@/components/tickets/ConversionPreviewCard'
 import { formatMoney } from '@/lib/utils'
-import { getTicketTotal, getDefaultWednesdayTravelDateInput, getCurrentTravelTimeInput, getBasePriceForCategory, computeTicketPaymentAmount } from '@/lib/ticket'
+import { getTicketTotal, getDefaultWednesdayTravelDateInput, getBasePriceForCategory, computeTicketPaymentAmount } from '@/lib/ticket'
 
 const FORM_ID = 'ticket-form'
 
@@ -156,11 +158,18 @@ function TicketCreateForm({
 }: TicketCreateFormProps) {
   const { user, issuingOfficeName } = useAuth()
   const issuingOfficeIri = resolveUserIssuingOfficeIri(user)
+  const issuingOfficeId = extractResourceId(issuingOfficeIri) ?? ''
+  const { data: issuingOffice } = useIssuingOffice(issuingOfficeId)
+  const userCheckpointIri = useMemo(
+    () => (issuingOffice ? getCheckpointIri(issuingOffice) : ''),
+    [issuingOffice],
+  )
   const { data: cashRegisters = [], isLoading: cashRegistersLoading } = useCashRegistersForSelect(issuingOfficeIri)
   const { data: currencies = [] } = useCurrenciesForSelect()
   const { data: exchangeRatesData } = useExchangeRates({ pagination: false })
   const exchangeRates = exchangeRatesData?.items ?? []
   const locked = readOnly
+  const departurePrefillDone = useRef(!!defaultValues?.departure)
 
   const {
     register,
@@ -174,7 +183,7 @@ function TicketCreateForm({
       paymentMode: PAYMENT_MODE.CASH,
       paymentCurrency: CURRENCY.USD,
       travelDate: getDefaultWednesdayTravelDateInput(),
-      travelTime: getCurrentTravelTimeInput(),
+      travelTime: '06:00',
       basePrice: '',
       tva: '0.00',
       fpt: '0.00',
@@ -182,6 +191,7 @@ function TicketCreateForm({
       baggageAllowanceKg: '20',
       cashRegister: '',
       reserveForLater: false,
+      departure: defaultValues?.departure ?? '',
       ...defaultValues,
     },
   })
@@ -197,6 +207,13 @@ function TicketCreateForm({
   const rva = watch('rva')
   const cashRegister = watch('cashRegister')
   const reserveForLater = watch('reserveForLater')
+
+  useEffect(() => {
+    if (departurePrefillDone.current) return
+    if (!userCheckpointIri) return
+    setValue('departure', userCheckpointIri, { shouldValidate: true })
+    departurePrefillDone.current = true
+  }, [userCheckpointIri, setValue])
 
   const cashRegisterOptions = useMemo(
     () =>
@@ -336,7 +353,7 @@ function TicketCreateForm({
             <CheckpointAsyncSelect
               label="Départ"
               placeholder="Rechercher le checkpoint de départ..."
-              initialCheckpointIri={defaultValues?.departure}
+              initialCheckpointIri={defaultValues?.departure || userCheckpointIri || undefined}
               value={departure ?? ''}
               onChange={(iri) => setValue('departure', iri, { shouldValidate: true })}
               error={errors.departure?.message}
