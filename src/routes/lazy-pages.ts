@@ -62,6 +62,7 @@ export const ExchangeRateDetailPage = lazyPage(
 )
 export const CashRegistersPage = lazyPage(() => import('@/pages/admin/CashRegistersPage'), 'CashRegistersPage')
 export const CashRegisterFormPage = lazyPage(() => import('@/pages/admin/CashRegisterFormPage'), 'CashRegisterFormPage')
+export const CashTransferPage = lazyPage(() => import('@/pages/admin/CashTransferPage'), 'CashTransferPage')
 export const CashRegisterDetailPage = lazyPage(
   () => import('@/pages/admin/CashRegisterDetailPage'),
   'CashRegisterDetailPage',

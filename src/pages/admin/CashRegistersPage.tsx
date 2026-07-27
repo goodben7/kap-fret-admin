@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ChevronRight,
+  ArrowLeftRight,
   LayoutGrid,
   Plus,
   Search,
@@ -243,6 +244,12 @@ export function CashRegistersPage() {
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <ViewModeToggle value={viewMode} onChange={(m) => { setViewMode(m); try { localStorage.setItem(STORAGE_KEYS.CASH_REGISTERS_VIEW, m) } catch { /* ignore */ } }} />
+          <Button asChild size="sm" variant="outline" className="rounded-full px-4 shadow-sm">
+            <Link to="/admin/cash-registers/transfer">
+              <ArrowLeftRight className="h-4 w-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">Transfert</span>
+            </Link>
+          </Button>
           <Button asChild size="sm" className="rounded-full px-4 shadow-sm">
             <Link to="/admin/cash-registers/new"><Plus className="h-4 w-4 sm:mr-1.5" /><span className="hidden sm:inline">Nouvelle</span></Link>
           </Button>

@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import {
   ArrowDownLeft,
   ArrowLeft,
+  ArrowLeftRight,
   ArrowUpRight,
   FileText,
   Pencil,
@@ -20,6 +21,8 @@ import { CURRENCY } from '@/constants/ticket'
 import {
   cashTransactionReferencePath,
   canChangeCashTransactionStatus,
+  getCashTransactionCashRegisterIri,
+  getCashTransactionCashRegisterLabel,
   getCashTransactionCurrencyCode,
   getCashTransactionReferenceTypeLabel,
   getCashTransactionTypeLabel,
@@ -57,6 +60,14 @@ function formatTransactionTime(date: string): string {
 }
 
 function TransactionTypeBadge({ type }: { type: CashTransaction['type'] }) {
+  if (type === CASH_TRANSACTION_TYPE.TRANSFER) {
+    return (
+      <Badge variant="secondary" className="gap-1">
+        <ArrowLeftRight className="h-3 w-3" aria-hidden="true" />
+        {getCashTransactionTypeLabel(type)}
+      </Badge>
+    )
+  }
   const isEntry = type === CASH_TRANSACTION_TYPE.ENTRY
   return (
     <Badge variant={isEntry ? 'success' : 'destructive'} className="gap-1">
@@ -66,23 +77,37 @@ function TransactionTypeBadge({ type }: { type: CashTransaction['type'] }) {
   )
 }
 
-function TransactionAmounts({ transaction }: { transaction: CashTransaction }) {
+function TransactionAmounts({
+  transaction,
+  registerIri,
+}: {
+  transaction: CashTransaction
+  registerIri?: string
+}) {
+  const isTransfer = transaction.type === CASH_TRANSACTION_TYPE.TRANSFER
   const isEntry = transaction.type === CASH_TRANSACTION_TYPE.ENTRY
+  const sourceIri = getCashTransactionCashRegisterIri(transaction.cashRegister)
+  const destinationIri = getCashTransactionCashRegisterIri(transaction.destinationCashRegister)
+  const isIncomingTransfer = isTransfer && !!registerIri && destinationIri === registerIri
+  const isOutgoingTransfer = isTransfer && !!registerIri && sourceIri === registerIri
   const amountCode = getCashTransactionCurrencyCode(transaction.currency) ?? 'USD'
   const txCode = getCashTransactionCurrencyCode(transaction.transactionCurrency) ?? amountCode
   const amount = parseFloat(transaction.amount) || 0
   const txAmount = parseFloat(transaction.transactionAmount) || 0
   const showTxLine = txCode !== amountCode || transaction.transactionAmount !== transaction.amount
 
+  const signedPositive = isIncomingTransfer || (!isTransfer && isEntry)
+  const signedNegative = isOutgoingTransfer || (!isTransfer && !isEntry)
+
   return (
     <div className="space-y-0.5 text-right">
       <p
         className={cn(
           'text-sm font-bold tabular-nums tracking-tight',
-          isEntry ? 'text-emerald-700' : 'text-destructive',
+          signedPositive ? 'text-emerald-700' : signedNegative ? 'text-destructive' : 'text-foreground',
         )}
       >
-        {isEntry ? '+' : '−'}
+        {signedPositive ? '+' : signedNegative ? '−' : ''}
         {formatMoney(amount, amountCode)}
       </p>
       {showTxLine && (
@@ -129,19 +154,46 @@ function TransactionReference({ transaction }: { transaction: CashTransaction })
   )
 }
 
-function TransactionOperationCell({ transaction }: { transaction: CashTransaction }) {
+function TransactionOperationCell({
+  transaction,
+  registerIri,
+}: {
+  transaction: CashTransaction
+  registerIri?: string
+}) {
+  const isTransfer = transaction.type === CASH_TRANSACTION_TYPE.TRANSFER
+  const sourceLabel = getCashTransactionCashRegisterLabel(transaction.cashRegister)
+  const destinationLabel = getCashTransactionCashRegisterLabel(transaction.destinationCashRegister)
+  const isIncoming = isTransfer && !!registerIri
+    && getCashTransactionCashRegisterIri(transaction.destinationCashRegister) === registerIri
+
   return (
     <div className="min-w-0 space-y-1.5">
       <TransactionTypeBadge type={transaction.type} />
-      <p className="truncate text-sm font-semibold leading-snug" title={transaction.description}>
-        {transaction.description}
+      <p className="truncate text-sm font-semibold leading-snug" title={transaction.description || undefined}>
+        {transaction.description?.trim()
+          || (isTransfer
+            ? (isIncoming ? `Transfert reçu de ${sourceLabel}` : `Transfert vers ${destinationLabel}`)
+            : '—')}
       </p>
-      <TransactionReference transaction={transaction} />
+      {isTransfer ? (
+        <p className="text-xs text-muted-foreground">
+          {sourceLabel} → {destinationLabel}
+        </p>
+      ) : (
+        <TransactionReference transaction={transaction} />
+      )}
     </div>
   )
 }
 
-function TransactionCard({ transaction }: { transaction: CashTransaction }) {
+function TransactionCard({
+  transaction,
+  registerIri,
+}: {
+  transaction: CashTransaction
+  registerIri?: string
+}) {
   const navigate = useNavigate()
 
   return (
@@ -153,15 +205,13 @@ function TransactionCard({ transaction }: { transaction: CashTransaction }) {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
-              <TransactionTypeBadge type={transaction.type} />
               <CashTransactionStatusBadge transaction={transaction} />
             </div>
-            <p className="text-sm font-semibold leading-snug">{transaction.description}</p>
+            <TransactionOperationCell transaction={transaction} registerIri={registerIri} />
           </div>
-          <TransactionAmounts transaction={transaction} />
+          <TransactionAmounts transaction={transaction} registerIri={registerIri} />
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3 text-xs text-muted-foreground">
-          <TransactionReference transaction={transaction} />
           <span>{formatDateTime(transaction.transactionDate)}</span>
         </div>
         {canChangeCashTransactionStatus(transaction) && (
@@ -258,7 +308,11 @@ export function CashRegisterDetailPage() {
             <>
               <div className="space-y-3">
                 {transactions.map((transaction) => (
-                  <TransactionCard key={transaction.id} transaction={transaction} />
+                  <TransactionCard
+                    key={transaction.id}
+                    transaction={transaction}
+                    registerIri={cashRegisterIri}
+                  />
                 ))}
               </div>
 
@@ -298,10 +352,16 @@ export function CashRegisterDetailPage() {
                           </div>
                         </TableCell>
                         <TableCell className="max-w-[28rem] align-top">
-                          <TransactionOperationCell transaction={transaction} />
+                          <TransactionOperationCell
+                            transaction={transaction}
+                            registerIri={cashRegisterIri}
+                          />
                         </TableCell>
                         <TableCell className="align-top">
-                          <TransactionAmounts transaction={transaction} />
+                          <TransactionAmounts
+                            transaction={transaction}
+                            registerIri={cashRegisterIri}
+                          />
                         </TableCell>
                         <TableCell className="align-top" onClick={(e) => e.stopPropagation()}>
                           <CashTransactionStatusActions transaction={transaction} layout="menu" />
@@ -382,6 +442,17 @@ export function CashRegisterDetailPage() {
         <Button
           type="button"
           variant="outline"
+          className="h-11 rounded-xl"
+          asChild
+        >
+          <Link to={`/admin/cash-registers/transfer?source=${encodeURIComponent(toIri('cash_registers', register.id))}`}>
+            <ArrowLeftRight className="h-4 w-4" />
+            Transfert
+          </Link>
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
           className="h-11 rounded-xl border-brand-orange/30 text-brand-orange hover:bg-brand-orange/5"
           onClick={() => setReportModalOpen(true)}
         >
@@ -398,6 +469,17 @@ export function CashRegisterDetailPage() {
 
       <div className="fixed inset-x-0 bottom-[4.25rem] z-30 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85 lg:hidden">
         <div className="mx-auto max-w-3xl space-y-2 p-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 w-full rounded-xl"
+            asChild
+          >
+            <Link to={`/admin/cash-registers/transfer?source=${encodeURIComponent(toIri('cash_registers', register.id))}`}>
+              <ArrowLeftRight className="h-4 w-4" />
+              Transfert
+            </Link>
+          </Button>
           <Button
             type="button"
             variant="outline"

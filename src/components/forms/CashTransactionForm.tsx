@@ -11,7 +11,7 @@ import {
   CASH_TRANSACTION_REFERENCE_TYPE,
   CASH_TRANSACTION_REFERENCE_TYPE_OPTIONS,
   CASH_TRANSACTION_TYPE,
-  CASH_TRANSACTION_TYPE_OPTIONS,
+  CASH_TRANSACTION_MANUAL_TYPE_OPTIONS,
 } from '@/constants/cash-transaction'
 import { useCashRegistersForSelect } from '@/hooks/useCashRegisters'
 import { useCurrenciesForSelect } from '@/hooks/useCurrencies'
@@ -136,7 +136,7 @@ export function CashTransactionForm({
           />
           <Select
             label="Type"
-            options={CASH_TRANSACTION_TYPE_OPTIONS}
+            options={CASH_TRANSACTION_MANUAL_TYPE_OPTIONS}
             error={errors.type?.message}
             variant="filter"
             value={watch('type') ?? ''}

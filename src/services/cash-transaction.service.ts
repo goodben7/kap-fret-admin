@@ -6,6 +6,7 @@ import type { HydraCollection } from '@/types/hydra'
 import type {
   CashTransaction,
   CashTransactionCreatePayload,
+  CashTransactionTransferPayload,
   PreviewConversionOutput,
   PreviewConversionPayload,
 } from '@/types/cash-transaction'
@@ -88,6 +89,13 @@ export const cashTransactionService = {
 
   async create(payload: CashTransactionCreatePayload) {
     const { data } = await api.post<CashTransaction>('/api/cash_transactions', payload, {
+      headers: JSON_HEADERS,
+    })
+    return data
+  },
+
+  async transfer(payload: CashTransactionTransferPayload) {
+    const { data } = await api.post<CashTransaction>('/api/cash_transactions/transfer', payload, {
       headers: JSON_HEADERS,
     })
     return data

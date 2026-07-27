@@ -9,6 +9,7 @@ import {
   CashRegisterDetailPage,
   CashRegisterFormPage,
   CashRegistersPage,
+  CashTransferPage,
   CashTransactionCreatePage,
   CashTransactionDetailPage,
   CashTransactionsListPage,
@@ -114,6 +115,7 @@ export const router = createBrowserRouter([
             children: [
               { path: '/admin/cash-registers', element: <CashRegistersPage /> },
               { path: '/admin/cash-registers/new', element: <CashRegisterFormPage /> },
+              { path: '/admin/cash-registers/transfer', element: <CashTransferPage /> },
               { path: '/admin/cash-registers/:id', element: <CashRegisterDetailPage /> },
               { path: '/admin/cash-registers/:id/edit', element: <CashRegisterFormPage /> },
             ],

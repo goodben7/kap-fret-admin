@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowDownLeft,
   ArrowLeft,
+  ArrowLeftRight,
   ArrowUpRight,
   ChevronRight,
   LayoutGrid,
@@ -96,6 +97,14 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
 }
 
 function TypeBadge({ type }: { type: CashTransaction['type'] }) {
+  if (type === CASH_TRANSACTION_TYPE.TRANSFER) {
+    return (
+      <Badge variant="secondary" className="gap-1">
+        <ArrowLeftRight className="h-3 w-3" />
+        {getCashTransactionTypeLabel(type)}
+      </Badge>
+    )
+  }
   const isEntry = type === CASH_TRANSACTION_TYPE.ENTRY
   return (
     <Badge variant={isEntry ? 'success' : 'destructive'} className="gap-1">
@@ -321,6 +330,12 @@ export function CashTransactionsListPage() {
               <Table2 className="h-4 w-4" />
             </Button>
           </div>
+          <Button asChild size="sm" variant="outline" className="rounded-full px-4 shadow-sm">
+            <Link to="/admin/cash-registers/transfer">
+              <ArrowLeftRight className="h-4 w-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">Transfert</span>
+            </Link>
+          </Button>
           <Button asChild size="sm" className="rounded-full px-4 shadow-sm">
             <Link to="/cash-transactions/new">
               <Plus className="h-4 w-4 sm:mr-1.5" />

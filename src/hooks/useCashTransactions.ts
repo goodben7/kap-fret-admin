@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getCashTransactionStatusLabel } from '@/lib/cash-transaction'
 import { cashTransactionService, type CashTransactionFilters } from '@/services/cash-transaction.service'
-import type { CashTransactionStatus } from '@/constants/cash-transaction'
-import type { CashTransactionCreatePayload } from '@/types/cash-transaction'
+import { CASH_TRANSACTION_STATUS, type CashTransactionStatus } from '@/constants/cash-transaction'
+import type { CashTransactionCreatePayload, CashTransactionTransferPayload } from '@/types/cash-transaction'
 import { toast } from 'sonner'
 
 export const cashTransactionKeys = {
@@ -43,6 +43,18 @@ export function useCreateCashTransaction() {
   })
 }
 
+export function useTransferCashTransaction() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: CashTransactionTransferPayload) => cashTransactionService.transfer(payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: cashTransactionKeys.lists() })
+      void queryClient.invalidateQueries({ queryKey: ['cashRegisters'] })
+      toast.success('Transfert effectué')
+    },
+  })
+}
+
 export function useValidateCashTransaction() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -59,13 +71,31 @@ export function useValidateCashTransaction() {
 export function useChangeCashTransactionStatus() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: CashTransactionStatus }) =>
-      cashTransactionService.changeStatus(id, status),
-    onSuccess: (_, { id, status }) => {
+    mutationFn: async ({
+      id,
+      status,
+      applyValidation = false,
+    }: {
+      id: string
+      status: CashTransactionStatus
+      /** Si true et statut VALIDATED → appelle aussi POST /validate (impact solde). */
+      applyValidation?: boolean
+    }) => {
+      const updated = await cashTransactionService.changeStatus(id, status)
+      if (status === CASH_TRANSACTION_STATUS.VALIDATED && applyValidation) {
+        return cashTransactionService.validate(id)
+      }
+      return updated
+    },
+    onSuccess: (_, { id, status, applyValidation }) => {
       void queryClient.invalidateQueries({ queryKey: cashTransactionKeys.lists() })
       void queryClient.invalidateQueries({ queryKey: cashTransactionKeys.detail(id) })
       void queryClient.invalidateQueries({ queryKey: ['cashRegisters'] })
-      toast.success(`Statut mis à jour : ${getCashTransactionStatusLabel(status)}`)
+      if (status === CASH_TRANSACTION_STATUS.VALIDATED && applyValidation) {
+        toast.success('Transaction validée')
+      } else {
+        toast.success(`Statut mis à jour : ${getCashTransactionStatusLabel(status)}`)
+      }
     },
   })
 }

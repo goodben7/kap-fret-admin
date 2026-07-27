@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ArrowDownLeft, ArrowUpRight, ChevronRight, Receipt } from 'lucide-react'
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, ChevronRight, Receipt } from 'lucide-react'
 import { useCashTransactions } from '@/hooks/useCashTransactions'
 import { CashTransactionStatusBadge } from '@/components/cash-transactions/CashTransactionStatusBadge'
 import {
@@ -17,6 +17,14 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { formatDateTime, formatMoney } from '@/lib/utils'
 
 function TypeBadge({ type }: { type: CashTransaction['type'] }) {
+  if (type === CASH_TRANSACTION_TYPE.TRANSFER) {
+    return (
+      <Badge variant="secondary" className="gap-1">
+        <ArrowLeftRight className="h-3 w-3" aria-hidden="true" />
+        {getCashTransactionTypeLabel(type)}
+      </Badge>
+    )
+  }
   const isEntry = type === CASH_TRANSACTION_TYPE.ENTRY
   return (
     <Badge variant={isEntry ? 'success' : 'destructive'} className="gap-1">

@@ -174,7 +174,7 @@ export function parseCashTransactionFiltersFromSearchParams(
 
   return {
     id: get('id'),
-    type: type === 'ENTRY' || type === 'EXIT' ? type : '',
+    type: type === 'ENTRY' || type === 'EXIT' || type === 'TRANSFER' ? type : '',
     referenceType:
       referenceType === 'TICKET'
       || referenceType === 'CHECKIN'

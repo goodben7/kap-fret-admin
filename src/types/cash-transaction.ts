@@ -32,6 +32,7 @@ export type PreviewConversionCurrencyRef = CashTransactionCurrencyRef
 export interface CashTransaction extends HydraResource {
   id: string
   cashRegister: string | CashTransactionCashRegisterRef
+  destinationCashRegister?: string | CashTransactionCashRegisterRef | null
   type: CashTransactionType
   amount: string
   currency: string | CashTransactionCurrencyRef
@@ -61,6 +62,16 @@ export interface CashTransactionCreatePayload {
   description: string
   referenceType: CashTransactionReferenceType
   referenceId: string
+  transactionDate: string
+  validated: boolean
+}
+
+export interface CashTransactionTransferPayload {
+  sourceCashRegister: string
+  destinationCashRegister: string
+  amount: string
+  currency: string
+  description?: string
   transactionDate: string
   validated: boolean
 }

@@ -1,6 +1,7 @@
 export const CASH_TRANSACTION_TYPE = {
   ENTRY: 'ENTRY',
   EXIT: 'EXIT',
+  TRANSFER: 'TRANSFER',
 } as const
 
 export type CashTransactionType = (typeof CASH_TRANSACTION_TYPE)[keyof typeof CASH_TRANSACTION_TYPE]
@@ -8,6 +9,7 @@ export type CashTransactionType = (typeof CASH_TRANSACTION_TYPE)[keyof typeof CA
 export const CASH_TRANSACTION_TYPE_LABELS: Record<CashTransactionType, string> = {
   ENTRY: 'Entrée',
   EXIT: 'Sortie',
+  TRANSFER: 'Transfert',
 }
 
 export const CASH_TRANSACTION_REFERENCE_TYPE = {
@@ -31,6 +33,11 @@ export const CASH_TRANSACTION_REFERENCE_TYPE_LABELS: Record<string, string> = {
 export const CASH_TRANSACTION_TYPE_OPTIONS = Object.entries(CASH_TRANSACTION_TYPE_LABELS).map(
   ([value, label]) => ({ value, label }),
 )
+
+export const CASH_TRANSACTION_MANUAL_TYPE_OPTIONS = [
+  { value: CASH_TRANSACTION_TYPE.ENTRY, label: CASH_TRANSACTION_TYPE_LABELS.ENTRY },
+  { value: CASH_TRANSACTION_TYPE.EXIT, label: CASH_TRANSACTION_TYPE_LABELS.EXIT },
+]
 
 export const CASH_TRANSACTION_REFERENCE_TYPE_OPTIONS = Object.entries(
   CASH_TRANSACTION_REFERENCE_TYPE_LABELS,

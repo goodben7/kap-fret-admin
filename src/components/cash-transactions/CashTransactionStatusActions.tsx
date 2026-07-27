@@ -83,7 +83,14 @@ export function CashTransactionStatusActions({
 
   const handleConfirm = async () => {
     if (!pendingStatus) return
-    await changeStatus.mutateAsync({ id: transaction.id, status: pendingStatus })
+    const applyValidation =
+      pendingStatus === CASH_TRANSACTION_STATUS.VALIDATED
+      && transaction.validated === false
+    await changeStatus.mutateAsync({
+      id: transaction.id,
+      status: pendingStatus,
+      applyValidation,
+    })
     setPendingStatus(null)
   }
 
@@ -96,9 +103,11 @@ export function CashTransactionStatusActions({
       variant={confirmMeta?.variant ?? 'default'}
       title={`${confirmMeta?.label ?? 'Changer le statut'} ?`}
       description={
-        pendingStatus
-          ? `La transaction passera au statut « ${getCashTransactionStatusLabel(pendingStatus)} ».`
-          : undefined
+        pendingStatus === CASH_TRANSACTION_STATUS.VALIDATED && transaction.validated === false
+          ? 'La transaction sera validée, le statut mis à jour et le solde de la caisse impacté.'
+          : pendingStatus
+            ? `La transaction passera au statut « ${getCashTransactionStatusLabel(pendingStatus)} ».`
+            : undefined
       }
       confirmLabel={confirmMeta?.label ?? 'Confirmer'}
       cancelLabel="Annuler"

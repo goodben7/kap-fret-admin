@@ -12,8 +12,12 @@ import {
 } from '@/constants/cash-transaction'
 import { CURRENCY } from '@/constants/ticket'
 import { extractIri } from '@/lib/hydra'
-import type { CashTransactionCreateFormData } from '@/schemas/cash-transaction.schema'
-import type { CashTransaction, CashTransactionCreatePayload } from '@/types/cash-transaction'
+import type { CashTransactionCreateFormData, CashTransactionTransferFormData } from '@/schemas/cash-transaction.schema'
+import type {
+  CashTransaction,
+  CashTransactionCreatePayload,
+  CashTransactionTransferPayload,
+} from '@/types/cash-transaction'
 
 export function getCashTransactionCurrencyCode(
   currency: string | CashTransactionCurrencyRef | undefined,
@@ -81,6 +85,21 @@ export function toCashTransactionCreatePayload(
       data.referenceType === CASH_TRANSACTION_REFERENCE_TYPE.MANUAL
         ? (data.referenceId?.trim() ?? '')
         : (data.referenceId?.trim() ?? ''),
+    transactionDate: toTransactionDateIso(data.transactionDate, data.transactionTime),
+    validated: data.validated,
+  }
+}
+
+export function toCashTransactionTransferPayload(
+  data: CashTransactionTransferFormData,
+): CashTransactionTransferPayload {
+  const description = data.description?.trim()
+  return {
+    sourceCashRegister: data.sourceCashRegister,
+    destinationCashRegister: data.destinationCashRegister,
+    amount: data.amount.replace(',', '.'),
+    currency: data.currency,
+    ...(description ? { description } : {}),
     transactionDate: toTransactionDateIso(data.transactionDate, data.transactionTime),
     validated: data.validated,
   }

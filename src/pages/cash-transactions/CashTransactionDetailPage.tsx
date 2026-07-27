@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import {
   ArrowDownLeft,
   ArrowLeft,
+  ArrowLeftRight,
   ArrowUpRight,
   Receipt,
 } from 'lucide-react'
@@ -93,9 +94,11 @@ export function CashTransactionDetailPage() {
     )
   }
 
+  const isTransfer = transaction.type === CASH_TRANSACTION_TYPE.TRANSFER
   const isEntry = transaction.type === CASH_TRANSACTION_TYPE.ENTRY
   const referencePath = cashTransactionReferencePath(transaction.referenceType, transaction.referenceId)
   const registerIri = getCashTransactionCashRegisterIri(transaction.cashRegister)
+  const destinationIri = getCashTransactionCashRegisterIri(transaction.destinationCashRegister)
   const status = getCashTransactionStatus(transaction)
   const requiresValidation = cashTransactionRequiresValidation(transaction)
   const showStatusActions = canChangeCashTransactionStatus(transaction)
@@ -117,8 +120,17 @@ export function CashTransactionDetailPage() {
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Transaction</p>
               <p className="font-mono text-xs text-muted-foreground">{transaction.id}</p>
               <div className="flex flex-wrap gap-2">
-                <Badge variant={isEntry ? 'success' : 'destructive'} className="gap-1">
-                  {isEntry ? <ArrowDownLeft className="h-3 w-3" /> : <ArrowUpRight className="h-3 w-3" />}
+                <Badge
+                  variant={isTransfer ? 'secondary' : isEntry ? 'success' : 'destructive'}
+                  className="gap-1"
+                >
+                  {isTransfer ? (
+                    <ArrowLeftRight className="h-3 w-3" />
+                  ) : isEntry ? (
+                    <ArrowDownLeft className="h-3 w-3" />
+                  ) : (
+                    <ArrowUpRight className="h-3 w-3" />
+                  )}
                   {getCashTransactionTypeLabel(transaction.type)}
                 </Badge>
                 <CashTransactionStatusBadge transaction={transaction} />
@@ -145,7 +157,7 @@ export function CashTransactionDetailPage() {
         <CardContent className="pt-0">
           <DetailRow label="Date transaction" value={formatDateTime(transaction.transactionDate)} />
           <DetailRow
-            label="Caisse"
+            label={isTransfer ? 'Caisse source' : 'Caisse'}
             value={
               registerIri ? (
                 <Link to={`/admin/cash-registers/${getCashTransactionCashRegisterRef(transaction.cashRegister)?.id ?? ''}`} className="text-primary hover:underline">
@@ -156,6 +168,23 @@ export function CashTransactionDetailPage() {
               )
             }
           />
+          {isTransfer && (
+            <DetailRow
+              label="Caisse destination"
+              value={
+                destinationIri ? (
+                  <Link
+                    to={`/admin/cash-registers/${getCashTransactionCashRegisterRef(transaction.destinationCashRegister)?.id ?? ''}`}
+                    className="text-primary hover:underline"
+                  >
+                    {getCashTransactionCashRegisterLabel(transaction.destinationCashRegister)}
+                  </Link>
+                ) : (
+                  getCashTransactionCashRegisterLabel(transaction.destinationCashRegister)
+                )
+              }
+            />
+          )}
           <DetailRow label="Bureau" value={getCashTransactionIssuingOfficeLabel(transaction.issuingOffice)} />
           <DetailRow label="Type référence" value={getCashTransactionReferenceTypeLabel(transaction.referenceType)} />
           <DetailRow

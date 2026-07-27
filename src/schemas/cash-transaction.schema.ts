@@ -28,6 +28,41 @@ export const cashTransactionCreateSchema = z
     if (data.referenceType !== CASH_TRANSACTION_REFERENCE_TYPE.MANUAL && !data.referenceId?.trim()) {
       ctx.addIssue({ code: 'custom', path: ['referenceId'], message: 'Référence requise' })
     }
+    const amount = parseFloat(data.amount.replace(',', '.'))
+    if (!Number.isFinite(amount) || amount <= 0) {
+      ctx.addIssue({ code: 'custom', path: ['amount'], message: 'Montant invalide' })
+    }
   })
 
 export type CashTransactionCreateFormData = z.infer<typeof cashTransactionCreateSchema>
+
+export const cashTransactionTransferSchema = z
+  .object({
+    sourceCashRegister: z.string().min(1, 'Caisse source requise'),
+    destinationCashRegister: z.string().min(1, 'Caisse destination requise'),
+    amount: z.string().min(1, 'Montant requis'),
+    currency: z.string().min(1, 'Devise requise'),
+    description: z.string().optional(),
+    transactionDate: z.string().min(1, 'Date requise'),
+    transactionTime: z.string().min(1, 'Heure requise'),
+    validated: z.boolean(),
+  })
+  .superRefine((data, ctx) => {
+    if (
+      data.sourceCashRegister
+      && data.destinationCashRegister
+      && data.sourceCashRegister === data.destinationCashRegister
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['destinationCashRegister'],
+        message: 'La caisse destination doit être différente de la source',
+      })
+    }
+    const amount = parseFloat(data.amount.replace(',', '.'))
+    if (!Number.isFinite(amount) || amount <= 0) {
+      ctx.addIssue({ code: 'custom', path: ['amount'], message: 'Montant invalide' })
+    }
+  })
+
+export type CashTransactionTransferFormData = z.infer<typeof cashTransactionTransferSchema>
