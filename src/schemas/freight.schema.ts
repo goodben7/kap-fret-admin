@@ -26,22 +26,26 @@ const natureEnum = z.enum([
   NATURE_OF_GOODS.OTHER,
 ])
 
-export const freightPackageSchema = z.object({
-  packageNumber: z.string().min(1, 'N° colis requis'),
+/** Création : packageNumber injecté (date du jour), pas saisi. */
+export const freightPackageCreateSchema = z.object({
   packagingType: packagingEnum,
   natureOfGoods: natureEnum,
   unitWeight: z.string().min(1, 'Poids unitaire requis'),
   totalWeight: z.string().min(1, 'Poids total requis'),
 })
 
+/** Édition colis : packageNumber toujours editable. */
+export const freightPackageSchema = freightPackageCreateSchema.extend({
+  packageNumber: z.string().min(1, 'N° colis requis'),
+})
+
 export const freightShipmentSchema = z
   .object({
-  ltaNumber: z.string().min(1, 'Numéro LTA requis'),
   shipmentDate: z.string().min(1, 'Date requise'),
   shipmentTime: z.string().min(1, 'Heure requise'),
-  airline: z.string().min(1, 'Compagnie aérienne requise'),
-  aircraft: z.string().min(1, 'Avion requis'),
-  registration: z.string().min(1, 'Immatriculation requise'),
+  airline: z.string().optional().default(''),
+  aircraft: z.string().optional().default(''),
+  registration: z.string().optional().default(''),
   loadingPlace: z.string().min(1, 'Lieu de chargement requis'),
   unloadingPlace: z.string().min(1, 'Lieu de déchargement requis'),
   senderName: z.string().min(2, 'Nom expéditeur requis'),
@@ -67,7 +71,7 @@ export const freightShipmentSchema = z
   ]),
   observations: z.string().optional(),
   cashRegister: z.string().optional(),
-  packages: z.array(freightPackageSchema).min(1, 'Au moins un colis requis'),
+  packages: z.array(freightPackageCreateSchema).min(1, 'Au moins un colis requis'),
 })
   .superRefine((data, ctx) => {
     if (
@@ -102,9 +106,9 @@ export const freightShipmentPatchSchema = z
   ltaNumber: z.string().min(1, 'Numéro LTA requis'),
   shipmentDate: z.string().min(1, 'Date requise'),
   shipmentTime: z.string().min(1, 'Heure requise'),
-  airline: z.string().min(1, 'Compagnie aérienne requise'),
-  aircraft: z.string().min(1, 'Avion requis'),
-  registration: z.string().min(1, 'Immatriculation requise'),
+  airline: z.string().optional().default(''),
+  aircraft: z.string().optional().default(''),
+  registration: z.string().optional().default(''),
   loadingPlace: z.string().min(1, 'Lieu de chargement requis'),
   unloadingPlace: z.string().min(1, 'Lieu de déchargement requis'),
   senderName: z.string().min(2, 'Nom expéditeur requis'),
@@ -144,6 +148,7 @@ export const freightShipmentPatchSchema = z
     }
   })
 
+export type FreightPackageCreateFormData = z.infer<typeof freightPackageCreateSchema>
 export type FreightPackageFormData = z.infer<typeof freightPackageSchema>
 export type FreightShipmentFormData = z.infer<typeof freightShipmentSchema>
 export type FreightShipmentPatchFormData = z.infer<typeof freightShipmentPatchSchema>

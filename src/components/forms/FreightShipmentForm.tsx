@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { LoaderIcon } from '@/components/ui/loading-spinner'
 import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -34,12 +34,14 @@ import { useAuth } from '@/hooks/useAuth'
 import { useCashRegistersForSelect } from '@/hooks/useCashRegisters'
 import { useCurrenciesForSelect } from '@/hooks/useCurrencies'
 import { useExchangeRates } from '@/hooks/useExchangeRates'
+import { useIssuingOffice } from '@/hooks/useIssuingOffices'
 import { usePreviewConversion } from '@/hooks/usePreviewConversion'
 import { formatCashRegisterSelectLabel } from '@/lib/cash-register'
 import { resolveCurrencyIriByCode } from '@/lib/currency-resource'
-import { extractIri } from '@/lib/hydra'
+import { extractIri, extractResourceId } from '@/lib/hydra'
 import { resolveUserIssuingOfficeIri } from '@/lib/issuing-office'
-import { getCurrentTravelTimeInput, getTodayTravelDateInput } from '@/lib/ticket'
+import { getCheckpointIri } from '@/services/issuing-office.service'
+import { getUpcomingFlightTravelDateInput } from '@/lib/ticket'
 import {
   computeFreightOrdinaryAmount,
   computeFreightPackagesTotalWeight,
@@ -70,7 +72,6 @@ interface FreightShipmentFormProps {
 }
 
 const defaultPackage = {
-  packageNumber: '',
   packagingType: PACKAGING_TYPE.CARTON,
   natureOfGoods: NATURE_OF_GOODS.GENERAL_CARGO,
   unitWeight: '',
@@ -176,10 +177,17 @@ export function FreightShipmentForm({
 }: FreightShipmentFormProps) {
   const { user } = useAuth()
   const issuingOfficeIri = resolveUserIssuingOfficeIri(user)
+  const issuingOfficeId = extractResourceId(issuingOfficeIri) ?? ''
+  const { data: issuingOffice } = useIssuingOffice(issuingOfficeId)
+  const userCheckpointIri = useMemo(
+    () => (issuingOffice ? getCheckpointIri(issuingOffice) : ''),
+    [issuingOffice],
+  )
   const { data: cashRegisters = [], isLoading: cashRegistersLoading } = useCashRegistersForSelect(issuingOfficeIri)
   const { data: currencies = [] } = useCurrenciesForSelect()
   const { data: exchangeRatesData } = useExchangeRates({ pagination: false })
   const exchangeRates = exchangeRatesData?.items ?? []
+  const loadingPlacePrefillDone = useRef(!!defaultValues?.loadingPlace)
 
   const {
     register,
@@ -194,8 +202,12 @@ export function FreightShipmentForm({
     resolver: zodResolver(freightShipmentSchema),
     mode: 'onChange',
     defaultValues: {
-      shipmentDate: getTodayTravelDateInput(),
-      shipmentTime: getCurrentTravelTimeInput(),
+      shipmentDate: getUpcomingFlightTravelDateInput(),
+      shipmentTime: '06:00',
+      airline: '',
+      aircraft: '',
+      registration: '',
+      loadingPlace: defaultValues?.loadingPlace ?? '',
       paymentMode: FREIGHT_PAYMENT_MODE.AT_ARRIVAL,
       currency: CURRENCY.USD,
       volumeFreight: '0.00',
@@ -218,12 +230,17 @@ export function FreightShipmentForm({
   const rva = useWatch({ control, name: 'rva' })
   const ltaFees = useWatch({ control, name: 'ltaFees' })
   const watchedPaidAmount = useWatch({ control, name: 'paidAmount' })
-  const ltaNumber = watch('ltaNumber')
   const loadingPlace = watch('loadingPlace') ?? ''
   const unloadingPlace = watch('unloadingPlace') ?? ''
   const currency = watch('currency')
   const paymentMode = watch('paymentMode')
   const cashRegister = watch('cashRegister')
+
+  useEffect(() => {
+    if (loadingPlacePrefillDone.current || !userCheckpointIri) return
+    setValue('loadingPlace', userCheckpointIri, { shouldValidate: true })
+    loadingPlacePrefillDone.current = true
+  }, [userCheckpointIri, setValue])
 
   const cashRegisterOptions = useMemo(
     () =>
@@ -273,13 +290,6 @@ export function FreightShipmentForm({
   useEffect(() => {
     setValue('packageCount', fields.length, { shouldValidate: true })
   }, [fields.length, setValue])
-
-  useEffect(() => {
-    const lta = ltaNumber?.trim() ?? ''
-    for (let index = 0; index < fields.length; index++) {
-      setValue(`packages.${index}.packageNumber`, lta, { shouldValidate: true })
-    }
-  }, [ltaNumber, fields.length, setValue])
 
   useEffect(() => {
     setValue('totalWeight', packagesTotalWeight, { shouldValidate: true })
@@ -342,10 +352,7 @@ export function FreightShipmentForm({
   }
 
   const appendPackage = () => {
-    append({
-      ...defaultPackage,
-      packageNumber: getValues('ltaNumber')?.trim() ?? '',
-    })
+    append({ ...defaultPackage })
   }
 
   const syncPricingTotals = () => {
@@ -412,7 +419,6 @@ export function FreightShipmentForm({
   return (
     <form id={FORM_ID} onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <FormSection title="Expédition" icon={Plane}>
-        <Input label="Numéro LTA" className={fieldClass} error={errors.ltaNumber?.message} {...register('ltaNumber')} />
         <Input label="Date" type="date" className={fieldClass} error={errors.shipmentDate?.message} {...register('shipmentDate')} />
         <Input label="Heure" type="time" className={fieldClass} error={errors.shipmentTime?.message} {...register('shipmentTime')} />
         <Input label="Compagnie aérienne" className={fieldClass} error={errors.airline?.message} {...register('airline')} />
@@ -423,7 +429,7 @@ export function FreightShipmentForm({
             label="Lieu de chargement"
             placeholder="Rechercher le checkpoint..."
             variant="filter"
-            initialCheckpointIri={defaultValues?.loadingPlace}
+            initialCheckpointIri={defaultValues?.loadingPlace || userCheckpointIri || undefined}
             value={loadingPlace}
             onChange={(iri) => setValue('loadingPlace', iri, { shouldValidate: true })}
             error={errors.loadingPlace?.message}
@@ -503,12 +509,6 @@ export function FreightShipmentForm({
                 </Button>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Input
-                  label="N° colis"
-                  className={fieldClass}
-                  error={errors.packages?.[index]?.packageNumber?.message}
-                  {...register(`packages.${index}.packageNumber`)}
-                />
                 <Select
                   label="Emballage"
                   options={packagingOptions}

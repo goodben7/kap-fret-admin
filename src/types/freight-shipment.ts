@@ -19,9 +19,9 @@ export interface FreightShipment extends HydraResource {
   id: string
   ltaNumber: string
   shipmentDate: string
-  airline: string
-  aircraft: string
-  registration: string
+  airline?: string | null
+  aircraft?: string | null
+  registration?: string | null
   loadingPlace: string | Checkpoint
   unloadingPlace: string | Checkpoint
   senderName: string
@@ -67,11 +67,10 @@ export interface FreightPackageCreatePayload {
 }
 
 export interface FreightShipmentCreatePayload {
-  ltaNumber: string
   shipmentDate: string
-  airline: string
-  aircraft: string
-  registration: string
+  airline?: string | null
+  aircraft?: string | null
+  registration?: string | null
   loadingPlace: string
   unloadingPlace: string
   senderName: string
@@ -100,9 +99,9 @@ export interface FreightShipmentCreatePayload {
 export interface FreightShipmentPatchPayload {
   ltaNumber: string
   shipmentDate: string
-  airline: string
-  aircraft: string
-  registration: string
+  airline?: string | null
+  aircraft?: string | null
+  registration?: string | null
   loadingPlace: string
   unloadingPlace: string
   senderName: string

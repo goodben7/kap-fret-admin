@@ -3,14 +3,11 @@ import { extractHydraMember, extractHydraTotalItems, toIri } from '@/lib/hydra'
 import { addDays, applyStatsClientFilters } from '@/lib/stats'
 import { getTicketTotal } from '@/lib/ticket'
 import { CURRENCY, normalizeCurrency } from '@/constants/ticket'
-import { CASH_TRANSACTION_TYPE } from '@/constants/cash-transaction'
-import { getCashTransactionCurrencyCode } from '@/lib/cash-transaction'
 import type { HydraCollection } from '@/types/hydra'
 import type { AppStats, StatsFilters, StatsRevenueByCurrency } from '@/types/stats'
 import type { Ticket } from '@/types/ticket'
 import type { CheckIn } from '@/types/check-in'
 import type { FreightShipment } from '@/types/freight-shipment'
-import type { CashTransaction } from '@/types/cash-transaction'
 
 const MAX_ITEMS_FOR_SUM = 2000
 
@@ -105,56 +102,6 @@ function sumFreightPaid(shipments: FreightShipment[]): { cdf: number; usd: numbe
   return { cdf, usd }
 }
 
-function sumCashTransactions(transactions: CashTransaction[], currencyFilter?: string) {
-  let entries = 0
-  let exits = 0
-  let entriesAmount = 0
-  let exitsAmount = 0
-  const byCurrencyMap = new Map<string, { entries: number; exits: number; net: number; count: number }>()
-
-  for (const tx of transactions) {
-    const amountCode = getCashTransactionCurrencyCode(tx.currency)
-    const txCode = getCashTransactionCurrencyCode(tx.transactionCurrency)
-    const code = txCode ?? amountCode ?? CURRENCY.USD
-    if (currencyFilter && code !== currencyFilter) continue
-
-    const amount = txCode
-      ? parseFloat(tx.transactionAmount) || 0
-      : parseFloat(tx.amount) || 0
-
-    const bucket = byCurrencyMap.get(code) ?? { entries: 0, exits: 0, net: 0, count: 0 }
-    bucket.count += 1
-
-    if (tx.type === CASH_TRANSACTION_TYPE.ENTRY) {
-      entries += 1
-      entriesAmount += amount
-      bucket.entries += amount
-      bucket.net += amount
-    } else {
-      exits += 1
-      exitsAmount += amount
-      bucket.exits += amount
-      bucket.net -= amount
-    }
-    byCurrencyMap.set(code, bucket)
-  }
-
-  return {
-    entries,
-    exits,
-    entriesAmount,
-    exitsAmount,
-    netAmount: entriesAmount - exitsAmount,
-    byCurrency: Array.from(byCurrencyMap.entries()).map(([currency, row]) => ({
-      currency: normalizeCurrency(currency),
-      entries: row.entries,
-      exits: row.exits,
-      net: row.net,
-      count: row.count,
-    })),
-  }
-}
-
 function countFreightByStatus(shipments: FreightShipment[]): Record<string, number> {
   const counts: Record<string, number> = {}
   for (const shipment of shipments) {
@@ -190,10 +137,6 @@ function shouldEnrichCheckIn(type?: StatsFilters['type']) {
 
 function shouldEnrichFreight(type?: StatsFilters['type']) {
   return !type || type === 'freight'
-}
-
-function shouldEnrichFinance(type?: StatsFilters['type']) {
-  return !type || type === 'finance'
 }
 
 /** Recalcule les agrégats via les APIs métier quand /api/stats ignore les filtres. */
@@ -278,30 +221,8 @@ export async function enrichStatsWithEntityFilters(
     })())
   }
 
-  if (shouldEnrichFinance(filters.type)) {
-    tasks.push((async () => {
-      const params: Record<string, string | number> = {}
-      appendDateRangeParams(params, 'transactionDate', filters.startDate, filters.endDate)
-      if (issuingOfficeIri) params.issuingOffice = issuingOfficeIri
-      const { items, totalItems } = await fetchAllItems<CashTransaction>('/api/cash_transactions', params)
-      const totals = sumCashTransactions(items, currency)
-      enriched.finance = {
-        ...enriched.finance,
-        entriesCount: totals.entries,
-        exitsCount: totals.exits,
-        entriesAmount: totals.entriesAmount,
-        exitsAmount: totals.exitsAmount,
-        netAmount: totals.netAmount,
-      }
-      if (totals.byCurrency.length > 0) {
-        enriched.byCurrency = totals.byCurrency
-      }
-      enriched.summary = {
-        ...enriched.summary,
-        transactionsTotal: totalItems,
-      }
-    })())
-  }
+  // Finance / byCurrency : on garde /api/stats.
+  // Recalculer via /api/cash_transactions fausse le net (liste partielle vs agrégats SQL).
 
   await Promise.all(tasks)
 

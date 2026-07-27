@@ -3,6 +3,7 @@ import { normalizeCurrency, CURRENCY, type Currency } from '@/constants/ticket'
 import { FREIGHT_PAYMENT_MODE, FREIGHT_STATUS, FREIGHT_ORDINARY_PRICE_PER_KG_USD } from '@/constants/freight'
 import { convertAmountBetweenCurrencyCodes } from '@/lib/exchange-rate'
 import { getCheckpointDisplayName, getCheckpointLabelFromRef } from '@/lib/checkpoint'
+import { getTodayTravelDateInput } from '@/lib/ticket'
 import type {
   FreightPackage,
   FreightShipment,
@@ -23,6 +24,12 @@ export function formatDecimal(value: string | number): string {
   const num = typeof value === 'number' ? value : parseFloat(value)
   if (Number.isNaN(num)) return '0.00'
   return num.toFixed(2)
+}
+
+/** Texte facultatif : vide → null pour l’API. */
+function optionalText(value?: string | null): string | null {
+  const trimmed = value?.trim()
+  return trimmed ? trimmed : null
 }
 
 /** Somme des poids totaux de tous les colis */
@@ -103,12 +110,12 @@ export function parseShipmentDate(isoDate: string): { date: string; time: string
 }
 
 export function toFreightCreatePayload(data: FreightShipmentFormData): FreightShipmentCreatePayload {
+  const packageNumber = getTodayTravelDateInput()
   const payload: FreightShipmentCreatePayload = {
-    ltaNumber: data.ltaNumber,
     shipmentDate: toShipmentDateIso(data.shipmentDate, data.shipmentTime),
-    airline: data.airline,
-    aircraft: data.aircraft,
-    registration: data.registration,
+    airline: optionalText(data.airline),
+    aircraft: optionalText(data.aircraft),
+    registration: optionalText(data.registration),
     loadingPlace: data.loadingPlace,
     unloadingPlace: data.unloadingPlace,
     senderName: data.senderName,
@@ -130,7 +137,7 @@ export function toFreightCreatePayload(data: FreightShipmentFormData): FreightSh
     paymentMode: data.paymentMode,
     observations: data.observations?.trim() ?? '',
     packages: data.packages.map((pkg) => ({
-      packageNumber: pkg.packageNumber,
+      packageNumber,
       packagingType: pkg.packagingType,
       natureOfGoods: pkg.natureOfGoods,
       unitWeight: formatDecimal(pkg.unitWeight),
@@ -152,9 +159,9 @@ export function toFreightPatchPayload(data: FreightShipmentPatchFormData): Freig
   return {
     ltaNumber: data.ltaNumber,
     shipmentDate: toShipmentDateIso(data.shipmentDate, data.shipmentTime),
-    airline: data.airline,
-    aircraft: data.aircraft,
-    registration: data.registration,
+    airline: optionalText(data.airline),
+    aircraft: optionalText(data.aircraft),
+    registration: optionalText(data.registration),
     loadingPlace: data.loadingPlace,
     unloadingPlace: data.unloadingPlace,
     senderName: data.senderName,
@@ -191,12 +198,11 @@ export function toFreightPackagePatchPayload(data: FreightPackageFormData): Frei
 export function shipmentToFormDefaults(shipment: FreightShipment): Partial<FreightShipmentFormData> {
   const { date, time } = parseShipmentDate(shipment.shipmentDate)
   return {
-    ltaNumber: shipment.ltaNumber,
     shipmentDate: date,
     shipmentTime: time,
-    airline: shipment.airline,
-    aircraft: shipment.aircraft,
-    registration: shipment.registration,
+    airline: shipment.airline ?? '',
+    aircraft: shipment.aircraft ?? '',
+    registration: shipment.registration ?? '',
     loadingPlace: extractIri(shipment.loadingPlace) ?? '',
     unloadingPlace: extractIri(shipment.unloadingPlace) ?? '',
     senderName: shipment.senderName,
@@ -216,7 +222,12 @@ export function shipmentToFormDefaults(shipment: FreightShipment): Partial<Freig
     remainingAmount: shipment.remainingAmount,
     paymentMode: shipment.paymentMode,
     observations: shipment.observations ?? '',
-    packages: (shipment.packages ?? []).map(packageToFormDefaults),
+    packages: (shipment.packages ?? []).map((pkg) => ({
+      packagingType: pkg.packagingType,
+      natureOfGoods: pkg.natureOfGoods,
+      unitWeight: pkg.unitWeight,
+      totalWeight: pkg.totalWeight,
+    })),
   }
 }
 
@@ -226,9 +237,9 @@ export function shipmentToPatchFormDefaults(shipment: FreightShipment): Partial<
     ltaNumber: shipment.ltaNumber,
     shipmentDate: date,
     shipmentTime: time,
-    airline: shipment.airline,
-    aircraft: shipment.aircraft,
-    registration: shipment.registration,
+    airline: shipment.airline ?? '',
+    aircraft: shipment.aircraft ?? '',
+    registration: shipment.registration ?? '',
     loadingPlace: extractIri(shipment.loadingPlace) ?? '',
     unloadingPlace: extractIri(shipment.unloadingPlace) ?? '',
     senderName: shipment.senderName,

@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { BRAND } from '@/constants/brand'
-import { FREIGHT_PAYMENT_MODE_LABELS, type FreightPaymentMode } from '@/constants/freight'
+import { FREIGHT_PAYMENT_MODE } from '@/constants/freight'
 import { buildFreightManifestFilters } from '@/lib/freight-filters'
 import {
   filterFreightShipmentsForManifest,
@@ -30,42 +30,46 @@ export interface FreightManifestParams {
 
 const NAVY = { r: 11, g: 33, b: 61 }
 const ORANGE = { r: 245, g: 124, b: 0 }
-const HEADER_FILL: [number, number, number] = [252, 211, 177]
+const HEADER_FILL: [number, number, number] = [146, 208, 80]
+const SUMMARY_FILL: [number, number, number] = [189, 215, 238]
+const TOTAL_RED: [number, number, number] = [192, 0, 0]
+const NET_BLUE: [number, number, number] = [0, 51, 153]
 
-const MARGIN_X = 12
-const FOOTER_HEIGHT_MM = 22
-const LOGO_WIDTH_MM = 30
-const LOGO_HEIGHT_MM = 18
+const MARGIN_X = 8
+const FOOTER_HEIGHT_MM = 28
+const LOGO_WIDTH_MM = 28
+const LOGO_HEIGHT_MM = 16
 
-/** Largeur utile A4 paysage (297 mm − marges gauche/droite) */
 const USABLE_TABLE_WIDTH_MM = 297 - MARGIN_X * 2
 
-const MANIFEST_CURRENCY_ORDER: Currency[] = [CURRENCY.USD, CURRENCY.CDF]
-
-const COLUMN_COUNT = 13
-
-/** Largeurs colonnes (mm) — total = USABLE_TABLE_WIDTH_MM */
+/** 18 colonnes — total = USABLE_TABLE_WIDTH_MM (281 mm) */
 const COLUMN_WIDTHS_MM = {
-  index: 8,
-  senderNumber: 30,
-  receiver: 30,
-  lta: 22,
-  packages: 14,
-  totalWeight: 18,
-  totalAmount: 22,
-  balanceTotal: 22,
-  paidAmount: 20,
-  balancePaid: 22,
-  remainingAmount: 20,
-  balanceRemaining: 22,
-  paymentMode: 23,
+  lta: 16,
+  sender: 36,
+  receiver: 36,
+  packages: 10,
+  weightsPerPackage: 18,
+  totalKg: 12,
+  unitPrice: 10,
+  totalAmount: 14,
+  netUsd: 12,
+  netCdf: 14,
+  cash: 10,
+  partial: 9,
+  arrival: 9,
+  soldeUsd: 12,
+  soldeCdf: 14,
+  resteMnt: 12,
+  resteSolde: 12,
+  obs: 25,
 } as const
 
 const TABLE_WIDTH_MM = USABLE_TABLE_WIDTH_MM
-
-const HEADER_ROW_MM = 10
-const ROW_HEIGHT_MM = 7
-const MIN_EMPTY_ROWS_AFTER_DATA = 3
+const HEADER_ROW_MM = 14
+const ROW_HEIGHT_MM = 6.5
+const MIN_EMPTY_ROWS_AFTER_DATA = 2
+const COLUMN_COUNT = 18
+const DASH = '--'
 
 function formatManifestDate(dateInput: string): string {
   const [year, month, day] = dateInput.split('-')
@@ -73,58 +77,47 @@ function formatManifestDate(dateInput: string): string {
   return `${day}/${month}/${year}`
 }
 
-function formatKgCell(value: string | number | undefined): string {
-  const num = typeof value === 'number' ? value : parseFloat(value ?? '')
-  if (Number.isNaN(num)) return '—'
-  return num.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+function formatWeightPart(value: string | number | undefined): string {
+  const num = typeof value === 'number' ? value : parseFloat(String(value ?? ''))
+  if (Number.isNaN(num)) return '0'
+  if (Number.isInteger(num)) return String(num)
+  return num.toFixed(2).replace(/\.?0+$/, '')
 }
 
-function formatManifestMoney(amount: number, currency: Currency): string {
+function formatKgCell(value: string | number | undefined): string {
+  const num = typeof value === 'number' ? value : parseFloat(String(value ?? ''))
+  if (Number.isNaN(num)) return DASH
+  return formatWeightPart(num)
+}
+
+function formatMoneyPlain(amount: number, currency: Currency): string {
   const safeAmount = Number.isFinite(amount) ? amount : 0
   const formatted = safeAmount.toLocaleString('fr-FR', {
-    minimumFractionDigits: currency === CURRENCY.USD ? 2 : 0,
+    minimumFractionDigits: currency === CURRENCY.USD ? 0 : 0,
     maximumFractionDigits: currency === CURRENCY.USD ? 2 : 0,
   })
-  const normalized = formatted.replace(/[\u00A0\u202F]/g, ' ')
-  const symbol = currency === CURRENCY.USD ? '$' : 'Fc'
-  return `${normalized} ${symbol}`
+  return formatted.replace(/[\u00A0\u202F]/g, ' ')
 }
 
-function formatMoneyCell(amount: number, currency: Currency): string {
-  if (!Number.isFinite(amount) || amount === 0) return '—'
-  return formatManifestMoney(amount, currency)
+function formatAmountOrDash(amount: number, currency: Currency, withSymbol = false): string {
+  if (!Number.isFinite(amount) || amount === 0) return DASH
+  const plain = formatMoneyPlain(amount, currency)
+  if (!withSymbol) return plain
+  return currency === CURRENCY.USD ? `${plain} $` : `${plain} Fc`
 }
 
-function formatTotalMoneyCell(amount: number, currency: Currency): string {
-  if (!Number.isFinite(amount)) return '—'
-  return formatManifestMoney(amount, currency)
+function formatUnitPrice(totalAmount: number, totalWeight: number): string {
+  if (!Number.isFinite(totalAmount) || !Number.isFinite(totalWeight) || totalWeight <= 0) return DASH
+  const unit = totalAmount / totalWeight
+  return formatWeightPart(Math.round(unit * 100) / 100)
 }
 
-function getPaymentModeLabel(mode: string): string {
-  if (mode in FREIGHT_PAYMENT_MODE_LABELS) {
-    return FREIGHT_PAYMENT_MODE_LABELS[mode as FreightPaymentMode]
+function packagesWeightsLabel(shipment: FreightShipment): string {
+  const packages = shipment.packages ?? []
+  if (packages.length === 0) {
+    return formatKgCell(shipment.totalWeight)
   }
-  return mode || '—'
-}
-
-function groupShipmentsByCurrency(shipments: FreightShipment[]): Map<Currency, FreightShipment[]> {
-  const groups = new Map<Currency, FreightShipment[]>(
-    MANIFEST_CURRENCY_ORDER.map((currency) => [currency, []]),
-  )
-
-  for (const shipment of shipments) {
-    const currency = getFreightCurrency(shipment)
-    const list = groups.get(currency) ?? []
-    list.push(shipment)
-    groups.set(currency, list)
-  }
-
-  return groups
-}
-
-interface ManifestTableBuildResult {
-  rows: string[][]
-  totalRowIndexes: Set<number>
+  return packages.map((pkg) => formatWeightPart(pkg.totalWeight)).join('+')
 }
 
 function emptyManifestRow(): string[] {
@@ -182,91 +175,112 @@ function buildTableBodyRows(
   return dataRows
 }
 
-interface CurrencyTotals {
-  totalAmount: number
-  paidAmount: number
-  remainingAmount: number
+interface ManifestTableBuildResult {
+  rows: string[][]
+  summaryRowIndex: number
 }
 
 function buildFreightManifestRows(shipments: FreightShipment[]): ManifestTableBuildResult {
-  const groups = groupShipmentsByCurrency(shipments)
   const rows: string[][] = []
-  const totalRowIndexes = new Set<number>()
-  const totalsByCurrency = new Map<Currency, CurrencyTotals>()
-  let rowIndex = 0
-  let globalIndex = 0
+  let runningNetUsd = 0
+  let runningNetCdf = 0
+  let runningReste = 0
+  let totalPackages = 0
+  let totalKg = 0
+  let totalAmountUsd = 0
+  let totalAmountCdf = 0
+  let totalPaidUsd = 0
+  let totalPaidCdf = 0
+  let totalReste = 0
 
-  for (const currency of MANIFEST_CURRENCY_ORDER) {
-    const group = groups.get(currency) ?? []
-    if (group.length === 0) continue
+  for (const shipment of shipments) {
+    const currency = getFreightCurrency(shipment)
+    const totalWeight = parseFloat(shipment.totalWeight) || 0
+    const totalAmount = parseFloat(shipment.totalAmount) || 0
+    const paidAmount = parseFloat(shipment.paidAmount) || 0
+    const remainingAmount = parseFloat(shipment.remainingAmount) || 0
+    const packageCount = shipment.packageCount ?? (shipment.packages?.length ?? 0)
 
-    let runningTotalAmount = 0
-    let runningPaidAmount = 0
-    let runningRemainingAmount = 0
+    totalPackages += packageCount
+    totalKg += totalWeight
+    totalReste += remainingAmount
 
-    for (const shipment of group) {
-      globalIndex += 1
-      const totalAmount = parseFloat(shipment.totalAmount) || 0
-      const paidAmount = parseFloat(shipment.paidAmount) || 0
-      const remainingAmount = parseFloat(shipment.remainingAmount) || 0
-      runningTotalAmount += totalAmount
-      runningPaidAmount += paidAmount
-      runningRemainingAmount += remainingAmount
-
-      rows.push([
-        String(globalIndex),
-        shipment.senderName?.trim() || '—',
-        shipment.receiverName?.trim() || '—',
-        shipment.ltaNumber?.trim() || '—',
-        String(shipment.packageCount ?? 0),
-        formatKgCell(shipment.totalWeight),
-        formatMoneyCell(totalAmount, currency),
-        formatMoneyCell(runningTotalAmount, currency),
-        formatMoneyCell(paidAmount, currency),
-        formatMoneyCell(runningPaidAmount, currency),
-        formatMoneyCell(remainingAmount, currency),
-        formatMoneyCell(runningRemainingAmount, currency),
-        getPaymentModeLabel(shipment.paymentMode),
-      ])
-      rowIndex += 1
+    if (currency === CURRENCY.USD) {
+      totalAmountUsd += totalAmount
+      totalPaidUsd += paidAmount
+      runningNetUsd += paidAmount
+    } else {
+      totalAmountCdf += totalAmount
+      totalPaidCdf += paidAmount
+      runningNetCdf += paidAmount
     }
+    runningReste += remainingAmount
 
-    totalsByCurrency.set(currency, {
-      totalAmount: runningTotalAmount,
-      paidAmount: runningPaidAmount,
-      remainingAmount: runningRemainingAmount,
-    })
-  }
+    const isCash = shipment.paymentMode === FREIGHT_PAYMENT_MODE.CASH
+    const isPartial = shipment.paymentMode === FREIGHT_PAYMENT_MODE.PARTIAL
+    const isArrival = shipment.paymentMode === FREIGHT_PAYMENT_MODE.AT_ARRIVAL
 
-  for (const currency of MANIFEST_CURRENCY_ORDER) {
-    const totals = totalsByCurrency.get(currency)
-    if (totals == null) continue
+    const netUsd = currency === CURRENCY.USD ? formatAmountOrDash(paidAmount, CURRENCY.USD) : DASH
+    const netCdf = currency === CURRENCY.CDF ? formatAmountOrDash(paidAmount, CURRENCY.CDF) : DASH
+    const totalDisplay = currency === CURRENCY.USD
+      ? formatAmountOrDash(totalAmount, CURRENCY.USD, true)
+      : formatAmountOrDash(totalAmount, CURRENCY.CDF, true)
 
     rows.push([
-      '',
-      `TOTAL ${currency}`,
-      '',
-      '',
-      '',
-      '',
-      formatTotalMoneyCell(totals.totalAmount, currency),
-      formatTotalMoneyCell(totals.totalAmount, currency),
-      formatTotalMoneyCell(totals.paidAmount, currency),
-      formatTotalMoneyCell(totals.paidAmount, currency),
-      formatTotalMoneyCell(totals.remainingAmount, currency),
-      formatTotalMoneyCell(totals.remainingAmount, currency),
-      '',
+      shipment.ltaNumber?.trim() || DASH,
+      shipment.senderName?.trim() || DASH,
+      shipment.receiverName?.trim() || DASH,
+      packageCount > 0 ? String(packageCount) : DASH,
+      packagesWeightsLabel(shipment),
+      formatKgCell(totalWeight),
+      formatUnitPrice(totalAmount, totalWeight),
+      totalDisplay,
+      netUsd,
+      netCdf,
+      isCash ? 'CASH' : '',
+      isPartial ? 'P. D' : '',
+      isArrival ? 'ACC' : '',
+      formatAmountOrDash(runningNetUsd, CURRENCY.USD),
+      formatAmountOrDash(runningNetCdf, CURRENCY.CDF),
+      formatAmountOrDash(remainingAmount, currency),
+      formatAmountOrDash(runningReste, currency),
+      shipment.observations?.trim() || '',
     ])
-    totalRowIndexes.add(rowIndex)
-    rowIndex += 1
   }
 
-  return { rows, totalRowIndexes }
+  const ltaCount = String(shipments.length).padStart(2, '0')
+  const totalAmountLabel = [
+    totalAmountUsd > 0 ? formatAmountOrDash(totalAmountUsd, CURRENCY.USD, true) : null,
+    totalAmountCdf > 0 ? formatAmountOrDash(totalAmountCdf, CURRENCY.CDF, true) : null,
+  ].filter(Boolean).join(' / ') || DASH
+
+  rows.push([
+    ltaCount,
+    '',
+    '',
+    totalPackages > 0 ? String(totalPackages) : DASH,
+    '',
+    totalKg > 0 ? `${formatWeightPart(totalKg)}Kgs` : DASH,
+    '',
+    totalAmountLabel,
+    formatAmountOrDash(totalPaidUsd, CURRENCY.USD),
+    formatAmountOrDash(totalPaidCdf, CURRENCY.CDF),
+    '',
+    '',
+    '',
+    formatAmountOrDash(totalPaidUsd, CURRENCY.USD),
+    formatAmountOrDash(totalPaidCdf, CURRENCY.CDF),
+    formatAmountOrDash(totalReste, CURRENCY.USD),
+    formatAmountOrDash(totalReste, CURRENCY.USD),
+    '',
+  ])
+
+  return { rows, summaryRowIndex: rows.length - 1 }
 }
 
 function drawBrandTitle(doc: jsPDF, centerX: number, y: number) {
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(20)
+  doc.setFontSize(16)
 
   const kapPart = 'KAP '
   const fretPart = 'FRET'
@@ -290,7 +304,7 @@ function drawHeader(
   const pageWidth = doc.internal.pageSize.getWidth()
   const centerX = pageWidth / 2
   const rightX = pageWidth - MARGIN_X
-  const topY = 10
+  const topY = 8
 
   if (logoDataUrl) {
     try {
@@ -300,66 +314,61 @@ function drawHeader(
     }
   }
 
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(11)
+  doc.setTextColor(NAVY.r, NAVY.g, NAVY.b)
+  doc.text('AGENCE KAP – FRET', centerX, topY + 6, { align: 'center' })
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(12)
+  doc.setTextColor(0, 0, 0)
+  doc.text('RAPPORT MANIFESTE FRET EXPÉDIÉ', centerX, topY + 13, { align: 'center' })
+
+  drawBrandTitle(doc, centerX, topY + 22)
+
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
   doc.setTextColor(0, 0, 0)
-  doc.text(`DATE EXPEDITION : ${formatManifestDate(params.shipmentDate)}`, rightX, topY + 3, {
+  doc.text(`Date du VOL : ${formatManifestDate(params.shipmentDate)}`, rightX, topY + 6, {
     align: 'right',
   })
-  doc.text(`N° DU VOL : ${params.flightNumber}`, rightX, topY + 9, { align: 'right' })
-
-  drawBrandTitle(doc, centerX, topY + 10)
-
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(10)
-  doc.setTextColor(NAVY.r, NAVY.g, NAVY.b)
   doc.text(
-    `MANIFESTE FRET ${params.departureLabel.toUpperCase()}`,
-    centerX,
-    topY + 18,
-    { align: 'center' },
+    `TRAJET : ${params.departureLabel.toUpperCase()} - ${params.destinationLabel.toUpperCase()}`,
+    rightX,
+    topY + 13,
+    { align: 'right' },
   )
 
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(9.5)
-  doc.setTextColor(0, 0, 0)
-  doc.text(
-    `TRAJET : ${params.departureCode} – ${params.destinationCode}`,
-    centerX,
-    topY + 25,
-    { align: 'center' },
-  )
-
-  return topY + 32
+  return topY + 28
 }
 
 function drawFooter(doc: jsPDF, params: FreightManifestParams) {
   const pageWidth = doc.internal.pageSize.getWidth()
   const pageHeight = doc.internal.pageSize.getHeight()
-  const blockRight = pageWidth - MARGIN_X
-  const blockWidth = 98
-  const blockLeft = blockRight - blockWidth
-  const signatureLineY = pageHeight - FOOTER_HEIGHT_MM + 4
-  const labelY = signatureLineY + 5
-  const faitY = signatureLineY - 7
+  const y = pageHeight - FOOTER_HEIGHT_MM + 6
+  const leftX = MARGIN_X + 20
+  const rightX = pageWidth - MARGIN_X - 20
 
-  doc.setFont('helvetica', 'normal')
+  doc.setFont('helvetica', 'bold')
   doc.setFontSize(9)
   doc.setTextColor(0, 0, 0)
-  doc.text(
-    `FAIT À ${params.departureLabel.toUpperCase()}, LE ${formatManifestDate(params.shipmentDate)}`,
-    blockRight,
-    faitY,
-    { align: 'right' },
-  )
+  doc.text("CHEF D'AGENCE", leftX, y, { align: 'center' })
+  doc.text('CHARGER DE FRET', rightX, y, { align: 'center' })
 
-  doc.setLineWidth(0.35)
+  doc.setLineWidth(0.3)
   doc.setDrawColor(60, 60, 60)
-  doc.line(blockLeft, signatureLineY, blockRight, signatureLineY)
+  doc.line(leftX - 28, y + 10, leftX + 28, y + 10)
+  doc.line(rightX - 28, y + 10, rightX + 28, y + 10)
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8)
-  doc.text('SIGNATURE DU RESPONSABLE.', blockRight, labelY, { align: 'right' })
+  doc.text(
+    `FAIT À ${params.departureLabel.toUpperCase()}, LE ${formatManifestDate(params.shipmentDate)}`,
+    pageWidth - MARGIN_X,
+    pageHeight - 6,
+    { align: 'right' },
+  )
 }
 
 export async function generateFreightManifestPdf(params: FreightManifestParams): Promise<Blob> {
@@ -368,74 +377,101 @@ export async function generateFreightManifestPdf(params: FreightManifestParams):
   const pageHeight = doc.internal.pageSize.getHeight()
   const tableStartY = drawHeader(doc, params, logoDataUrl)
 
-  const { rows: dataRows, totalRowIndexes } = buildFreightManifestRows(params.shipments)
+  const { rows: dataRows, summaryRowIndex } = buildFreightManifestRows(params.shipments)
   const rows = buildTableBodyRows(dataRows, pageHeight, tableStartY)
   const singlePage = dataRows.length <= getMaxBodyRows(pageHeight, tableStartY)
 
   autoTable(doc, {
     startY: tableStartY,
     tableWidth: TABLE_WIDTH_MM,
-    head: [[
-      'N°',
-      'EXPEDITEUR',
-      'DESTINATAIRE',
-      'LTA',
-      'COLIS',
-      'POIDS\nTOTAL',
-      'MONTANT\nTOTAL',
-      'SOLDE',
-      'MONTANT\nPAYE',
-      'SOLDE',
-      'RESTE\nA PAYER',
-      'SOLDE',
-      'MODE\nPAIEMENT',
-    ]],
+    head: [
+      [
+        { content: 'LTA', rowSpan: 2, styles: { valign: 'middle' } },
+        { content: 'EXPÉDITEUR', rowSpan: 2, styles: { valign: 'middle' } },
+        { content: 'DESTINATAIRE', rowSpan: 2, styles: { valign: 'middle' } },
+        { content: 'NBR.\nDE COLIS', rowSpan: 2, styles: { valign: 'middle' } },
+        { content: 'PODS\nPAR COLIS', rowSpan: 2, styles: { valign: 'middle' } },
+        { content: 'TOTAL\nKgs', rowSpan: 2, styles: { valign: 'middle' } },
+        { content: 'P. U', rowSpan: 2, styles: { valign: 'middle' } },
+        { content: 'TOTAL\nEN $', rowSpan: 2, styles: { valign: 'middle' } },
+        { content: 'NET PAYER', colSpan: 2, styles: { halign: 'center' } },
+        { content: 'ETATS', colSpan: 3, styles: { halign: 'center' } },
+        { content: 'SOLDE', colSpan: 2, styles: { halign: 'center' } },
+        { content: 'RESTE', colSpan: 2, styles: { halign: 'center' } },
+        { content: 'OBS.', rowSpan: 2, styles: { valign: 'middle' } },
+      ],
+      [
+        'USD',
+        'CDF',
+        'CASH',
+        'P. D',
+        'ACC',
+        'USD',
+        'CDF',
+        'MNT',
+        'SOLDE',
+      ],
+    ],
     body: rows,
     theme: 'grid',
     styles: {
       font: 'helvetica',
-      fontSize: 7,
-      cellPadding: 1.8,
-      lineColor: [180, 180, 180],
+      fontSize: 6,
+      cellPadding: 1,
+      lineColor: [40, 40, 40],
       lineWidth: 0.2,
       valign: 'middle',
-      minCellHeight: 6,
+      minCellHeight: 5.5,
       overflow: 'linebreak',
     },
     headStyles: {
       fillColor: HEADER_FILL,
-      textColor: [40, 40, 40],
+      textColor: [20, 20, 20],
       fontStyle: 'bold',
       halign: 'center',
-      fontSize: 6.5,
-      cellPadding: 2,
+      fontSize: 5.5,
+      cellPadding: 1,
     },
     columnStyles: {
-      0: { cellWidth: COLUMN_WIDTHS_MM.index, halign: 'center' },
-      1: { cellWidth: COLUMN_WIDTHS_MM.senderNumber },
-      2: { cellWidth: COLUMN_WIDTHS_MM.receiver },
-      3: { cellWidth: COLUMN_WIDTHS_MM.lta, halign: 'center' },
-      4: { cellWidth: COLUMN_WIDTHS_MM.packages, halign: 'right' },
-      5: { cellWidth: COLUMN_WIDTHS_MM.totalWeight, halign: 'right' },
-      6: { cellWidth: COLUMN_WIDTHS_MM.totalAmount, halign: 'right' },
-      7: { cellWidth: COLUMN_WIDTHS_MM.balanceTotal, halign: 'right' },
-      8: { cellWidth: COLUMN_WIDTHS_MM.paidAmount, halign: 'right' },
-      9: { cellWidth: COLUMN_WIDTHS_MM.balancePaid, halign: 'right' },
-      10: { cellWidth: COLUMN_WIDTHS_MM.remainingAmount, halign: 'right' },
-      11: { cellWidth: COLUMN_WIDTHS_MM.balanceRemaining, halign: 'right' },
-      12: { cellWidth: COLUMN_WIDTHS_MM.paymentMode, halign: 'center' },
+      0: { cellWidth: COLUMN_WIDTHS_MM.lta, halign: 'center' },
+      1: { cellWidth: COLUMN_WIDTHS_MM.sender, halign: 'left' },
+      2: { cellWidth: COLUMN_WIDTHS_MM.receiver, halign: 'left' },
+      3: { cellWidth: COLUMN_WIDTHS_MM.packages, halign: 'center' },
+      4: { cellWidth: COLUMN_WIDTHS_MM.weightsPerPackage, halign: 'center' },
+      5: { cellWidth: COLUMN_WIDTHS_MM.totalKg, halign: 'center' },
+      6: { cellWidth: COLUMN_WIDTHS_MM.unitPrice, halign: 'center' },
+      7: { cellWidth: COLUMN_WIDTHS_MM.totalAmount, halign: 'right' },
+      8: { cellWidth: COLUMN_WIDTHS_MM.netUsd, halign: 'right' },
+      9: { cellWidth: COLUMN_WIDTHS_MM.netCdf, halign: 'right' },
+      10: { cellWidth: COLUMN_WIDTHS_MM.cash, halign: 'center' },
+      11: { cellWidth: COLUMN_WIDTHS_MM.partial, halign: 'center' },
+      12: { cellWidth: COLUMN_WIDTHS_MM.arrival, halign: 'center' },
+      13: { cellWidth: COLUMN_WIDTHS_MM.soldeUsd, halign: 'right' },
+      14: { cellWidth: COLUMN_WIDTHS_MM.soldeCdf, halign: 'right' },
+      15: { cellWidth: COLUMN_WIDTHS_MM.resteMnt, halign: 'right' },
+      16: { cellWidth: COLUMN_WIDTHS_MM.resteSolde, halign: 'right' },
+      17: { cellWidth: COLUMN_WIDTHS_MM.obs, halign: 'left' },
     },
     margin: { left: MARGIN_X, right: MARGIN_X, bottom: FOOTER_HEIGHT_MM },
     showHead: singlePage ? 'firstPage' : 'everyPage',
     didParseCell: (data) => {
-      if (data.section !== 'body' || !totalRowIndexes.has(data.row.index)) return
-      data.cell.styles.fontStyle = 'bold'
-      data.cell.styles.fillColor = [245, 245, 245]
-      const amountColumns = new Set([6, 7, 8, 9, 10, 11])
-      if (data.column.index === 1) {
-        data.cell.styles.halign = 'left'
-      } else if (amountColumns.has(data.column.index)) {
-        data.cell.styles.halign = 'right'
+      if (data.section !== 'body') return
+
+      if (data.row.index === summaryRowIndex) {
+        data.cell.styles.fontStyle = 'bold'
+        data.cell.styles.fillColor = SUMMARY_FILL
+        if (data.column.index === 7) {
+          data.cell.styles.textColor = TOTAL_RED
+        }
+        if ([8, 9, 13, 14, 15, 16].includes(data.column.index)) {
+          data.cell.styles.textColor = NET_BLUE
+        }
+        return
+      }
+
+      if (data.column.index === 7 && data.cell.raw) {
+        data.cell.styles.textColor = TOTAL_RED
+        data.cell.styles.fontStyle = 'bold'
       }
     },
   })
@@ -450,10 +486,15 @@ export async function generateFreightManifestPdf(params: FreightManifestParams):
 }
 
 export function buildFreightManifestFileName(
-  params: Pick<FreightManifestParams, 'departureCode' | 'destinationCode' | 'shipmentDate'>,
+  params: Pick<FreightManifestParams, 'departureLabel' | 'departureCode' | 'destinationCode' | 'shipmentDate'>,
 ): string {
-  const date = params.shipmentDate.replace(/-/g, '')
-  return `MANIFESTE_FRET_${params.departureCode}_${params.destinationCode}_${date}.pdf`
+  const place = (params.departureLabel || params.departureCode || 'FRET')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '')
+    .toUpperCase()
+  return `RAPPORT_MANIFESTE_FRET_EXPEDIE_${place}.pdf`
 }
 
 export function resolveFreightManifestFlightNumber(
