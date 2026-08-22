@@ -24,6 +24,9 @@ export interface CheckIn extends HydraResource {
   netToPay: string
   handBaggageWeight: string
   observations?: string
+  weightJustification?: string | null
+  hasWeightReduction?: boolean
+  destinationObservations?: string | null
   encodedAt?: string
   baggages?: CheckInBaggage[]
   status?: string
@@ -52,9 +55,16 @@ export interface CheckInCreatePayload {
   excessPrice: string
   currency: string
   paymentCurrency: string
+  /** Paiement mixte : partie USD (avec paidAmountCdf). */
+  paidAmountUsd?: string
+  /** Paiement mixte : partie CDF (avec paidAmountUsd). */
+  paidAmountCdf?: string
   netToPay: string
   handBaggageWeight: string
   observations: string
+  weightJustification?: string | null
+  hasWeightReduction: boolean
+  destinationObservations?: string | null
   encodedAt?: string
   baggages: CheckInBaggageInput[]
 }
@@ -68,6 +78,9 @@ export interface CheckInPatchPayload {
   netToPay: string
   handBaggageWeight: string
   observations: string
+  weightJustification?: string | null
+  hasWeightReduction: boolean
+  destinationObservations?: string | null
   encodedAt?: string
   baggages: CheckInBaggagePatchInput[]
 }

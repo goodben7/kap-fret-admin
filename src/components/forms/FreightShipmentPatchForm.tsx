@@ -98,12 +98,12 @@ export function FreightShipmentPatchForm({
   const computedRemainingAmount = computeFreightRemainingAmount(computedTotalAmount, paidAmount)
 
   const isCashPayment = paymentMode === FREIGHT_PAYMENT_MODE.CASH
-  const isPartialPayment = paymentMode === FREIGHT_PAYMENT_MODE.PARTIAL
-  const canEditPaidAmount = isPartialPayment
+  const isAccPayment = paymentMode === FREIGHT_PAYMENT_MODE.ACC
+  const canEditPaidAmount = isAccPayment
 
   useEffect(() => {
     setValue('totalAmount', computedTotalAmount, { shouldValidate: true })
-    if (isPartialPayment) {
+    if (isAccPayment) {
       const paid = getValues('paidAmount')
       const clamped = clampFreightPartialPaidAmount(paid, computedTotalAmount)
       if (clamped !== paid) {
@@ -112,12 +112,12 @@ export function FreightShipmentPatchForm({
         void trigger('paidAmount')
       }
     }
-  }, [computedTotalAmount, isPartialPayment, getValues, setValue, trigger])
+  }, [computedTotalAmount, isAccPayment, getValues, setValue, trigger])
 
   useEffect(() => {
     if (isCashPayment) {
       setValue('paidAmount', computedTotalAmount, { shouldValidate: true })
-    } else if (paymentMode === FREIGHT_PAYMENT_MODE.AT_ARRIVAL) {
+    } else if (paymentMode === FREIGHT_PAYMENT_MODE.PTA) {
       setValue('paidAmount', '0.00', { shouldValidate: true })
     }
   }, [isCashPayment, paymentMode, computedTotalAmount, setValue])
@@ -139,7 +139,7 @@ export function FreightShipmentPatchForm({
     if (mode === FREIGHT_PAYMENT_MODE.CASH) {
       paid = total
       setValue('paidAmount', paid, { shouldValidate: true })
-    } else if (mode === FREIGHT_PAYMENT_MODE.PARTIAL) {
+    } else if (mode === FREIGHT_PAYMENT_MODE.ACC) {
       const clamped = clampFreightPartialPaidAmount(paid, total)
       if (clamped !== paid) {
         paid = clamped
@@ -289,7 +289,7 @@ export function FreightShipmentPatchForm({
           label="Mode de paiement"
           options={paymentModeOptions}
           variant="filter"
-          value={paymentMode ?? FREIGHT_PAYMENT_MODE.AT_ARRIVAL}
+          value={paymentMode ?? FREIGHT_PAYMENT_MODE.CASH}
           onChange={(e) =>
             handlePaymentModeChange(e.target.value as FreightShipmentPatchFormData['paymentMode'])
           }

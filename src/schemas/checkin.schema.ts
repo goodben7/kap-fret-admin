@@ -23,9 +23,15 @@ const checkInFieldsSchema = z.object({
   excessPrice: z.string().min(1, 'Prix excédent requis'),
   currency: z.enum([CURRENCY.CDF, CURRENCY.USD], { message: 'Devise requise' }),
   paymentCurrency: z.enum([CURRENCY.CDF, CURRENCY.USD], { message: 'Devise de paiement requise' }),
+  mixedPayment: z.boolean().optional(),
+  paidAmountUsd: z.string().optional(),
+  paidAmountCdf: z.string().optional(),
   netToPay: z.string().min(1, 'Net à payer requis'),
   handBaggageWeight: z.string().optional(),
   observations: z.string().optional(),
+  weightJustification: z.string().optional(),
+  hasWeightReduction: z.boolean().optional(),
+  destinationObservations: z.string().optional(),
   encodedAt: z.string().optional(),
   baggages: z.array(checkInBaggageItemSchema),
 })
@@ -44,12 +50,55 @@ export const checkInCreateSchema = checkInFieldsSchema
         message: 'Caisse requise lorsqu\'il y a un excédent bagage',
       })
     }
+    if (data.hasWeightReduction && !data.weightJustification?.trim()) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['weightJustification'],
+        message: 'Justification requise pour une réduction de poids',
+      })
+    }
+    if (data.mixedPayment && excess > 0) {
+      const usd = parseFloat(String(data.paidAmountUsd ?? '').replace(',', '.'))
+      const cdf = parseFloat(String(data.paidAmountCdf ?? '').replace(',', '.'))
+      if (!Number.isFinite(usd) || usd <= 0) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['paidAmountUsd'],
+          message: 'Montant USD requis (> 0) pour un paiement mixte',
+        })
+      }
+      if (!Number.isFinite(cdf) || cdf <= 0) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['paidAmountCdf'],
+          message: 'Montant CDF requis (> 0) pour un paiement mixte',
+        })
+      }
+      const due = parseFloat(String(data.netToPay ?? '').replace(',', '.')) || 0
+      if (Number.isFinite(usd) && usd >= due && due > 0) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['paidAmountUsd'],
+          message: 'En mixte, le USD doit être inférieur au net à payer',
+        })
+      }
+    }
   })
 
-export const checkInPatchSchema = checkInFieldsSchema.extend({
-  ticketIri: z.string().optional(),
-  cashRegister: z.string().optional(),
-})
+export const checkInPatchSchema = checkInFieldsSchema
+  .extend({
+    ticketIri: z.string().optional(),
+    cashRegister: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.hasWeightReduction && !data.weightJustification?.trim()) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['weightJustification'],
+        message: 'Justification requise pour une réduction de poids',
+      })
+    }
+  })
 
 export type CheckInBaggageItemFormData = z.infer<typeof checkInBaggageItemSchema>
 export type CheckInCreateFormData = z.infer<typeof checkInCreateSchema>

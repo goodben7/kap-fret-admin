@@ -3,6 +3,12 @@ export const BRAND = {
   logoIconSrc: '/logo.png',
   logoAlt: 'KAP FRET — Gestion transport aérien',
   tagline: 'Gestion Transport Aérien',
+  legalName: 'KAP FRET S.A.R.L',
+  rccm: 'CD/KIN RCCM/25-B-4354',
+  idNat: '01-F4300-N87895S',
+  taxNumber: 'A0814441G',
+  address: 'C/BARUMBU, Q/ FUNA, AV/ MILITANT, N° : 05 Aéroport de Ndolo',
+  contactLine: 'CONTACT : +243 820 665 757 — +243 814 936 051 / R.D CONGO – KINSHASA',
   navy: '#0B213D',
   orange: '#F57C00',
 } as const

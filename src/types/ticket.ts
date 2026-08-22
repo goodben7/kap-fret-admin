@@ -44,6 +44,8 @@ export interface Ticket extends HydraResource {
   paymentMode: PaymentMode
   sponsor?: string | null
   cashRegister?: string | CashRegisterRef
+  totalAmount?: string
+  paidAmount?: string
   issuingAgent?: string | TicketUserRef
   issuedAt?: string
   travelDateChangedAt?: string
@@ -61,6 +63,7 @@ export interface Ticket extends HydraResource {
 }
 
 export interface TicketCreatePayload {
+  ticketNumber?: string | null
   passengerName: string
   age?: number
   category: TicketCategory
@@ -91,7 +94,7 @@ export interface TicketCreatePayload {
  */
 export interface TicketPatchPayload {
   passengerName: string
-  age: number
+  age?: number | null
   gender: Gender
   phone: string
   departure: string
@@ -112,10 +115,14 @@ export interface TicketReportTravelDatePayload {
 }
 
 export interface TicketPaymentPayload {
-  /** Montant du billet en USD. */
-  amount: string
-  /** Devise d'encaissement. */
+  /** Montant du billet en USD (mode simple). */
+  amount?: string
+  /** Devise d'encaissement (mode simple). */
   paymentCurrency: Currency
+  /** Paiement mixte : partie USD. */
+  paidAmountUsd?: string
+  /** Paiement mixte : partie CDF. */
+  paidAmountCdf?: string
   cashRegister: string
   description: string
 }

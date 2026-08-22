@@ -11,6 +11,7 @@ import {
   Banknote,
   ArrowLeftRight,
   Receipt,
+  Tags,
   type LucideIcon,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -65,6 +66,12 @@ const adminSections: AdminSection[] = [
         description: 'Conversions entre devises du bureau',
         path: '/admin/exchange-rates',
         icon: ArrowLeftRight,
+      },
+      {
+        title: 'Tarifs catégories',
+        description: 'Prix de base INF / Enfant / Adulte (USD)',
+        path: '/admin/ticket-category-prices',
+        icon: Tags,
       },
       {
         title: 'Mouvements Financiers',

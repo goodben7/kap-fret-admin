@@ -158,8 +158,34 @@ export function toIssuingOfficeIri(value: string): string {
   return toIri('issuing_offices', value)
 }
 
-export function getBasePriceForCategory(category: TicketCategory): string {
+export function getBasePriceForCategory(
+  category: TicketCategory,
+  pricesByCategory?: Partial<Record<TicketCategory, string>>,
+): string {
+  const fromApi = pricesByCategory?.[category]?.trim()
+  if (fromApi) return fromApi
   return TICKET_CATEGORY_BASE_PRICE_USD[category]
+}
+
+export function getTicketPaidAmount(ticket: Pick<Ticket, 'paidAmount' | 'totalAmount' | 'basePrice' | 'tva' | 'fpt' | 'rva'>): number {
+  if (ticket.paidAmount != null && ticket.paidAmount !== '') {
+    return parseFloat(ticket.paidAmount) || 0
+  }
+  return 0
+}
+
+export function getTicketTotalAmount(ticket: Pick<Ticket, 'totalAmount' | 'basePrice' | 'tva' | 'fpt' | 'rva'>): number {
+  if (ticket.totalAmount != null && ticket.totalAmount !== '') {
+    return parseFloat(ticket.totalAmount) || 0
+  }
+  return getTicketTotal(ticket)
+}
+
+export function getTicketRemainingAmount(
+  ticket: Pick<Ticket, 'paidAmount' | 'totalAmount' | 'basePrice' | 'tva' | 'fpt' | 'rva'>,
+): number {
+  const remaining = getTicketTotalAmount(ticket) - getTicketPaidAmount(ticket)
+  return remaining > 0 ? remaining : 0
 }
 
 /** Montant à encaisser dans la devise de paiement (tarif billet toujours en USD). */
@@ -198,7 +224,12 @@ export function toTicketCreatePayload(data: TicketFormData): TicketCreatePayload
     rva: String(data.rva),
     baggageAllowanceKg: String(data.baggageAllowanceKg),
     paymentMode: data.paymentMode,
-    sponsor: data.paymentMode === PAYMENT_MODE.SPONSOR ? (data.sponsor ?? null) : null,
+    sponsor: null,
+  }
+
+  const ticketNumber = data.ticketNumber?.trim()
+  if (ticketNumber) {
+    payload.ticketNumber = ticketNumber
   }
 
   if (data.age !== undefined) {
@@ -216,16 +247,26 @@ export function buildTicketPaymentDescription(ticket: Pick<Ticket, 'ticketNumber
   return `Paiement billet ${ticket.ticketNumber} — ${ticket.passengerName}`
 }
 
-export function getTicketPaymentAmount(ticket: Pick<Ticket, 'basePrice' | 'tva' | 'fpt' | 'rva'>): string {
-  return getTicketTotal(ticket).toFixed(2)
+export function getTicketPaymentAmount(ticket: Pick<Ticket, 'basePrice' | 'tva' | 'fpt' | 'rva' | 'paidAmount' | 'totalAmount'>): string {
+  return getTicketRemainingAmount(ticket).toFixed(2)
 }
 
 export function toTicketPaymentPayload(
-  ticket: Pick<Ticket, 'ticketNumber' | 'passengerName' | 'basePrice' | 'tva' | 'fpt' | 'rva'>,
+  ticket: Pick<Ticket, 'ticketNumber' | 'passengerName' | 'basePrice' | 'tva' | 'fpt' | 'rva' | 'paidAmount' | 'totalAmount'>,
   data: TicketPaymentFormData,
 ): TicketPaymentPayload {
+  if (data.mixedPayment) {
+    return {
+      paymentCurrency: CURRENCY.USD,
+      paidAmountUsd: data.paidAmountUsd?.trim() || '0',
+      paidAmountCdf: data.paidAmountCdf?.trim() || '0',
+      cashRegister: data.cashRegister,
+      description: data.description.trim(),
+    }
+  }
+
   return {
-    amount: getTicketPaymentAmount(ticket),
+    amount: data.amount?.trim() || getTicketPaymentAmount(ticket),
     paymentCurrency: data.paymentCurrency,
     cashRegister: data.cashRegister,
     description: data.description.trim(),
@@ -234,9 +275,8 @@ export function toTicketPaymentPayload(
 
 /** Payload PATCH strict — champs modifiables API uniquement */
 export function toTicketPatchPayload(data: TicketPatchFormData): TicketPatchPayload {
-  return {
+  const payload: TicketPatchPayload = {
     passengerName: data.passengerName,
-    age: data.age,
     gender: data.gender,
     phone: data.phone ?? '',
     departure: data.departure,
@@ -245,6 +285,10 @@ export function toTicketPatchPayload(data: TicketPatchFormData): TicketPatchPayl
     travelTime: data.travelTime,
     sponsor: data.sponsor ?? '',
   }
+  if (data.age !== undefined) {
+    payload.age = data.age
+  }
+  return payload
 }
 
 export function toTicketReportTravelDatePayload(

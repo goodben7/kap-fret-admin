@@ -20,7 +20,8 @@ import {
   parseCashRegisterFiltersFromSearchParams,
   type CashRegisterFiltersState,
 } from '@/lib/cash-register-filters'
-import { formatCashRegisterBalancesSummary } from '@/lib/cash-register'
+import { formatCashRegisterBalancesSummary, normalizeCashRegisterModule } from '@/lib/cash-register'
+import { CASH_REGISTER_MODULE_LABELS } from '@/constants/cash-register'
 import { CURRENCY } from '@/constants/ticket'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -121,6 +122,9 @@ function CashRegisterCard({ register }: { register: CashRegisterResource }) {
               <div className="flex flex-wrap items-center gap-2">
                 <p className="font-semibold truncate">{register.name}</p>
                 <Badge variant={register.active ? 'success' : 'destructive'}>{register.active ? 'Actif' : 'Inactif'}</Badge>
+                <Badge variant="secondary">
+                  {CASH_REGISTER_MODULE_LABELS[normalizeCashRegisterModule(register.module)]}
+                </Badge>
               </div>
               <p className="font-mono text-xs font-semibold text-primary">{register.code}</p>
               <p className="text-sm font-bold tabular-nums text-brand-orange">{balances}</p>
@@ -146,6 +150,7 @@ function CashRegisterTable({ registers }: { registers: CashRegisterResource[] })
           <TableRow className="hover:bg-transparent">
             <TableHead>Code</TableHead>
             <TableHead>Nom</TableHead>
+            <TableHead>Module</TableHead>
             <TableHead className="text-right">Solde USD</TableHead>
             <TableHead className="text-right">Solde CDF</TableHead>
             <TableHead>Statut</TableHead>
@@ -157,6 +162,11 @@ function CashRegisterTable({ registers }: { registers: CashRegisterResource[] })
               <TableRow key={register.id}>
                 <TableCell className="cursor-pointer font-mono text-xs" onClick={() => void navigate(`/admin/cash-registers/${register.id}`)}>{register.code}</TableCell>
                 <TableCell className="cursor-pointer font-medium" onClick={() => void navigate(`/admin/cash-registers/${register.id}`)}>{register.name}</TableCell>
+                <TableCell>
+                  <Badge variant="secondary">
+                    {CASH_REGISTER_MODULE_LABELS[normalizeCashRegisterModule(register.module)]}
+                  </Badge>
+                </TableCell>
                 <TableCell className="text-right font-semibold tabular-nums">{formatMoney(parseFloat(register.currentBalanceUSD) || 0, CURRENCY.USD)}</TableCell>
                 <TableCell className="text-right font-semibold tabular-nums">{formatMoney(parseFloat(register.currentBalanceCDF) || 0, CURRENCY.CDF)}</TableCell>
                 <TableCell><Badge variant={register.active ? 'success' : 'destructive'}>{register.active ? 'Actif' : 'Inactif'}</Badge></TableCell>
@@ -248,6 +258,12 @@ export function CashRegistersPage() {
             <Link to="/admin/cash-registers/transfer">
               <ArrowLeftRight className="h-4 w-4 sm:mr-1.5" />
               <span className="hidden sm:inline">Transfert</span>
+            </Link>
+          </Button>
+          <Button asChild size="sm" variant="outline" className="rounded-full px-4 shadow-sm">
+            <Link to="/finance/debts">
+              <span className="hidden sm:inline">Dettes</span>
+              <span className="sm:hidden">Dettes</span>
             </Link>
           </Button>
           <Button asChild size="sm" className="rounded-full px-4 shadow-sm">

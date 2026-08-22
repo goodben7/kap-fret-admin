@@ -17,6 +17,7 @@ import {
   FileText,
 } from 'lucide-react'
 import { FreightManifestModal } from '@/components/freight/FreightManifestModal'
+import { TicketContactActions } from '@/components/tickets/TicketContactActions'
 import { useFreight } from '@/hooks/useFreight'
 import {
   FREIGHT_PAYMENT_MODE_LABELS,
@@ -264,9 +265,9 @@ function FreightCard({ shipment }: { shipment: FreightShipment }) {
   const total = parseFloat(shipment.totalAmount) || 0
 
   return (
-    <Link to={`/freight/${shipment.id}`} className="block group">
-      <Card className="overflow-hidden border-border/80 shadow-sm transition-all active:scale-[0.99] group-hover:border-brand-orange/40 group-hover:shadow-md">
-        <CardContent className="p-4">
+    <Card className="overflow-hidden border-border/80 shadow-sm transition-all group-hover:border-brand-orange/40 group-hover:shadow-md">
+      <CardContent className="p-4">
+        <Link to={`/freight/${shipment.id}`} className="block group">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
@@ -292,6 +293,9 @@ function FreightCard({ shipment }: { shipment: FreightShipment }) {
                 </span>
                 <span>{shipment.packageCount} colis</span>
               </div>
+              <p className="truncate text-xs text-muted-foreground">
+                {shipment.senderName} → {shipment.receiverName}
+              </p>
             </div>
             <div className="flex flex-col items-end gap-2 shrink-0">
               <div className="text-right">
@@ -303,9 +307,27 @@ function FreightCard({ shipment }: { shipment: FreightShipment }) {
               <ChevronRight className="h-5 w-5 text-muted-foreground/50 group-hover:text-brand-orange transition-colors" />
             </div>
           </div>
-        </CardContent>
-      </Card>
-    </Link>
+        </Link>
+        {(shipment.senderPhone || shipment.receiverPhone) && (
+          <div className="mt-3 flex flex-wrap gap-2 border-t border-border/60 pt-3">
+            {shipment.senderPhone && (
+              <TicketContactActions
+                phone={shipment.senderPhone}
+                passengerName={shipment.senderName}
+                size="sm"
+              />
+            )}
+            {shipment.receiverPhone && shipment.receiverPhone !== shipment.senderPhone && (
+              <TicketContactActions
+                phone={shipment.receiverPhone}
+                passengerName={shipment.receiverName}
+                size="sm"
+              />
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 

@@ -217,8 +217,8 @@ function buildFreightManifestRows(shipments: FreightShipment[]): ManifestTableBu
     runningReste += remainingAmount
 
     const isCash = shipment.paymentMode === FREIGHT_PAYMENT_MODE.CASH
-    const isPartial = shipment.paymentMode === FREIGHT_PAYMENT_MODE.PARTIAL
-    const isArrival = shipment.paymentMode === FREIGHT_PAYMENT_MODE.AT_ARRIVAL
+    const isAcc = shipment.paymentMode === FREIGHT_PAYMENT_MODE.ACC
+    const isPta = shipment.paymentMode === FREIGHT_PAYMENT_MODE.PTA
 
     const netUsd = currency === CURRENCY.USD ? formatAmountOrDash(paidAmount, CURRENCY.USD) : DASH
     const netCdf = currency === CURRENCY.CDF ? formatAmountOrDash(paidAmount, CURRENCY.CDF) : DASH
@@ -238,8 +238,8 @@ function buildFreightManifestRows(shipments: FreightShipment[]): ManifestTableBu
       netUsd,
       netCdf,
       isCash ? 'CASH' : '',
-      isPartial ? 'P. D' : '',
-      isArrival ? 'ACC' : '',
+      isAcc ? 'ACC' : '',
+      isPta ? 'PTA' : '',
       formatAmountOrDash(runningNetUsd, CURRENCY.USD),
       formatAmountOrDash(runningNetCdf, CURRENCY.CDF),
       formatAmountOrDash(remainingAmount, currency),
@@ -404,8 +404,8 @@ export async function generateFreightManifestPdf(params: FreightManifestParams):
         'USD',
         'CDF',
         'CASH',
-        'P. D',
         'ACC',
+        'PTA',
         'USD',
         'CDF',
         'MNT',

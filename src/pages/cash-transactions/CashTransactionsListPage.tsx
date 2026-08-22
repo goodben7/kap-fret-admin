@@ -8,6 +8,7 @@ import {
   ChevronRight,
   LayoutGrid,
   Plus,
+  Printer,
   Receipt,
   SlidersHorizontal,
   Table2,
@@ -52,6 +53,8 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { CashTransactionStatusBadge } from '@/components/cash-transactions/CashTransactionStatusBadge'
 import { extractIri } from '@/lib/hydra'
 import { formatDate, formatDateTime, formatMoney, cn } from '@/lib/utils'
+import { downloadCashTransactionsListPdf } from '@/lib/cash-transactions-list-pdf'
+import { toast } from 'sonner'
 
 const ITEMS_PER_PAGE = 20
 
@@ -212,10 +215,40 @@ function CashTransactionFiltersFields({
       </FilterSection>
       <FilterSection title="Dates" icon={Receipt}>
         <Input
-          label="Date de transaction"
+          label="Du (transaction)"
+          type="date"
+          value={draft.transactionDateFrom}
+          onChange={(e) =>
+            onChange({
+              transactionDateFrom: e.target.value,
+              transactionDate: '',
+            })
+          }
+          className={filterInputClass}
+        />
+        <Input
+          label="Au (transaction)"
+          type="date"
+          value={draft.transactionDateTo}
+          onChange={(e) =>
+            onChange({
+              transactionDateTo: e.target.value,
+              transactionDate: '',
+            })
+          }
+          className={filterInputClass}
+        />
+        <Input
+          label="Jour unique (transaction)"
           type="date"
           value={draft.transactionDate}
-          onChange={(e) => onChange({ transactionDate: e.target.value })}
+          onChange={(e) =>
+            onChange({
+              transactionDate: e.target.value,
+              transactionDateFrom: '',
+              transactionDateTo: '',
+            })
+          }
           className={filterInputClass}
         />
         <Input
@@ -224,6 +257,17 @@ function CashTransactionFiltersFields({
           value={draft.createdAt}
           onChange={(e) => onChange({ createdAt: e.target.value })}
           className={filterInputClass}
+        />
+        <Select
+          label="Devise d'encaissement"
+          options={[
+            { value: '', label: 'Toutes' },
+            { value: 'USD', label: 'USD' },
+            { value: 'CDF', label: 'CDF' },
+          ]}
+          value={draft.currency}
+          onChange={(e) => onChange({ currency: e.target.value as CashTransactionFiltersState['currency'] })}
+          variant="filter"
         />
       </FilterSection>
     </div>
@@ -285,6 +329,28 @@ export function CashTransactionsListPage() {
     setSearchParams(cashTransactionFiltersToSearchParams(next, page), { replace: true })
   }
 
+  const handlePrint = () => {
+    const items = data?.items ?? []
+    if (!items.length) {
+      toast.error('Aucun mouvement à imprimer')
+      return
+    }
+    const parts: string[] = []
+    if (filters.transactionDateFrom || filters.transactionDateTo) {
+      parts.push(`Période ${filters.transactionDateFrom || '…'} → ${filters.transactionDateTo || '…'}`)
+    } else if (filters.transactionDate) {
+      parts.push(`Jour ${filters.transactionDate}`)
+    }
+    if (filters.currency) parts.push(`Devise ${filters.currency}`)
+    if (filters.type) parts.push(`Type ${CASH_TRANSACTION_TYPE_LABELS[filters.type]}`)
+    if (filters.status) parts.push(`Statut ${getCashTransactionStatusLabel(filters.status)}`)
+    downloadCashTransactionsListPdf({
+      transactions: items,
+      filtersLabel: parts.length ? parts.join(' · ') : undefined,
+    })
+    toast.success('PDF généré')
+  }
+
   return (
     <div className="mx-auto max-w-3xl space-y-4 pb-6 lg:max-w-5xl">
       <Link
@@ -330,6 +396,17 @@ export function CashTransactionsListPage() {
               <Table2 className="h-4 w-4" />
             </Button>
           </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="rounded-full px-4 shadow-sm"
+            onClick={handlePrint}
+            disabled={!data?.items.length}
+          >
+            <Printer className="h-4 w-4 sm:mr-1.5" />
+            <span className="hidden sm:inline">Imprimer</span>
+          </Button>
           <Button asChild size="sm" variant="outline" className="rounded-full px-4 shadow-sm">
             <Link to="/admin/cash-registers/transfer">
               <ArrowLeftRight className="h-4 w-4 sm:mr-1.5" />
@@ -425,10 +502,23 @@ export function CashTransactionsListPage() {
               onRemove={() => patchFilters({ transactionDate: '' })}
             />
           )}
+          {(filters.transactionDateFrom || filters.transactionDateTo) && (
+            <FilterChip
+              label={`Du ${filters.transactionDateFrom || '…'} au ${filters.transactionDateTo || '…'}`}
+              onRemove={() => patchFilters({ transactionDateFrom: '', transactionDateTo: '' })}
+            />
+          )}
+          {filters.currency && (
+            <FilterChip
+              label={`Devise ${filters.currency}`}
+              onRemove={() => patchFilters({ currency: '' })}
+            />
+          )}
           {filters.createdAt && (
             <FilterChip
               label={`Créée ${formatDate(filters.createdAt)}`}
-              onRemove={() => patchFilters({ createdAt: '' })} />
+              onRemove={() => patchFilters({ createdAt: '' })}
+            />
           )}
         </div>
       )}

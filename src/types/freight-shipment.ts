@@ -87,6 +87,9 @@ export interface FreightShipmentCreatePayload {
   ltaFees: string
   totalAmount: string
   currency: string
+  paymentCurrency?: string
+  paidAmountUsd?: string
+  paidAmountCdf?: string
   paidAmount: string
   remainingAmount: string
   paymentMode: string

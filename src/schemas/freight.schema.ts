@@ -62,12 +62,16 @@ export const freightShipmentSchema = z
   ltaFees: z.string().min(1, 'Frais LTA requis'),
   totalAmount: z.string().min(1, 'Montant total requis'),
   currency: z.enum([CURRENCY.CDF, CURRENCY.USD], { message: 'Devise requise' }),
+  paymentCurrency: z.enum([CURRENCY.CDF, CURRENCY.USD]).optional(),
+  mixedPayment: z.boolean().optional(),
+  paidAmountUsd: z.string().optional(),
+  paidAmountCdf: z.string().optional(),
   paidAmount: z.string().min(1, 'Montant payé requis'),
   remainingAmount: z.string().min(1, 'Reste à payer requis'),
   paymentMode: z.enum([
     FREIGHT_PAYMENT_MODE.CASH,
-    FREIGHT_PAYMENT_MODE.PARTIAL,
-    FREIGHT_PAYMENT_MODE.AT_ARRIVAL,
+    FREIGHT_PAYMENT_MODE.ACC,
+    FREIGHT_PAYMENT_MODE.PTA,
   ]),
   observations: z.string().optional(),
   cashRegister: z.string().optional(),
@@ -75,7 +79,7 @@ export const freightShipmentSchema = z
 })
   .superRefine((data, ctx) => {
     if (
-      (data.paymentMode === FREIGHT_PAYMENT_MODE.CASH || data.paymentMode === FREIGHT_PAYMENT_MODE.PARTIAL)
+      (data.paymentMode === FREIGHT_PAYMENT_MODE.CASH || data.paymentMode === FREIGHT_PAYMENT_MODE.ACC)
       && !data.cashRegister?.trim()
     ) {
       ctx.addIssue({
@@ -88,7 +92,29 @@ export const freightShipmentSchema = z
       })
     }
 
-    if (data.paymentMode !== FREIGHT_PAYMENT_MODE.PARTIAL) return
+    if (
+      data.mixedPayment
+      && (data.paymentMode === FREIGHT_PAYMENT_MODE.CASH || data.paymentMode === FREIGHT_PAYMENT_MODE.ACC)
+    ) {
+      const usd = parseFloat(String(data.paidAmountUsd ?? '').replace(',', '.'))
+      const cdf = parseFloat(String(data.paidAmountCdf ?? '').replace(',', '.'))
+      if (!Number.isFinite(usd) || usd <= 0) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['paidAmountUsd'],
+          message: 'Montant USD requis (> 0) pour un paiement mixte',
+        })
+      }
+      if (!Number.isFinite(cdf) || cdf <= 0) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['paidAmountCdf'],
+          message: 'Montant CDF requis (> 0) pour un paiement mixte',
+        })
+      }
+    }
+
+    if (data.paymentMode !== FREIGHT_PAYMENT_MODE.ACC) return
 
     const total = parseFloat(data.totalAmount) || 0
     const paid = parseFloat(data.paidAmount) || 0
@@ -129,13 +155,13 @@ export const freightShipmentPatchSchema = z
   remainingAmount: z.string().min(1, 'Reste à payer requis'),
   paymentMode: z.enum([
     FREIGHT_PAYMENT_MODE.CASH,
-    FREIGHT_PAYMENT_MODE.PARTIAL,
-    FREIGHT_PAYMENT_MODE.AT_ARRIVAL,
+    FREIGHT_PAYMENT_MODE.ACC,
+    FREIGHT_PAYMENT_MODE.PTA,
   ]),
   observations: z.string().optional(),
 })
   .superRefine((data, ctx) => {
-    if (data.paymentMode !== FREIGHT_PAYMENT_MODE.PARTIAL) return
+    if (data.paymentMode !== FREIGHT_PAYMENT_MODE.ACC) return
 
     const total = parseFloat(data.totalAmount) || 0
     const paid = parseFloat(data.paidAmount) || 0

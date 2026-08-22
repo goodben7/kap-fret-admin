@@ -28,8 +28,10 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: 'LayoutDashboard', roles: [ROLES.SPADM, ROLES.ADM, ROLES.MGR] },
   { label: 'Billetterie', path: '/tickets', icon: 'Ticket', roles: [ROLES.SPADM, ROLES.ADM, ROLES.TKT] },
+  { label: 'Réservations', path: '/tickets/reservations', icon: 'Bookmark', roles: [ROLES.SPADM, ROLES.ADM, ROLES.TKT] },
   { label: 'Check-In', path: '/checkins', icon: 'UserCheck', roles: [ROLES.SPADM, ROLES.ADM, ROLES.CHK] },
   { label: 'Fret', path: '/freight', icon: 'Package', roles: [ROLES.SPADM, ROLES.ADM, ROLES.FRT] },
+  { label: 'Dettes', path: '/finance/debts', icon: 'Scale', roles: [ROLES.SPADM, ROLES.ADM, ROLES.MGR] },
   { label: 'Mouvements Financiers', path: '/admin/cash-registers', icon: 'Wallet', roles: [ROLES.SPADM, ROLES.ADM, ROLES.MGR, ROLES.TKT, ROLES.CHK, ROLES.FRT] },
   { label: 'Administration', path: '/admin', icon: 'Settings', roles: [ROLES.SPADM, ROLES.ADM] },
 ]
@@ -68,6 +70,15 @@ export function isNavPathActive(pathname: string, path: string): boolean {
   }
   if (path === '/admin/cash-registers') {
     return pathname === '/admin/cash-registers' || pathname.startsWith('/admin/cash-registers/')
+  }
+  if (path === '/tickets') {
+    return (
+      pathname === '/tickets'
+      || (pathname.startsWith('/tickets/') && !pathname.startsWith('/tickets/reservations'))
+    )
+  }
+  if (path === '/tickets/reservations') {
+    return pathname === '/tickets/reservations' || pathname.startsWith('/tickets/reservations/')
   }
   return pathname === path || pathname.startsWith(`${path}/`)
 }

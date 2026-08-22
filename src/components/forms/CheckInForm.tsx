@@ -45,13 +45,17 @@ import {
   computeCheckInPaymentAmount,
   computeCheckInExcessPrice,
   computeExcessWeightFromBaggages,
+  computeMixedPaymentUsdEquivalent,
   computeWeightsFromBaggages,
   formatCheckInWeight,
+  isMixedPaymentWithinTolerance,
+  suggestMixedPaymentCdf,
   toEncodedAtDateInput,
 } from '@/lib/check-in'
 import { ticketService } from '@/services/ticket.service'
 import type { Ticket } from '@/types/ticket'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -285,9 +289,15 @@ export function CheckInForm(props: CheckInFormProps) {
       excessPrice: '0',
       currency: CURRENCY.USD,
       paymentCurrency: CURRENCY.USD,
+      mixedPayment: false,
+      paidAmountUsd: '',
+      paidAmountCdf: '',
       netToPay: '0',
       handBaggageWeight: '0.00',
       observations: '',
+      weightJustification: '',
+      hasWeightReduction: false,
+      destinationObservations: '',
       encodedAt: toEncodedAtDateInput(),
       ...defaultValues,
       baggages: initialBaggages,
@@ -341,11 +351,25 @@ export function CheckInForm(props: CheckInFormProps) {
 
   const excessWeightKg = watch('excessWeightKg')
   const paymentCurrency = watch('paymentCurrency')
+  const mixedPayment = watch('mixedPayment')
+  const paidAmountUsd = watch('paidAmountUsd')
+  const paidAmountCdf = watch('paidAmountCdf')
   const netToPay = watch('netToPay')
   const cashRegister = watch('cashRegister')
+  const hasWeightReduction = watch('hasWeightReduction')
 
   const hasExcessPayment = !isEdit && (parseFloat(excessWeightKg ?? '') || 0) > 0
   const tarificationInactive = !isEdit && !hasExcessPayment
+  const netToPayNumber = parseFloat(netToPay) || 0
+
+  const mixedUsdEquivalent = useMemo(() => {
+    if (!mixedPayment) return null
+    return computeMixedPaymentUsdEquivalent(paidAmountUsd ?? '', paidAmountCdf ?? '', exchangeRates)
+  }, [mixedPayment, paidAmountUsd, paidAmountCdf, exchangeRates])
+
+  const mixedPaymentOk =
+    !!mixedPayment
+    && isMixedPaymentWithinTolerance(netToPayNumber, paidAmountUsd ?? '', paidAmountCdf ?? '', exchangeRates)
 
   const cashRegisterOptions = useMemo(
     () =>
@@ -359,20 +383,27 @@ export function CheckInForm(props: CheckInFormProps) {
   const usdCurrencyIri = resolveCurrencyIriByCode(currencies, CURRENCY.USD)
   const paymentCurrencyIri = resolveCurrencyIriByCode(currencies, paymentCurrency ?? CURRENCY.USD)
   const fallbackPaymentAmount = useMemo(() => {
+    if (mixedPayment) return undefined
     const converted = computeCheckInPaymentAmount(
-      parseFloat(netToPay) || 0,
+      netToPayNumber,
       paymentCurrency ?? CURRENCY.USD,
       exchangeRates,
     )
     return converted != null ? parseFloat(converted) : undefined
-  }, [netToPay, paymentCurrency, exchangeRates])
+  }, [mixedPayment, netToPayNumber, paymentCurrency, exchangeRates])
   const localPreviewEnabled =
     hasExcessPayment
+    && !mixedPayment
     && paymentCurrency !== CURRENCY.USD
-    && (parseFloat(netToPay) || 0) > 0
+    && netToPayNumber > 0
     && fallbackPaymentAmount != null
   const previewEnabled =
-    hasExcessPayment && !!cashRegister && !!usdCurrencyIri && !!paymentCurrencyIri && (parseFloat(netToPay) || 0) > 0
+    hasExcessPayment
+    && !mixedPayment
+    && !!cashRegister
+    && !!usdCurrencyIri
+    && !!paymentCurrencyIri
+    && netToPayNumber > 0
   const {
     data: conversionPreview,
     isLoading: conversionPreviewLoading,
@@ -770,13 +801,51 @@ export function CheckInForm(props: CheckInFormProps) {
             />
           </div>
 
-          <Input
-            label="Observations"
-            placeholder="Remarques éventuelles..."
-            className={fieldClass}
-            error={errors.observations?.message}
-            {...register('observations')}
-          />
+          <div className="space-y-4 sm:col-span-2">
+            <label
+              className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${
+                hasWeightReduction
+                  ? 'border-sky-500/40 bg-sky-500/5'
+                  : 'border-border/60 bg-muted/20'
+              }`}
+            >
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 rounded border-input"
+                {...register('hasWeightReduction')}
+              />
+              <span className="space-y-0.5">
+                <span className="block text-sm font-medium">Réduction de poids accordée</span>
+                <span className="block text-xs text-muted-foreground">
+                  Pointage couleur sur la liste — ex. accord direction / franchise exceptionnelle.
+                </span>
+              </span>
+            </label>
+
+            <Textarea
+              label="Justification poids"
+              placeholder="Motif de l'accord exceptionnel (obligatoire si réduction)..."
+              rows={3}
+              error={errors.weightJustification?.message}
+              {...register('weightJustification')}
+            />
+
+            <Textarea
+              label="Observations"
+              placeholder="Remarques générales..."
+              rows={2}
+              error={errors.observations?.message}
+              {...register('observations')}
+            />
+
+            <Textarea
+              label="Observation paiement à destination"
+              placeholder="Détails du montant / modalités à régler à l'arrivée..."
+              rows={2}
+              error={errors.destinationObservations?.message}
+              {...register('destinationObservations')}
+            />
+          </div>
         </div>
       </FormSection>
 
@@ -819,19 +888,112 @@ export function CheckInForm(props: CheckInFormProps) {
           readOnly
           className={lockedFieldClass}
         />
-        <Select
-          label="Devise de paiement"
-          options={CURRENCY_OPTIONS}
-          error={errors.paymentCurrency?.message}
-          variant="filter"
-          disabled={isEdit || tarificationInactive}
-          value={paymentCurrency ?? CURRENCY.USD}
-          onChange={(e) =>
-            setValue('paymentCurrency', e.target.value as CheckInPatchFormData['paymentCurrency'], {
-              shouldValidate: true,
-            })
-          }
-        />
+        {!isEdit && !tarificationInactive && (
+          <label
+            className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors sm:col-span-2 ${
+              mixedPayment
+                ? 'border-brand-orange/40 bg-brand-orange/5'
+                : 'border-border/60 bg-muted/20'
+            }`}
+          >
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 rounded border-input"
+              checked={!!mixedPayment}
+              onChange={(e) => {
+                const checked = e.target.checked
+                setValue('mixedPayment', checked, { shouldValidate: true })
+                if (!checked) {
+                  setValue('paidAmountUsd', '', { shouldValidate: true })
+                  setValue('paidAmountCdf', '', { shouldValidate: true })
+                } else {
+                  setValue('paymentCurrency', CURRENCY.USD, { shouldValidate: true })
+                }
+              }}
+            />
+            <span className="space-y-0.5">
+              <span className="block text-sm font-medium">Paiement mixte (USD + CDF)</span>
+              <span className="block text-xs text-muted-foreground">
+                Encaisser une partie en dollars et le reste en francs congolais sur la même caisse.
+              </span>
+            </span>
+          </label>
+        )}
+        {!mixedPayment && (
+          <Select
+            label="Devise de paiement"
+            options={CURRENCY_OPTIONS}
+            error={errors.paymentCurrency?.message}
+            variant="filter"
+            disabled={isEdit || tarificationInactive}
+            value={paymentCurrency ?? CURRENCY.USD}
+            onChange={(e) =>
+              setValue('paymentCurrency', e.target.value as CheckInPatchFormData['paymentCurrency'], {
+                shouldValidate: true,
+              })
+            }
+          />
+        )}
+        {mixedPayment && !tarificationInactive && (
+          <>
+            <Input
+              label="Montant encaissé (USD)"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              placeholder="0,00"
+              className={fieldClass}
+              error={errors.paidAmountUsd?.message}
+              value={paidAmountUsd ?? ''}
+              onChange={(e) => {
+                const nextUsd = e.target.value
+                setValue('paidAmountUsd', nextUsd, { shouldValidate: true })
+                const suggested = suggestMixedPaymentCdf(netToPayNumber, nextUsd, exchangeRates)
+                if (suggested != null) {
+                  setValue('paidAmountCdf', suggested, { shouldValidate: true })
+                }
+              }}
+            />
+            <Input
+              label="Montant encaissé (CDF)"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              placeholder="0,00"
+              className={fieldClass}
+              error={errors.paidAmountCdf?.message}
+              {...register('paidAmountCdf')}
+            />
+            <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 text-sm sm:col-span-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Équivalent total</span>
+                <span className="font-semibold tabular-nums">
+                  {mixedUsdEquivalent != null
+                    ? formatMoney(mixedUsdEquivalent, CURRENCY.USD)
+                    : '—'}
+                </span>
+              </div>
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Net à payer</span>
+                <span className="font-semibold tabular-nums">
+                  {formatMoney(netToPayNumber, CURRENCY.USD)}
+                </span>
+              </div>
+              {paidAmountUsd && paidAmountCdf && mixedUsdEquivalent != null && !mixedPaymentOk && (
+                <p className="mt-2 text-xs text-destructive">
+                  L&apos;équivalent mixte doit correspondre au net à payer (± 0,05 USD). Vérifiez le taux de change.
+                </p>
+              )}
+              {mixedPaymentOk && (
+                <p className="mt-2 text-xs text-emerald-700">
+                  Paiement mixte équilibré — deux écritures caisse (USD + CDF) seront créées.
+                </p>
+              )}
+            </div>
+          </>
+        )}
         <Input
           label="Prix excédent"
           type="number"
@@ -868,7 +1030,7 @@ export function CheckInForm(props: CheckInFormProps) {
           <div className="flex items-center justify-between rounded-xl bg-brand-orange/10 px-4 py-3 sm:col-span-2">
             <span className="text-sm font-semibold">Net à payer</span>
             <span className="text-lg font-bold tabular-nums text-brand-orange">
-              {formatMoney(parseFloat(netToPay) || 0, CURRENCY.USD)}
+              {formatMoney(netToPayNumber, CURRENCY.USD)}
             </span>
           </div>
         )}
@@ -877,15 +1039,16 @@ export function CheckInForm(props: CheckInFormProps) {
             preview={conversionPreview}
             isLoading={conversionPreviewLoading}
             isError={conversionPreviewError}
-            referenceAmount={parseFloat(netToPay) || 0}
+            referenceAmount={netToPayNumber}
             referenceCurrency={CURRENCY.USD}
             paymentCurrency={paymentCurrency}
             fallbackPaymentAmount={fallbackPaymentAmount}
           />
         )}
         {!previewEnabled
+          && !mixedPayment
           && paymentCurrency !== CURRENCY.USD
-          && (parseFloat(netToPay) || 0) > 0
+          && netToPayNumber > 0
           && fallbackPaymentAmount == null && (
           <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive sm:col-span-2">
             Aucun taux de change actif pour convertir le montant USD vers {paymentCurrency}.
@@ -899,7 +1062,7 @@ export function CheckInForm(props: CheckInFormProps) {
 
       <CheckInFormActions
         formId={FORM_ID}
-        canSubmit={isValid}
+        canSubmit={isValid && (!mixedPayment || !hasExcessPayment || mixedPaymentOk)}
         isLoading={isLoading}
         submitLabel={submitLabel}
         cancelHref={cancelHref}

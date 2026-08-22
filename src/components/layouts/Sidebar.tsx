@@ -8,6 +8,8 @@ import {
   User,
   Receipt,
   Wallet,
+  Bookmark,
+  Scale,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
@@ -28,6 +30,8 @@ const iconMap = {
   Settings,
   Receipt,
   Wallet,
+  Bookmark,
+  Scale,
 }
 
 function CollapsedNavTooltip({ label }: { label: string }) {

@@ -4,6 +4,10 @@ export const LoginPage = lazyPage(() => import('@/pages/auth/LoginPage'), 'Login
 export const DashboardPage = lazyPage(() => import('@/pages/dashboard/DashboardPage'), 'DashboardPage')
 
 export const TicketsListPage = lazyPage(() => import('@/pages/tickets/TicketsListPage'), 'TicketsListPage')
+export const TicketReservationsPage = lazyPage(
+  () => import('@/pages/tickets/TicketReservationsPage'),
+  'TicketReservationsPage',
+)
 export const TicketCreatePage = lazyPage(() => import('@/pages/tickets/TicketCreatePage'), 'TicketCreatePage')
 export const TicketDetailPage = lazyPage(() => import('@/pages/tickets/TicketDetailPage'), 'TicketDetailPage')
 export const TicketEditPage = lazyPage(() => import('@/pages/tickets/TicketEditPage'), 'TicketEditPage')
@@ -18,6 +22,10 @@ export const FreightCreatePage = lazyPage(() => import('@/pages/freight/FreightC
 export const FreightDetailPage = lazyPage(() => import('@/pages/freight/FreightDetailPage'), 'FreightDetailPage')
 export const FreightEditPage = lazyPage(() => import('@/pages/freight/FreightEditPage'), 'FreightEditPage')
 
+export const DebtsReportPage = lazyPage(
+  () => import('@/pages/finance/DebtsReportPage'),
+  'DebtsReportPage',
+)
 export const CashTransactionsListPage = lazyPage(
   () => import('@/pages/cash-transactions/CashTransactionsListPage'),
   'CashTransactionsListPage',
@@ -59,6 +67,10 @@ export const ExchangeRateFormPage = lazyPage(() => import('@/pages/admin/Exchang
 export const ExchangeRateDetailPage = lazyPage(
   () => import('@/pages/admin/ExchangeRateDetailPage'),
   'ExchangeRateDetailPage',
+)
+export const TicketCategoryPricesPage = lazyPage(
+  () => import('@/pages/admin/TicketCategoryPricesPage'),
+  'TicketCategoryPricesPage',
 )
 export const CashRegistersPage = lazyPage(() => import('@/pages/admin/CashRegistersPage'), 'CashRegistersPage')
 export const CashRegisterFormPage = lazyPage(() => import('@/pages/admin/CashRegisterFormPage'), 'CashRegisterFormPage')

@@ -18,6 +18,9 @@ export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
 
 export const PAYMENT_MODE = {
   CASH: 'CASH',
+  ACC: 'ACC',
+  PTA: 'PTA',
+  /** Legacy — billets existants uniquement */
   CARD: 'CARD',
   MOBILE_MONEY: 'MOBILE_MONEY',
   SPONSOR: 'SPONSOR',
@@ -26,18 +29,19 @@ export const PAYMENT_MODE = {
 export type PaymentMode = (typeof PAYMENT_MODE)[keyof typeof PAYMENT_MODE]
 
 export const PAYMENT_MODE_LABELS: Record<PaymentMode, string> = {
-  CASH: 'Espèces',
+  CASH: 'Cash',
+  ACC: 'ACC',
+  PTA: 'PTA',
   CARD: 'Carte bancaire',
   MOBILE_MONEY: 'Mobile Money',
   SPONSOR: 'Sponsor',
 }
 
-/** Ordre stable pour selects / filtres — aligné sur Ticket::PAYMENT_MODE_* côté API */
+/** Modes proposés à la création / filtres — alignés sur Ticket::getPaymentModes() */
 export const PAYMENT_MODE_OPTIONS: { value: PaymentMode; label: string }[] = [
   PAYMENT_MODE.CASH,
-  PAYMENT_MODE.CARD,
-  PAYMENT_MODE.MOBILE_MONEY,
-  PAYMENT_MODE.SPONSOR,
+  PAYMENT_MODE.ACC,
+  PAYMENT_MODE.PTA,
 ].map((value) => ({ value, label: PAYMENT_MODE_LABELS[value] }))
 
 export function paymentModeFilterOptions(allLabel = 'Tous les modes') {

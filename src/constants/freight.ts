@@ -58,16 +58,16 @@ export const FREIGHT_STATUS_TRANSITIONS = [
 
 export const FREIGHT_PAYMENT_MODE = {
   CASH: 'CASH',
-  PARTIAL: 'PARTIAL',
-  AT_ARRIVAL: 'AT_ARRIVAL',
+  ACC: 'ACC',
+  PTA: 'PTA',
 } as const
 
 export type FreightPaymentMode = (typeof FREIGHT_PAYMENT_MODE)[keyof typeof FREIGHT_PAYMENT_MODE]
 
 export const FREIGHT_PAYMENT_MODE_LABELS: Record<FreightPaymentMode, string> = {
-  CASH: 'Comptant',
-  PARTIAL: 'Acompte',
-  AT_ARRIVAL: 'À l\'arrivée',
+  CASH: 'Cash',
+  ACC: 'ACC (acompte)',
+  PTA: 'PTA (à destination)',
 }
 
 export const FREIGHT_PAYMENT_MODE_OPTIONS: { value: FreightPaymentMode; label: string }[] = (

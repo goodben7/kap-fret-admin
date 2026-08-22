@@ -12,11 +12,12 @@ import {
   freightDeliveryPaymentSchema,
   type FreightDeliveryPaymentFormData,
 } from '@/schemas/freight-delivery-payment.schema'
-import { CURRENCY_LABELS } from '@/constants/ticket'
+import { CURRENCY, CURRENCY_LABELS } from '@/constants/ticket'
 import { FREIGHT_PAYMENT_MODE_LABELS } from '@/constants/freight'
 import { useAuth } from '@/hooks/useAuth'
 import { useCashRegistersForSelect } from '@/hooks/useCashRegisters'
 import { useCurrenciesForSelect } from '@/hooks/useCurrencies'
+import { useExchangeRates } from '@/hooks/useExchangeRates'
 import { usePreviewConversion } from '@/hooks/usePreviewConversion'
 import { formatCashRegisterSelectLabel } from '@/lib/cash-register'
 import { resolveCurrencyIriByCode } from '@/lib/currency-resource'
@@ -27,6 +28,12 @@ import {
   getFreightCurrency,
   getFreightDeliveryPaymentAmount,
 } from '@/lib/freight'
+import {
+  computeMixedPaymentEquivalentInCurrency,
+  isMixedPaymentWithinTolerance,
+  splitMixedPaymentLedgerAmounts,
+  suggestMixedPaymentCdf,
+} from '@/lib/mixed-payment'
 import { getCurrentTravelTimeInput, getTodayTravelDateInput } from '@/lib/ticket'
 import { formatMoney } from '@/lib/utils'
 import type { FreightShipment } from '@/types/freight-shipment'
@@ -40,7 +47,7 @@ const fieldClass =
 const lockedFieldClass = `${fieldClass} cursor-not-allowed bg-muted/60`
 
 export interface FreightDeliveryPaymentResult {
-  transaction: CashTransactionCreatePayload
+  transactions: CashTransactionCreatePayload[]
 }
 
 interface FreightDeliveryPaymentModalProps {
@@ -64,11 +71,16 @@ export function FreightDeliveryPaymentModal({
     issuingOfficeIri,
   )
   const { data: currencies = [] } = useCurrenciesForSelect()
+  const { data: exchangeRatesData } = useExchangeRates({ pagination: false })
+  const exchangeRates = exchangeRatesData?.items ?? []
 
   const currency = getFreightCurrency(shipment)
   const amount = getFreightDeliveryPaymentAmount(shipment)
+  const amountNumber = parseFloat(amount) || 0
   const defaultDescription = buildFreightDeliveryPaymentDescription(shipment)
   const currencyIri = resolveCurrencyIriByCode(currencies, currency) ?? ''
+  const usdCurrencyIri = resolveCurrencyIriByCode(currencies, CURRENCY.USD) ?? ''
+  const cdfCurrencyIri = resolveCurrencyIriByCode(currencies, CURRENCY.CDF) ?? ''
 
   const {
     register,
@@ -83,10 +95,16 @@ export function FreightDeliveryPaymentModal({
       cashRegister: '',
       amount,
       description: defaultDescription,
+      mixedPayment: false,
+      paidAmountUsd: '',
+      paidAmountCdf: '',
     },
   })
 
   const cashRegister = watch('cashRegister')
+  const mixedPayment = watch('mixedPayment')
+  const paidAmountUsd = watch('paidAmountUsd')
+  const paidAmountCdf = watch('paidAmountCdf')
 
   useEffect(() => {
     if (!open) return
@@ -94,6 +112,9 @@ export function FreightDeliveryPaymentModal({
       cashRegister: '',
       amount,
       description: defaultDescription,
+      mixedPayment: false,
+      paidAmountUsd: '',
+      paidAmountCdf: '',
     })
   }, [open, amount, defaultDescription, reset])
 
@@ -106,7 +127,29 @@ export function FreightDeliveryPaymentModal({
     [cashRegisters],
   )
 
-  const previewEnabled = !!cashRegister && !!currencyIri && (parseFloat(amount) || 0) > 0
+  const mixedEquivalent = useMemo(() => {
+    if (!mixedPayment) return null
+    return computeMixedPaymentEquivalentInCurrency(
+      paidAmountUsd ?? '',
+      paidAmountCdf ?? '',
+      currency,
+      exchangeRates,
+    )
+  }, [mixedPayment, paidAmountUsd, paidAmountCdf, currency, exchangeRates])
+
+  const mixedPaymentOk =
+    !!mixedPayment
+    && amountNumber > 0
+    && isMixedPaymentWithinTolerance(
+      amountNumber,
+      paidAmountUsd ?? '',
+      paidAmountCdf ?? '',
+      exchangeRates,
+      0.05,
+      currency,
+    )
+
+  const previewEnabled = !mixedPayment && !!cashRegister && !!currencyIri && amountNumber > 0
   const {
     data: conversionPreview,
     isLoading: conversionPreviewLoading,
@@ -124,20 +167,73 @@ export function FreightDeliveryPaymentModal({
 
   const submit = handleSubmit(async (data) => {
     if (!currencyIri) return
+    const transactionDate = toTransactionDateIso(
+      getTodayTravelDateInput(),
+      getCurrentTravelTimeInput(),
+    )
+
+    if (data.mixedPayment) {
+      if (!usdCurrencyIri || !cdfCurrencyIri) return
+      const split = splitMixedPaymentLedgerAmounts(
+        amountNumber,
+        data.paidAmountUsd ?? '',
+        data.paidAmountCdf ?? '',
+        currency,
+        exchangeRates,
+      )
+      if (!split) return
+
+      await onConfirm({
+        transactions: [
+          {
+            cashRegister: data.cashRegister,
+            type: CASH_TRANSACTION_TYPE.ENTRY,
+            amount: split.usdLegAmount,
+            currency: currencyIri,
+            paymentCurrency: usdCurrencyIri,
+            description: `${data.description.trim()} (USD)`,
+            referenceType: CASH_TRANSACTION_REFERENCE_TYPE.FREIGHT,
+            referenceId: shipment.id,
+            transactionDate,
+            validated: true,
+          },
+          {
+            cashRegister: data.cashRegister,
+            type: CASH_TRANSACTION_TYPE.ENTRY,
+            amount: split.cdfLegAmount,
+            currency: currencyIri,
+            paymentCurrency: cdfCurrencyIri,
+            description: `${data.description.trim()} (CDF)`,
+            referenceType: CASH_TRANSACTION_REFERENCE_TYPE.FREIGHT,
+            referenceId: shipment.id,
+            transactionDate,
+            validated: true,
+          },
+        ],
+      })
+      return
+    }
+
     await onConfirm({
-      transaction: {
-        cashRegister: data.cashRegister,
-        type: CASH_TRANSACTION_TYPE.ENTRY,
-        amount: data.amount,
-        currency: currencyIri,
-        description: data.description.trim(),
-        referenceType: CASH_TRANSACTION_REFERENCE_TYPE.FREIGHT,
-        referenceId: shipment.id,
-        transactionDate: toTransactionDateIso(getTodayTravelDateInput(), getCurrentTravelTimeInput()),
-        validated: true,
-      },
+      transactions: [
+        {
+          cashRegister: data.cashRegister,
+          type: CASH_TRANSACTION_TYPE.ENTRY,
+          amount: data.amount,
+          currency: currencyIri,
+          description: data.description.trim(),
+          referenceType: CASH_TRANSACTION_REFERENCE_TYPE.FREIGHT,
+          referenceId: shipment.id,
+          transactionDate,
+          validated: true,
+        },
+      ],
     })
   })
+
+  const canSubmit = mixedPayment
+    ? mixedPaymentOk && !!currencyIri && !!usdCurrencyIri && !!cdfCurrencyIri
+    : !!currencyIri
 
   return (
     <Modal
@@ -161,7 +257,7 @@ export function FreightDeliveryPaymentModal({
             <div>
               <p className="text-muted-foreground">Reste à payer</p>
               <p className="font-bold tabular-nums text-brand-orange">
-                {formatMoney(parseFloat(amount) || 0, currency)}
+                {formatMoney(amountNumber, currency)}
               </p>
             </div>
           </div>
@@ -184,22 +280,111 @@ export function FreightDeliveryPaymentModal({
           onChange={(e) => setValue('cashRegister', e.target.value, { shouldValidate: true })}
         />
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Input
-            label="Montant"
-            value={amount}
-            disabled
-            readOnly
-            className={lockedFieldClass}
+        <label
+          className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${
+            mixedPayment
+              ? 'border-brand-orange/40 bg-brand-orange/5'
+              : 'border-border/60 bg-muted/20'
+          }`}
+        >
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 rounded border-input"
+            checked={!!mixedPayment}
+            disabled={isLoading}
+            onChange={(e) => {
+              const checked = e.target.checked
+              setValue('mixedPayment', checked, { shouldValidate: true })
+              if (!checked) {
+                setValue('paidAmountUsd', '', { shouldValidate: true })
+                setValue('paidAmountCdf', '', { shouldValidate: true })
+              }
+            }}
           />
-          <Input
-            label="Devise"
-            value={CURRENCY_LABELS[currency]}
-            disabled
-            readOnly
-            className={lockedFieldClass}
-          />
-        </div>
+          <span className="space-y-0.5">
+            <span className="block text-sm font-medium">Paiement mixte (USD + CDF)</span>
+            <span className="block text-xs text-muted-foreground">
+              Couvrir le solde avec une partie en dollars et une partie en francs.
+            </span>
+          </span>
+        </label>
+
+        {!mixedPayment && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input
+              label="Montant"
+              value={amount}
+              disabled
+              readOnly
+              className={lockedFieldClass}
+            />
+            <Input
+              label="Devise"
+              value={CURRENCY_LABELS[currency]}
+              disabled
+              readOnly
+              className={lockedFieldClass}
+            />
+          </div>
+        )}
+
+        {mixedPayment && (
+          <>
+            <Input
+              label="Montant encaissé (USD)"
+              inputMode="decimal"
+              className={fieldClass}
+              error={errors.paidAmountUsd?.message}
+              disabled={isLoading}
+              value={paidAmountUsd ?? ''}
+              onChange={(e) => {
+                const nextUsd = e.target.value
+                setValue('paidAmountUsd', nextUsd, { shouldValidate: true })
+                const suggested = suggestMixedPaymentCdf(
+                  amountNumber,
+                  nextUsd,
+                  exchangeRates,
+                  currency,
+                )
+                if (suggested != null) {
+                  setValue('paidAmountCdf', suggested, { shouldValidate: true })
+                }
+              }}
+            />
+            <Input
+              label="Montant encaissé (CDF)"
+              inputMode="decimal"
+              className={fieldClass}
+              error={errors.paidAmountCdf?.message}
+              disabled={isLoading}
+              {...register('paidAmountCdf')}
+            />
+            <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Équivalent total</span>
+                <span className="font-semibold tabular-nums">
+                  {mixedEquivalent != null ? formatMoney(mixedEquivalent, currency) : '—'}
+                </span>
+              </div>
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Reste à payer</span>
+                <span className="font-semibold tabular-nums">
+                  {formatMoney(amountNumber, currency)}
+                </span>
+              </div>
+              {paidAmountUsd && paidAmountCdf && mixedEquivalent != null && !mixedPaymentOk && (
+                <p className="mt-2 text-xs text-destructive">
+                  L&apos;équivalent mixte doit correspondre au reste à payer.
+                </p>
+              )}
+              {mixedPaymentOk && (
+                <p className="mt-2 text-xs text-emerald-700">
+                  Deux écritures caisse (USD + CDF) seront créées.
+                </p>
+              )}
+            </div>
+          </>
+        )}
 
         <Input
           label="Description"
@@ -227,7 +412,7 @@ export function FreightDeliveryPaymentModal({
           >
             Annuler
           </Button>
-          <Button type="submit" className="h-11 flex-1 rounded-xl" disabled={isLoading || !currencyIri}>
+          <Button type="submit" className="h-11 flex-1 rounded-xl" disabled={isLoading || !canSubmit}>
             {isLoading ? (
               <>
                 <LoaderIcon />

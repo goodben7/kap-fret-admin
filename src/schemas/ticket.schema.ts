@@ -20,6 +20,7 @@ const optionalAgeSchema = z.union([
 
 export const ticketSchema = z
   .object({
+    ticketNumber: z.string().optional(),
     passengerName: z.string().min(2, 'Nom requis (min. 2 caractères)'),
     category: z.enum([TICKET_CATEGORY.INF, TICKET_CATEGORY.CD, TICKET_CATEGORY.AD], {
       message: 'Catégorie requise',
@@ -31,9 +32,8 @@ export const ticketSchema = z
     travelTime: z.string().min(1, 'Heure de voyage requise'),
     paymentMode: z.enum([
       PAYMENT_MODE.CASH,
-      PAYMENT_MODE.CARD,
-      PAYMENT_MODE.MOBILE_MONEY,
-      PAYMENT_MODE.SPONSOR,
+      PAYMENT_MODE.ACC,
+      PAYMENT_MODE.PTA,
     ]),
     paymentCurrency: z.enum([CURRENCY.CDF, CURRENCY.USD], { message: 'Devise de paiement requise' }),
     basePrice: z.string().min(1, 'Prix de base requis'),
@@ -67,21 +67,18 @@ export const ticketSchema = z
       }
     }
 
-    if (data.paymentMode === PAYMENT_MODE.SPONSOR && !data.sponsor?.trim()) {
-      ctx.addIssue({ code: 'custom', path: ['sponsor'], message: 'Sponsor requis' })
-    }
     if (data.paymentMode === PAYMENT_MODE.CASH && !data.reserveForLater && !data.cashRegister?.trim()) {
-      ctx.addIssue({ code: 'custom', path: ['cashRegister'], message: 'Caisse requise pour un paiement en espèces' })
+      ctx.addIssue({ code: 'custom', path: ['cashRegister'], message: 'Caisse requise pour un paiement Cash' })
     }
   })
 
 /** Champs modifiables via PATCH /api/tickets/{id} */
 export const ticketPatchSchema = z.object({
   passengerName: z.string().min(2, 'Nom requis (min. 2 caractères)'),
-  age: z.number({ message: 'Âge requis' }).min(1, 'Âge requis').max(120, 'Âge invalide'),
-    gender: z.enum([GENDER.MALE, GENDER.FEMALE], { message: 'Sexe requis' }),
-    phone: z.string().trim().min(1, 'Téléphone requis'),
-    travelDate: z.string().min(1, 'Date de voyage requise'),
+  age: optionalAgeSchema,
+  gender: z.enum([GENDER.MALE, GENDER.FEMALE], { message: 'Sexe requis' }),
+  phone: z.string().trim().min(1, 'Téléphone requis'),
+  travelDate: z.string().min(1, 'Date de voyage requise'),
   travelTime: z.string().min(1, 'Heure de voyage requise'),
   departure: z.string().min(1, 'Checkpoint de départ requis'),
   destination: z.string().min(1, 'Checkpoint de destination requis'),

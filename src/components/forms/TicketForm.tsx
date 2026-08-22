@@ -32,6 +32,8 @@ import { CheckpointAsyncSelect } from '@/components/ui/checkpoint-async-select'
 import { ConversionPreviewCard } from '@/components/tickets/ConversionPreviewCard'
 import { formatMoney } from '@/lib/utils'
 import { getTicketTotal, getDefaultWednesdayTravelDateInput, getBasePriceForCategory, computeTicketPaymentAmount } from '@/lib/ticket'
+import { useTicketCategoryPrices } from '@/hooks/useTicketCategoryPrices'
+import type { TicketCategory } from '@/constants/ticket'
 
 const FORM_ID = 'ticket-form'
 
@@ -171,6 +173,15 @@ function TicketCreateForm({
   const locked = readOnly
   const departurePrefillDone = useRef(!!defaultValues?.departure)
 
+  const { data: categoryPricesData } = useTicketCategoryPrices({ activeOnly: true })
+  const categoryPricesByCode = useMemo(() => {
+    const map: Partial<Record<TicketCategory, string>> = {}
+    for (const row of categoryPricesData?.items ?? []) {
+      if (row.active !== false) map[row.category] = row.basePrice
+    }
+    return map
+  }, [categoryPricesData?.items])
+
   const {
     register,
     handleSubmit,
@@ -183,7 +194,7 @@ function TicketCreateForm({
       paymentMode: PAYMENT_MODE.CASH,
       paymentCurrency: CURRENCY.USD,
       travelDate: getDefaultWednesdayTravelDateInput(),
-      travelTime: '06:00',
+      travelTime: '06:30',
       basePrice: '',
       tva: '0.00',
       fpt: '0.00',
@@ -191,6 +202,7 @@ function TicketCreateForm({
       baggageAllowanceKg: '20',
       cashRegister: '',
       reserveForLater: false,
+      ticketNumber: '',
       departure: defaultValues?.departure ?? '',
       ...defaultValues,
     },
@@ -230,8 +242,8 @@ function TicketCreateForm({
 
   useEffect(() => {
     if (!category) return
-    setValue('basePrice', getBasePriceForCategory(category), { shouldValidate: true })
-  }, [category, setValue])
+    setValue('basePrice', getBasePriceForCategory(category, categoryPricesByCode), { shouldValidate: true })
+  }, [category, categoryPricesByCode, setValue])
 
   useEffect(() => {
     if (paymentMode !== PAYMENT_MODE.CASH) {
@@ -294,6 +306,14 @@ function TicketCreateForm({
         )}
 
         <FormSection title="Passager" icon={User}>
+          <Input
+            label="N° billet"
+            placeholder="Auto si vide — ou saisie manuelle"
+            error={errors.ticketNumber?.message}
+            disabled={locked}
+            className={fieldClass}
+            {...register('ticketNumber')}
+          />
           <Input
             label="Nom complet"
             placeholder="Nom et prénom du passager"
@@ -467,15 +487,6 @@ function TicketCreateForm({
                       })
                     }
                   />
-                  {paymentMode === PAYMENT_MODE.SPONSOR && (
-                    <Input
-                      label="Sponsor"
-                      error={errors.sponsor?.message}
-                      disabled={locked}
-                      className={fieldClass}
-                      {...register('sponsor')}
-                    />
-                  )}
                   {paymentMode === PAYMENT_MODE.CASH && (
                     <Select
                       label="Caisse"
@@ -508,6 +519,13 @@ function TicketCreateForm({
                     }
                   />
                 </div>
+                {(paymentMode === PAYMENT_MODE.ACC || paymentMode === PAYMENT_MODE.PTA) && (
+                  <p className="text-xs text-muted-foreground">
+                    {paymentMode === PAYMENT_MODE.PTA
+                      ? 'PTA : paiement à destination — pas d’encaissement immédiat en caisse.'
+                      : 'ACC : acompte / solde à suivre — pas d’encaissement immédiat en caisse.'}
+                  </p>
+                )}
                 {paymentMode === PAYMENT_MODE.CASH && previewEnabled && (
                   <ConversionPreviewCard
                     preview={conversionPreview}
@@ -639,8 +657,9 @@ function TicketEditForm({
             label="Âge"
             type="number"
             inputMode="numeric"
-            min={1}
+            min={0}
             max={120}
+            placeholder="Optionnel"
             error={errors.age?.message}
             disabled={locked}
             className={fieldClass}

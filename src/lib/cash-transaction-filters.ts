@@ -5,6 +5,7 @@ import type {
   CashTransactionType,
 } from '@/constants/cash-transaction'
 import { CASH_TRANSACTION_STATUS } from '@/constants/cash-transaction'
+import { CURRENCY, type Currency } from '@/constants/ticket'
 
 export interface CashTransactionFilters {
   page?: number
@@ -23,6 +24,8 @@ export interface CashTransactionFilters {
   transactionDateFrom?: string
   transactionDateTo?: string
   createdAt?: string
+  /** Code devise d'encaissement (USD / CDF). */
+  currency?: Currency
 }
 
 export type CashTransactionFiltersState = {
@@ -34,7 +37,10 @@ export type CashTransactionFiltersState = {
   validated: '' | 'true' | 'false'
   status: '' | CashTransactionStatus
   transactionDate: string
+  transactionDateFrom: string
+  transactionDateTo: string
   createdAt: string
+  currency: '' | Currency
 }
 
 export const emptyCashTransactionFilters: CashTransactionFiltersState = {
@@ -46,7 +52,10 @@ export const emptyCashTransactionFilters: CashTransactionFiltersState = {
   validated: '',
   status: '',
   transactionDate: '',
+  transactionDateFrom: '',
+  transactionDateTo: '',
   createdAt: '',
+  currency: '',
 }
 
 const FILTER_PARAM_KEYS = [
@@ -58,7 +67,10 @@ const FILTER_PARAM_KEYS = [
   'validated',
   'status',
   'transactionDate',
+  'transactionDateFrom',
+  'transactionDateTo',
   'createdAt',
+  'currency',
 ] as const satisfies readonly (keyof CashTransactionFiltersState)[]
 
 function addDay(isoDate: string, days: number): string {
@@ -82,6 +94,11 @@ function parseStatus(value: string | undefined): CashTransactionStatus | undefin
   ) {
     return value
   }
+  return undefined
+}
+
+function parseCurrency(value: string | undefined): Currency | undefined {
+  if (value === CURRENCY.USD || value === CURRENCY.CDF) return value
   return undefined
 }
 
@@ -118,20 +135,23 @@ export function buildCashTransactionFilterParams(
   const createdBy = filters.createdBy?.trim()
   if (createdBy) params.createdBy = normalizeIri(createdBy)
 
+  const currency = filters.currency?.trim()
+  if (currency) params['transactionCurrency.code'] = currency
+
   const transactionDate = filters.transactionDate?.trim()
-  if (transactionDate) {
+  const transactionDateFrom = filters.transactionDateFrom?.trim()
+  const transactionDateTo = filters.transactionDateTo?.trim()
+
+  if (transactionDate && !transactionDateFrom && !transactionDateTo) {
     params['transactionDate[after]'] = `${transactionDate}T00:00:00`
     params['transactionDate[before]'] = `${addDay(transactionDate, 1)}T00:00:00`
-  }
-
-  const transactionDateFrom = filters.transactionDateFrom?.trim()
-  if (transactionDateFrom) {
-    params['transactionDate[after]'] = `${transactionDateFrom}T00:00:00`
-  }
-
-  const transactionDateTo = filters.transactionDateTo?.trim()
-  if (transactionDateTo) {
-    params['transactionDate[before]'] = `${addDay(transactionDateTo, 1)}T00:00:00`
+  } else {
+    if (transactionDateFrom) {
+      params['transactionDate[after]'] = `${transactionDateFrom}T00:00:00`
+    }
+    if (transactionDateTo) {
+      params['transactionDate[before]'] = `${addDay(transactionDateTo, 1)}T00:00:00`
+    }
   }
 
   const createdAt = filters.createdAt?.trim()
@@ -159,7 +179,10 @@ export function cashTransactionFiltersStateToApi(
     validated: parseValidated(state.validated),
     status: parseStatus(state.status) || undefined,
     transactionDate: state.transactionDate.trim() || undefined,
+    transactionDateFrom: state.transactionDateFrom.trim() || undefined,
+    transactionDateTo: state.transactionDateTo.trim() || undefined,
     createdAt: state.createdAt.trim() || undefined,
+    currency: parseCurrency(state.currency) || undefined,
   }
 }
 
@@ -171,6 +194,7 @@ export function parseCashTransactionFiltersFromSearchParams(
   const type = get('type')
   const referenceType = get('referenceType')
   const status = parseStatus(get('status'))
+  const currency = parseCurrency(get('currency'))
 
   return {
     id: get('id'),
@@ -187,7 +211,10 @@ export function parseCashTransactionFiltersFromSearchParams(
     validated: validated === 'true' || validated === 'false' ? validated : '',
     status: status ?? '',
     transactionDate: get('transactionDate'),
+    transactionDateFrom: get('transactionDateFrom'),
+    transactionDateTo: get('transactionDateTo'),
     createdAt: get('createdAt'),
+    currency: currency ?? '',
   }
 }
 

@@ -176,6 +176,9 @@ export function CheckInDetailPage() {
   const excessWeight = parseFloat(checkIn.excessWeightKg) || 0
   const netToPay = parseFloat(checkIn.netToPay) || 0
   const showObservations = hasCheckInObservations(checkIn.observations)
+  const showWeightJustification = hasCheckInObservations(checkIn.weightJustification)
+  const showDestinationObservations = hasCheckInObservations(checkIn.destinationObservations)
+  const hasReduction = !!checkIn.hasWeightReduction
   const baggages = sortCheckInBaggagesByNewestFirst(checkIn.baggages ?? [])
   const isCancelled = checkIn.status === CHECK_IN_STATUS.CANCELLED
   const statusLabel = checkIn.status ? (CHECK_IN_STATUS_LABELS[checkIn.status] ?? checkIn.status) : null
@@ -206,6 +209,11 @@ export function CheckInDetailPage() {
               <div className="flex shrink-0 flex-col items-end gap-2">
                 {statusLabel && (
                   <Badge variant={isCancelled ? 'destructive' : 'secondary'}>{statusLabel}</Badge>
+                )}
+                {hasReduction && (
+                  <Badge className="border-sky-500/30 bg-sky-500/15 text-sky-800 hover:bg-sky-500/20">
+                    Réduction poids
+                  </Badge>
                 )}
                 <Button variant="outline" asChild className="hidden rounded-xl lg:inline-flex">
                   <Link to={`/checkins/${checkIn.id}/edit`}>
@@ -353,9 +361,32 @@ export function CheckInDetailPage() {
           </DetailSection>
         )}
 
-        {showObservations && (
-          <DetailSection title="Observations" icon={MessageSquare} className="lg:col-span-2">
-            <p className="whitespace-pre-wrap text-sm leading-relaxed">{checkIn.observations}</p>
+        {(showWeightJustification || showObservations || showDestinationObservations) && (
+          <DetailSection title="Justifications & observations" icon={MessageSquare} className="lg:col-span-2">
+            {showWeightJustification && (
+              <div className="space-y-1 border-b border-border/40 pb-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Justification poids
+                </p>
+                <p className="whitespace-pre-wrap text-sm leading-relaxed">{checkIn.weightJustification}</p>
+              </div>
+            )}
+            {showObservations && (
+              <div className={cn('space-y-1', (showWeightJustification || showDestinationObservations) && 'border-b border-border/40 py-3')}>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Observations
+                </p>
+                <p className="whitespace-pre-wrap text-sm leading-relaxed">{checkIn.observations}</p>
+              </div>
+            )}
+            {showDestinationObservations && (
+              <div className={cn('space-y-1', (showWeightJustification || showObservations) && 'pt-3')}>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Paiement à destination
+                </p>
+                <p className="whitespace-pre-wrap text-sm leading-relaxed">{checkIn.destinationObservations}</p>
+              </div>
+            )}
           </DetailSection>
         )}
       </div>

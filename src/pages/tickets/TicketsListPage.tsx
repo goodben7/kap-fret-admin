@@ -17,8 +17,11 @@ import {
   Bookmark,
   Pencil,
   Trash2,
+  CalendarClock,
 } from 'lucide-react'
-import { useTickets, useUpdateTicketStatus } from '@/hooks/useTickets'
+import { useTickets, useUpdateTicketStatus, useReportTicketTravelDate } from '@/hooks/useTickets'
+import { TicketContactActions } from '@/components/tickets/TicketContactActions'
+import { TicketReportTravelDateModal } from '@/components/tickets/TicketReportTravelDateModal'
 import {
   GENDER_LABELS,
   PAYMENT_MODE_LABELS,
@@ -42,7 +45,11 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { CheckpointAsyncSelect } from '@/components/ui/checkpoint-async-select'
 import { formatMoney, cn } from '@/lib/utils'
-import { getTicketTotal, getUpcomingFlightTravelDateInput, formatTicketTravelDate, formatTravelDateInput } from '@/lib/ticket'
+import { getTicketTotal, getUpcomingFlightTravelDateInput, formatTicketTravelDate, formatTravelDateInput, toTicketReportTravelDatePayload } from '@/lib/ticket'
+import type { TicketReportTravelDateFormData } from '@/schemas/ticket-report-travel-date.schema'
+import { toast } from 'sonner'
+import { isAxiosError } from 'axios'
+import { extractApiErrorMessage } from '@/services/api'
 import {
   countActiveTicketFilters,
   emptyTicketFilters,
@@ -87,17 +94,25 @@ function canCancelTicket(ticket: TicketType) {
   return ticket.status === TICKET_STATUS.ISSUED || ticket.status === TICKET_STATUS.RESERVED
 }
 
+function canReportTravelDate(ticket: TicketType) {
+  return ticket.status === TICKET_STATUS.ISSUED || ticket.status === TICKET_STATUS.RESERVED
+}
+
 function TicketCard({
   ticket,
   onCancel,
+  onReportTravelDate,
   cancelPending,
 }: {
   ticket: TicketType
   onCancel: (ticket: TicketType) => void
+  onReportTravelDate: (ticket: TicketType) => void
   cancelPending: boolean
 }) {
   const editable = canEditTicket(ticket)
   const cancellable = canCancelTicket(ticket)
+  const reportable = canReportTravelDate(ticket)
+  const hasPhone = !!ticket.phone?.trim()
 
   return (
     <Card className="overflow-hidden border-border/80 shadow-sm transition-all group-hover:border-brand-orange/40 group-hover:shadow-md">
@@ -134,8 +149,24 @@ function TicketCard({
           </div>
         </Link>
 
-        {(editable || cancellable) && (
-          <div className="mt-3 flex gap-2 border-t border-border/60 pt-3">
+        {(editable || cancellable || reportable || hasPhone) && (
+          <div className="mt-3 flex flex-wrap gap-2 border-t border-border/60 pt-3">
+            {hasPhone && (
+              <TicketContactActions phone={ticket.phone} passengerName={ticket.passengerName} />
+            )}
+            {reportable && (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-10 w-10 shrink-0 rounded-xl"
+                aria-label={`Reporter la date du billet ${ticket.ticketNumber}`}
+                title="Modifier la date de vol"
+                onClick={() => onReportTravelDate(ticket)}
+              >
+                <CalendarClock className="h-4 w-4" />
+              </Button>
+            )}
             {editable && (
               <Button
                 variant="outline"
@@ -171,10 +202,12 @@ function TicketCard({
 function TicketTable({
   tickets,
   onCancel,
+  onReportTravelDate,
   cancelPending,
 }: {
   tickets: TicketType[]
   onCancel: (ticket: TicketType) => void
+  onReportTravelDate: (ticket: TicketType) => void
   cancelPending: boolean
 }) {
   const navigate = useNavigate()
@@ -194,13 +227,16 @@ function TicketTable({
             <TableHead className="hidden sm:table-cell font-semibold text-foreground/80">Date</TableHead>
             <TableHead className="hidden md:table-cell font-semibold text-foreground/80">Téléphone</TableHead>
             <TableHead className="text-right font-semibold text-foreground/80">Montant</TableHead>
-            <TableHead className="w-[88px] text-right font-semibold text-foreground/80">Actions</TableHead>
+            <TableHead className="w-[160px] text-right font-semibold text-foreground/80">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {tickets.map((ticket) => {
             const editable = canEditTicket(ticket)
             const cancellable = canCancelTicket(ticket)
+            const reportable = canReportTravelDate(ticket)
+            const hasPhone = !!ticket.phone?.trim()
+            const hasActions = editable || cancellable || reportable || hasPhone
 
             return (
               <TableRow
@@ -237,6 +273,30 @@ function TicketTable({
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="inline-flex items-center justify-end gap-1">
+                    {hasPhone && (
+                      <TicketContactActions
+                        phone={ticket.phone}
+                        passengerName={ticket.passengerName}
+                        size="sm"
+                        stopPropagation
+                      />
+                    )}
+                    {reportable && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 rounded-lg"
+                        aria-label={`Reporter la date du billet ${ticket.ticketNumber}`}
+                        title="Modifier la date de vol"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onReportTravelDate(ticket)
+                        }}
+                      >
+                        <CalendarClock className="h-4 w-4" />
+                      </Button>
+                    )}
                     {editable && (
                       <Button
                         type="button"
@@ -268,7 +328,7 @@ function TicketTable({
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     )}
-                    {!editable && !cancellable && (
+                    {!hasActions && (
                       <ChevronRight className="h-4 w-4 text-muted-foreground/50" aria-hidden="true" />
                     )}
                   </div>
@@ -491,9 +551,11 @@ export function TicketsListPage() {
   const [manifestOpen, setManifestOpen] = useState(false)
   const [salesManifestOpen, setSalesManifestOpen] = useState(false)
   const [ticketToCancel, setTicketToCancel] = useState<TicketType | null>(null)
+  const [ticketToReportDate, setTicketToReportDate] = useState<TicketType | null>(null)
   const [panelDraft, setPanelDraft] = useState<TicketFiltersState>(emptyTicketFilters)
   const [viewMode, setViewMode] = useState<TicketViewMode>(readTicketsViewMode)
   const updateStatus = useUpdateTicketStatus()
+  const reportTravelDate = useReportTicketTravelDate()
 
   const page = Math.max(1, Number(searchParams.get('page')) || 1)
 
@@ -642,6 +704,23 @@ export function TicketsListPage() {
     setTicketToCancel(null)
   }
 
+  const handleConfirmReportTravelDate = async (data: TicketReportTravelDateFormData) => {
+    if (!ticketToReportDate) return
+    try {
+      await reportTravelDate.mutateAsync({
+        id: ticketToReportDate.id,
+        payload: toTicketReportTravelDatePayload(data),
+      })
+      setTicketToReportDate(null)
+    } catch (error) {
+      if (isAxiosError(error)) {
+        toast.error(extractApiErrorMessage(error.response?.data, error.response?.status))
+      } else {
+        toast.error('Impossible de reporter la date de vol')
+      }
+    }
+  }
+
   return (
     <div className="mx-auto max-w-3xl space-y-4 lg:max-w-5xl">
       <div className="flex items-center justify-between gap-3">
@@ -697,6 +776,12 @@ export function TicketsListPage() {
           >
             <FileText className="h-4 w-4 sm:mr-1.5" />
             <span className="hidden sm:inline">Manifeste vente</span>
+          </Button>
+          <Button asChild size="sm" variant="outline" className="shrink-0 rounded-full px-3 shadow-sm">
+            <Link to="/tickets/reservations">
+              <Bookmark className="h-4 w-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">Réservations</span>
+            </Link>
           </Button>
           <Button asChild size="sm" className="shrink-0 rounded-full px-4 shadow-sm">
             <Link to="/tickets/new">
@@ -896,6 +981,7 @@ export function TicketsListPage() {
                 key={ticket['@id']}
                 ticket={ticket}
                 onCancel={setTicketToCancel}
+                onReportTravelDate={setTicketToReportDate}
                 cancelPending={updateStatus.isPending}
               />
             ))}
@@ -910,6 +996,7 @@ export function TicketsListPage() {
             <TicketTable
               tickets={data.items}
               onCancel={setTicketToCancel}
+              onReportTravelDate={setTicketToReportDate}
               cancelPending={updateStatus.isPending}
             />
           </div>
@@ -957,6 +1044,18 @@ export function TicketsListPage() {
           </div>
         )}
       </ConfirmDialog>
+
+      {ticketToReportDate && (
+        <TicketReportTravelDateModal
+          open={!!ticketToReportDate}
+          onOpenChange={(open) => {
+            if (!open && !reportTravelDate.isPending) setTicketToReportDate(null)
+          }}
+          ticket={ticketToReportDate}
+          onSubmit={handleConfirmReportTravelDate}
+          isLoading={reportTravelDate.isPending}
+        />
+      )}
     </div>
   )
 }

@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { cashRegisterService, type CashRegisterFilters } from '@/services/cash-register.service'
 import type { CashRegisterCreatePayload, CashRegisterPatchPayload } from '@/types/cash-register'
+import { filterCashRegistersForUserRoles } from '@/lib/cash-register'
+import { useAuth } from '@/hooks/useAuth'
 import { toast } from 'sonner'
 
 export const cashRegisterKeys = {
@@ -18,11 +20,14 @@ export function useCashRegisters(filters: CashRegisterFilters = {}) {
 }
 
 export function useCashRegistersForSelect(issuingOfficeIri?: string) {
+  const { user } = useAuth()
+  const roles = user?.roles ?? []
+
   return useQuery({
-    queryKey: [...cashRegisterKeys.lists(), 'select', issuingOfficeIri ?? ''],
+    queryKey: [...cashRegisterKeys.lists(), 'select', issuingOfficeIri ?? '', roles.join(',')],
     queryFn: async () => {
       const { items } = await cashRegisterService.getByIssuingOffice(issuingOfficeIri!)
-      return items
+      return filterCashRegistersForUserRoles(items, roles)
     },
     enabled: !!issuingOfficeIri,
   })

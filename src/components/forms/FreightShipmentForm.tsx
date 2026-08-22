@@ -49,6 +49,11 @@ import {
   computeFreightTotalAmount,
   clampFreightPartialPaidAmount,
 } from '@/lib/freight'
+import {
+  computeMixedPaymentEquivalentInCurrency,
+  isMixedPaymentWithinTolerance,
+  suggestMixedPaymentCdf,
+} from '@/lib/mixed-payment'
 import { formatMoney, cn } from '@/lib/utils'
 import type { ReactNode } from 'react'
 
@@ -112,11 +117,13 @@ function FreightFormActions({
   isLoading,
   submitLabel,
   cancelHref,
+  canSubmit = true,
 }: {
   formId: string
   isLoading?: boolean
   submitLabel: string
   cancelHref?: string
+  canSubmit?: boolean
 }) {
   return (
     <>
@@ -127,7 +134,7 @@ function FreightFormActions({
               <Link to={cancelHref}>Annuler</Link>
             </Button>
           )}
-          <Button type="submit" disabled={isLoading} className="h-11 rounded-xl px-8">
+          <Button type="submit" disabled={!canSubmit || isLoading} className="h-11 rounded-xl px-8">
             {isLoading ? (
               <>
                 <LoaderIcon />
@@ -145,7 +152,7 @@ function FreightFormActions({
           <Button
             type="submit"
             form={formId}
-            disabled={isLoading}
+            disabled={!canSubmit || isLoading}
             className="h-11 w-full rounded-xl bg-brand-orange font-semibold hover:bg-brand-orange/90"
           >
             {isLoading ? (
@@ -208,8 +215,12 @@ export function FreightShipmentForm({
       aircraft: '',
       registration: '',
       loadingPlace: defaultValues?.loadingPlace ?? '',
-      paymentMode: FREIGHT_PAYMENT_MODE.AT_ARRIVAL,
+      paymentMode: FREIGHT_PAYMENT_MODE.CASH,
       currency: CURRENCY.USD,
+      paymentCurrency: CURRENCY.USD,
+      mixedPayment: false,
+      paidAmountUsd: '',
+      paidAmountCdf: '',
       volumeFreight: '0.00',
       rva: '0.00',
       ltaFees: '0.00',
@@ -233,6 +244,10 @@ export function FreightShipmentForm({
   const loadingPlace = watch('loadingPlace') ?? ''
   const unloadingPlace = watch('unloadingPlace') ?? ''
   const currency = watch('currency')
+  const paymentCurrency = watch('paymentCurrency')
+  const mixedPayment = watch('mixedPayment')
+  const paidAmountUsd = watch('paidAmountUsd')
+  const paidAmountCdf = watch('paidAmountCdf')
   const paymentMode = watch('paymentMode')
   const cashRegister = watch('cashRegister')
 
@@ -254,19 +269,49 @@ export function FreightShipmentForm({
   const packagesTotalWeight = computeFreightPackagesTotalWeight(watchedPackages)
   const computedTotalAmount = computeFreightTotalAmount(ordinaryFreight, volumeFreight, rva, ltaFees)
   const computedRemainingAmount = computeFreightRemainingAmount(computedTotalAmount, watchedPaidAmount)
+  const paidDueNumber = parseFloat(String(watchedPaidAmount ?? '').replace(',', '.')) || 0
 
   const isCashPayment = paymentMode === FREIGHT_PAYMENT_MODE.CASH
-  const isPartialPayment = paymentMode === FREIGHT_PAYMENT_MODE.PARTIAL
-  const needsCashRegister = isCashPayment || isPartialPayment
-  const canEditPaidAmount = isPartialPayment
+  const isAccPayment = paymentMode === FREIGHT_PAYMENT_MODE.ACC
+  const needsCashRegister = isCashPayment || isAccPayment
+  const canEditPaidAmount = isAccPayment
+  const dueCurrency = currency ?? CURRENCY.USD
+
+  const mixedEquivalent = useMemo(() => {
+    if (!mixedPayment || !needsCashRegister) return null
+    return computeMixedPaymentEquivalentInCurrency(
+      paidAmountUsd ?? '',
+      paidAmountCdf ?? '',
+      dueCurrency,
+      exchangeRates,
+    )
+  }, [mixedPayment, needsCashRegister, paidAmountUsd, paidAmountCdf, dueCurrency, exchangeRates])
+
+  const mixedPaymentOk =
+    !!mixedPayment
+    && needsCashRegister
+    && paidDueNumber > 0
+    && isMixedPaymentWithinTolerance(
+      paidDueNumber,
+      paidAmountUsd ?? '',
+      paidAmountCdf ?? '',
+      exchangeRates,
+      0.05,
+      dueCurrency,
+    )
 
   const freightCurrencyIri = resolveCurrencyIriByCode(currencies, currency ?? CURRENCY.USD)
-  const conversionPreviewAmount = isPartialPayment
+  const paymentCurrencyIri = resolveCurrencyIriByCode(
+    currencies,
+    paymentCurrency ?? currency ?? CURRENCY.USD,
+  )
+  const conversionPreviewAmount = isAccPayment
     ? String(watchedPaidAmount ?? '').trim()
     : computedTotalAmount
   const hasConversionAmount = (parseFloat(conversionPreviewAmount) || 0) > 0
   const showConversionPreview =
-    (isCashPayment || isPartialPayment)
+    !mixedPayment
+    && (isCashPayment || isAccPayment)
     && !!cashRegister?.trim()
     && !!freightCurrencyIri
     && hasConversionAmount
@@ -278,6 +323,8 @@ export function FreightShipmentForm({
     cashRegister: cashRegister || undefined,
     amount: conversionPreviewAmount || '0',
     currencyIri: freightCurrencyIri,
+    paymentCurrencyIri:
+      paymentCurrency && paymentCurrency !== currency ? paymentCurrencyIri : undefined,
     enabled: showConversionPreview,
   })
 
@@ -302,7 +349,7 @@ export function FreightShipmentForm({
 
   useEffect(() => {
     setValue('totalAmount', computedTotalAmount, { shouldValidate: true })
-    if (isPartialPayment) {
+    if (isAccPayment) {
       const paid = getValues('paidAmount')
       const clamped = clampFreightPartialPaidAmount(paid, computedTotalAmount)
       if (clamped !== paid) {
@@ -311,12 +358,12 @@ export function FreightShipmentForm({
         void trigger('paidAmount')
       }
     }
-  }, [computedTotalAmount, isPartialPayment, getValues, setValue, trigger])
+  }, [computedTotalAmount, isAccPayment, getValues, setValue, trigger])
 
   useEffect(() => {
     if (isCashPayment) {
       setValue('paidAmount', computedTotalAmount, { shouldValidate: true })
-    } else if (paymentMode === FREIGHT_PAYMENT_MODE.AT_ARRIVAL) {
+    } else if (paymentMode === FREIGHT_PAYMENT_MODE.PTA) {
       setValue('paidAmount', '0.00', { shouldValidate: true })
     }
   }, [isCashPayment, paymentMode, computedTotalAmount, setValue])
@@ -368,7 +415,7 @@ export function FreightShipmentForm({
     if (mode === FREIGHT_PAYMENT_MODE.CASH) {
       paid = total
       setValue('paidAmount', paid, { shouldValidate: true })
-    } else if (mode === FREIGHT_PAYMENT_MODE.PARTIAL) {
+    } else if (mode === FREIGHT_PAYMENT_MODE.ACC) {
       const clamped = clampFreightPartialPaidAmount(paid, total)
       if (clamped !== paid) {
         paid = clamped
@@ -391,8 +438,11 @@ export function FreightShipmentForm({
 
   const handlePaymentModeChange = (mode: FreightShipmentFormData['paymentMode']) => {
     setValue('paymentMode', mode, { shouldValidate: true })
-    if (mode !== FREIGHT_PAYMENT_MODE.CASH && mode !== FREIGHT_PAYMENT_MODE.PARTIAL) {
+    if (mode !== FREIGHT_PAYMENT_MODE.CASH && mode !== FREIGHT_PAYMENT_MODE.ACC) {
       setValue('cashRegister', '', { shouldValidate: true })
+      setValue('mixedPayment', false, { shouldValidate: true })
+      setValue('paidAmountUsd', '', { shouldValidate: true })
+      setValue('paidAmountCdf', '', { shouldValidate: true })
     }
     const total = computeFreightTotalAmount(
       getValues('ordinaryFreight'),
@@ -405,7 +455,7 @@ export function FreightShipmentForm({
     const paid =
       mode === FREIGHT_PAYMENT_MODE.CASH
         ? total
-        : mode === FREIGHT_PAYMENT_MODE.PARTIAL
+        : mode === FREIGHT_PAYMENT_MODE.ACC
           ? currentPaidNum > 0
             ? currentPaid
             : ''
@@ -647,7 +697,7 @@ export function FreightShipmentForm({
           label="Mode de paiement"
           options={paymentModeOptions}
           variant="filter"
-          value={paymentMode ?? FREIGHT_PAYMENT_MODE.AT_ARRIVAL}
+          value={paymentMode ?? FREIGHT_PAYMENT_MODE.CASH}
           onChange={(e) =>
             handlePaymentModeChange(e.target.value as FreightShipmentFormData['paymentMode'])
           }
@@ -670,6 +720,116 @@ export function FreightShipmentForm({
             value={cashRegister ?? ''}
             onChange={(e) => setValue('cashRegister', e.target.value, { shouldValidate: true })}
           />
+        )}
+        {needsCashRegister && (
+          <label
+            className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors sm:col-span-2 ${
+              mixedPayment
+                ? 'border-brand-orange/40 bg-brand-orange/5'
+                : 'border-border/60 bg-muted/20'
+            }`}
+          >
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 rounded border-input"
+              checked={!!mixedPayment}
+              onChange={(e) => {
+                const checked = e.target.checked
+                setValue('mixedPayment', checked, { shouldValidate: true })
+                if (!checked) {
+                  setValue('paidAmountUsd', '', { shouldValidate: true })
+                  setValue('paidAmountCdf', '', { shouldValidate: true })
+                } else {
+                  setValue('paymentCurrency', CURRENCY.USD, { shouldValidate: true })
+                }
+              }}
+            />
+            <span className="space-y-0.5">
+              <span className="block text-sm font-medium">Paiement mixte (USD + CDF)</span>
+              <span className="block text-xs text-muted-foreground">
+                Encaisser une partie en dollars et le reste en francs sur la même caisse.
+              </span>
+            </span>
+          </label>
+        )}
+        {needsCashRegister && !mixedPayment && (
+          <Select
+            label="Devise de paiement"
+            options={CURRENCY_OPTIONS}
+            variant="filter"
+            value={paymentCurrency ?? currency ?? CURRENCY.USD}
+            onChange={(e) =>
+              setValue('paymentCurrency', e.target.value as FreightShipmentFormData['paymentCurrency'], {
+                shouldValidate: true,
+              })
+            }
+            error={errors.paymentCurrency?.message}
+          />
+        )}
+        {needsCashRegister && mixedPayment && (
+          <>
+            <Input
+              label="Montant encaissé (USD)"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              placeholder="0,00"
+              className={fieldClass}
+              error={errors.paidAmountUsd?.message}
+              value={paidAmountUsd ?? ''}
+              onChange={(e) => {
+                const nextUsd = e.target.value
+                setValue('paidAmountUsd', nextUsd, { shouldValidate: true })
+                const suggested = suggestMixedPaymentCdf(
+                  paidDueNumber,
+                  nextUsd,
+                  exchangeRates,
+                  dueCurrency,
+                )
+                if (suggested != null) {
+                  setValue('paidAmountCdf', suggested, { shouldValidate: true })
+                }
+              }}
+            />
+            <Input
+              label="Montant encaissé (CDF)"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              placeholder="0,00"
+              className={fieldClass}
+              error={errors.paidAmountCdf?.message}
+              {...register('paidAmountCdf')}
+            />
+            <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 text-sm sm:col-span-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Équivalent total</span>
+                <span className="font-semibold tabular-nums">
+                  {mixedEquivalent != null
+                    ? formatMoney(mixedEquivalent, dueCurrency)
+                    : '—'}
+                </span>
+              </div>
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Montant encaissé</span>
+                <span className="font-semibold tabular-nums">
+                  {formatMoney(paidDueNumber, dueCurrency)}
+                </span>
+              </div>
+              {paidAmountUsd && paidAmountCdf && mixedEquivalent != null && !mixedPaymentOk && (
+                <p className="mt-2 text-xs text-destructive">
+                  L&apos;équivalent mixte doit correspondre au montant encaissé. Vérifiez le taux.
+                </p>
+              )}
+              {mixedPaymentOk && (
+                <p className="mt-2 text-xs text-emerald-700">
+                  Paiement mixte équilibré — deux écritures caisse seront créées.
+                </p>
+              )}
+            </div>
+          </>
         )}
         {canEditPaidAmount ? (
           <Input
@@ -739,6 +899,7 @@ export function FreightShipmentForm({
         isLoading={isLoading}
         submitLabel={submitLabel}
         cancelHref={cancelHref}
+        canSubmit={!mixedPayment || !needsCashRegister || mixedPaymentOk}
       />
     </form>
   )

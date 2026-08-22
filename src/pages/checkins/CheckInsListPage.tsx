@@ -42,6 +42,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Pagination } from '@/components/ui/pagination'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
@@ -253,16 +254,29 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
 function CheckInCard({ checkIn }: { checkIn: CheckIn }) {
   const netToPay = parseFloat(checkIn.netToPay) || 0
   const passenger = getCheckInPassengerName(checkIn)
+  const hasReduction = !!checkIn.hasWeightReduction
 
   return (
     <Link to={`/checkins/${checkIn.id}`} className="block group">
-      <Card className="overflow-hidden border-border/80 shadow-sm transition-all active:scale-[0.99] group-hover:border-brand-orange/40 group-hover:shadow-md">
+      <Card
+        className={cn(
+          'overflow-hidden border-border/80 shadow-sm transition-all active:scale-[0.99] group-hover:border-brand-orange/40 group-hover:shadow-md',
+          hasReduction && 'border-l-4 border-l-sky-500',
+        )}
+      >
         <CardContent className="p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1 space-y-2">
-              <span className="font-mono text-xs font-semibold text-primary truncate block">
-                {checkIn.id}
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-xs font-semibold text-primary truncate">
+                  {checkIn.id}
+                </span>
+                {hasReduction && (
+                  <Badge className="shrink-0 border-sky-500/30 bg-sky-500/15 text-sky-800 hover:bg-sky-500/20">
+                    Réduction poids
+                  </Badge>
+                )}
+              </div>
               <div className="space-y-1">
                 <p className="inline-flex items-center gap-1.5 text-sm font-semibold truncate">
                   <Ticket className="h-3.5 w-3.5 shrink-0 text-brand-orange" aria-hidden="true" />
@@ -343,7 +357,16 @@ function CheckInTable({ checkIns }: { checkIns: CheckIn[] }) {
                   className={cn(cellClass, 'truncate font-medium')}
                   title={getCheckInPassengerName(checkIn) ?? undefined}
                 >
-                  {getCheckInPassengerName(checkIn) ?? '—'}
+                  <span className="inline-flex max-w-full items-center gap-1.5">
+                    {checkIn.hasWeightReduction && (
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full bg-sky-500"
+                        title="Réduction de poids"
+                        aria-label="Réduction de poids"
+                      />
+                    )}
+                    <span className="truncate">{getCheckInPassengerName(checkIn) ?? '—'}</span>
+                  </span>
                 </TableCell>
                 <TableCell className={cn(cellClass, 'truncate font-mono text-[11px] lg:text-xs')} title={getCheckInTicketNumber(checkIn)}>
                   {getCheckInTicketNumber(checkIn)}

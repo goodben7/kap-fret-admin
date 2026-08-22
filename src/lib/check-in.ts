@@ -9,6 +9,11 @@ import {
 } from '@/constants/check-in-baggage'
 import { CURRENCY, normalizeCurrency, type Currency } from '@/constants/ticket'
 import { convertAmountBetweenCurrencyCodes } from '@/lib/exchange-rate'
+import {
+  computeMixedPaymentUsdEquivalent,
+  isMixedPaymentWithinTolerance,
+  suggestMixedPaymentCdf,
+} from '@/lib/mixed-payment'
 import { extractResourceId } from '@/lib/hydra'
 import type { ExchangeRateResource } from '@/types/exchange-rate'
 import type { CheckIn, CheckInBaggage, CheckInCreatePayload, CheckInPatchPayload } from '@/types/check-in'
@@ -273,6 +278,12 @@ export function computeCheckInExcessPrice(
   return converted.toFixed(2)
 }
 
+export {
+  computeMixedPaymentUsdEquivalent,
+  isMixedPaymentWithinTolerance,
+  suggestMixedPaymentCdf,
+} from '@/lib/mixed-payment'
+
 /** Montant à encaisser dans la devise de paiement (tarification check-in toujours en USD). */
 export function computeCheckInPaymentAmount(
   totalUsd: number,
@@ -402,16 +413,26 @@ export function toCheckInCreatePayload(data: CheckInCreateFormData): CheckInCrea
     excessWeightKg: formatDecimal(data.excessWeightKg),
     excessPrice: formatDecimal(data.excessPrice),
     currency: CURRENCY.USD,
-    paymentCurrency: normalizeCurrency(data.paymentCurrency),
+    paymentCurrency: data.mixedPayment
+      ? CURRENCY.USD
+      : normalizeCurrency(data.paymentCurrency),
     netToPay: formatDecimal(data.netToPay),
     handBaggageWeight: formatDecimal(data.handBaggageWeight || '0'),
     observations: data.observations?.trim() ?? '',
+    weightJustification: data.weightJustification?.trim() || null,
+    hasWeightReduction: !!data.hasWeightReduction,
+    destinationObservations: data.destinationObservations?.trim() || null,
     encodedAt: encodedAtDateInputToIso(data.encodedAt),
     baggages: data.baggages.filter(hasBaggageWeight).map(toBaggageCreateInput),
   }
 
   if (excess > 0 && data.cashRegister?.trim()) {
     payload.cashRegister = data.cashRegister
+  }
+
+  if (data.mixedPayment && excess > 0) {
+    payload.paidAmountUsd = formatDecimal(data.paidAmountUsd || '0')
+    payload.paidAmountCdf = formatDecimal(data.paidAmountCdf || '0')
   }
 
   return payload
@@ -426,6 +447,9 @@ export function toCheckInPatchPayload(data: CheckInPatchFormData): CheckInPatchP
     netToPay: formatDecimal(data.netToPay),
     handBaggageWeight: formatDecimal(data.handBaggageWeight || '0'),
     observations: data.observations?.trim() ?? '',
+    weightJustification: data.weightJustification?.trim() || null,
+    hasWeightReduction: !!data.hasWeightReduction,
+    destinationObservations: data.destinationObservations?.trim() || null,
     encodedAt: encodedAtDateInputToIso(data.encodedAt),
     baggages: data.baggages.filter(hasBaggageWeight).map(toBaggagePatchInput),
   }
@@ -467,6 +491,9 @@ export function checkInToFormDefaults(checkIn: CheckIn): Partial<CheckInPatchFor
     netToPay: checkIn.netToPay,
     handBaggageWeight: checkIn.handBaggageWeight,
     observations: checkIn.observations ?? '',
+    weightJustification: checkIn.weightJustification ?? '',
+    hasWeightReduction: !!checkIn.hasWeightReduction,
+    destinationObservations: checkIn.destinationObservations ?? '',
     encodedAt: toEncodedAtDateInput(checkIn.encodedAt ?? checkIn.createdAt),
     baggages: sortCheckInBaggagesByNewestFirst(checkIn.baggages ?? []).map((baggage) => ({
       id: resolveCheckInBaggageFormId(baggage),

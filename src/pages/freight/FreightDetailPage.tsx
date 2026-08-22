@@ -5,8 +5,10 @@ import {
   Banknote,
   Ban,
   Box,
+  Download,
   FileText,
   History,
+  MessageCircle,
   MessageSquare,
   Package,
   Pencil,
@@ -40,6 +42,13 @@ import {
 } from '@/constants/freight'
 import { FreightPackageForm } from '@/components/forms/FreightPackageForm'
 import { FreightDeliveryPaymentModal, type FreightDeliveryPaymentResult } from '@/components/freight/FreightDeliveryPaymentModal'
+import { TicketContactActions } from '@/components/tickets/TicketContactActions'
+import {
+  buildFreightLtaReceiptWhatsAppText,
+  downloadFreightLtaReceiptPdf,
+} from '@/lib/freight-lta-receipt-pdf'
+import { toWhatsAppUrl } from '@/lib/phone'
+import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -381,8 +390,10 @@ export function FreightDetailPage() {
     setNewStatus('')
   }
 
-  const handleDeliveryPaymentConfirm = async ({ transaction }: FreightDeliveryPaymentResult) => {
-    await createTransaction.mutateAsync(transaction)
+  const handleDeliveryPaymentConfirm = async ({ transactions }: FreightDeliveryPaymentResult) => {
+    for (const transaction of transactions) {
+      await createTransaction.mutateAsync(transaction)
+    }
     await updateStatus.mutateAsync({ id: shipmentId, status: FREIGHT_STATUS.DELIVERED })
     setDeliveryPaymentModalOpen(false)
     setNewStatus('')
@@ -464,6 +475,61 @@ export function FreightDetailPage() {
         />
       )}
 
+      {activeTab === 'details' && (
+        <Card className="rounded-2xl border-border/80 shadow-sm">
+          <CardContent className="flex flex-wrap gap-2 p-4">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 rounded-xl"
+              onClick={() => {
+                downloadFreightLtaReceiptPdf(shipment)
+                toast.success('Reçu LTA téléchargé')
+              }}
+            >
+              <Download className="h-4 w-4" />
+              Télécharger le reçu
+            </Button>
+            {shipment.senderPhone && (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 rounded-xl text-emerald-700"
+                onClick={() => {
+                  downloadFreightLtaReceiptPdf(shipment)
+                  const url = toWhatsAppUrl(
+                    shipment.senderPhone,
+                    buildFreightLtaReceiptWhatsAppText(shipment),
+                  )
+                  if (url) window.open(url, '_blank', 'noopener,noreferrer')
+                }}
+              >
+                <MessageCircle className="h-4 w-4" />
+                WhatsApp expéditeur
+              </Button>
+            )}
+            {shipment.receiverPhone && (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 rounded-xl text-emerald-700"
+                onClick={() => {
+                  downloadFreightLtaReceiptPdf(shipment)
+                  const url = toWhatsAppUrl(
+                    shipment.receiverPhone,
+                    buildFreightLtaReceiptWhatsAppText(shipment),
+                  )
+                  if (url) window.open(url, '_blank', 'noopener,noreferrer')
+                }}
+              >
+                <MessageCircle className="h-4 w-4" />
+                WhatsApp destinataire
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {activeTab === 'details' ? (
       <>
       <div className="grid gap-4 lg:grid-cols-2">
@@ -501,7 +567,17 @@ export function FreightDetailPage() {
           <DetailRow label="Nom" value={shipment.senderName} />
           <DetailRow label="Adresse" value={shipment.senderAddress} />
           {shipment.senderPhone && (
-            <DetailRow label="Téléphone" value={shipment.senderPhone} href={`tel:${shipment.senderPhone}`} />
+            <div className="flex items-center justify-between gap-3 border-b border-border/40 py-2.5 last:border-0">
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">Téléphone</p>
+                <p className="font-medium">{shipment.senderPhone}</p>
+              </div>
+              <TicketContactActions
+                phone={shipment.senderPhone}
+                passengerName={shipment.senderName}
+                size="sm"
+              />
+            </div>
           )}
         </DetailSection>
 
@@ -509,7 +585,17 @@ export function FreightDetailPage() {
           <DetailRow label="Nom" value={shipment.receiverName} />
           <DetailRow label="Adresse" value={shipment.receiverAddress} />
           {shipment.receiverPhone && (
-            <DetailRow label="Téléphone" value={shipment.receiverPhone} href={`tel:${shipment.receiverPhone}`} />
+            <div className="flex items-center justify-between gap-3 border-b border-border/40 py-2.5 last:border-0">
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">Téléphone</p>
+                <p className="font-medium">{shipment.receiverPhone}</p>
+              </div>
+              <TicketContactActions
+                phone={shipment.receiverPhone}
+                passengerName={shipment.receiverName}
+                size="sm"
+              />
+            </div>
           )}
         </DetailSection>
 

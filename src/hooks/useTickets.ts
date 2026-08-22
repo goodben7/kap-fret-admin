@@ -93,7 +93,7 @@ export function usePayTicket() {
       void queryClient.invalidateQueries({ queryKey: ticketKeys.detail(id) })
       void queryClient.invalidateQueries({ queryKey: ['cash-transactions'] })
       void queryClient.invalidateQueries({ queryKey: ['activities'] })
-      toast.success('Paiement enregistré — billet émis')
+      toast.success('Paiement enregistré')
     },
   })
 }

@@ -1,7 +1,7 @@
-import { jsPDF } from 'jspdf'
+import { jsPDF, GState } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { BRAND } from '@/constants/brand'
-import { CHECK_IN_STATUS } from '@/constants/check-in'
+import { CHECK_IN_STATUS, CHECK_IN_EXCESS_PRICE_PER_KG_USD } from '@/constants/check-in'
 import {
   buildCheckInManifestFilters,
   type CheckInFilters,
@@ -36,40 +36,49 @@ export interface CheckInManifestParams {
 
 const NAVY = { r: 11, g: 33, b: 61 }
 const ORANGE = { r: 245, g: 124, b: 0 }
-const HEADER_FILL: [number, number, number] = [252, 211, 177]
+/** En-tête tableau — bleu clair (modèle papier) */
+const HEADER_FILL: [number, number, number] = [173, 216, 230]
+const GRID_COLOR: [number, number, number] = [40, 40, 40]
 
-const MARGIN_X = 12
-const FOOTER_HEIGHT_MM = 22
-const LOGO_WIDTH_MM = 30
-const LOGO_HEIGHT_MM = 18
+const MARGIN_X = 10
+const FOOTER_HEIGHT_MM = 24
+const LOGO_WIDTH_MM = 32
+const LOGO_HEIGHT_MM = 20
 
-/** Largeur utile A4 paysage (297 mm − marges gauche/droite) */
+/** Largeur utile A4 paysage */
 const USABLE_TABLE_WIDTH_MM = 297 - MARGIN_X * 2
 
-const COLUMN_COUNT = 13
+/**
+ * Colonnes alignées sur le modèle papier :
+ * N° | NOMS | N° BILLETS | POIDS CHECK-IN | POIDS TOTAL | FRANCHISES |
+ * BAGAGES A MAIN | TOTAL EXCEDENTS | PRIX | NET USD/CDF | SOLDE USD/CDF | OBSERVAT°
+ */
+const COLUMN_COUNT = 14
 
-/** Largeurs colonnes (mm) — total = USABLE_TABLE_WIDTH_MM */
 const COLUMN_WIDTHS_MM = {
-  index: 8,
-  name: 49,
-  ticket: 25,
-  checkInWeight: 19,
-  totalWeight: 20,
-  allowance: 18,
-  hand: 18,
-  excess: 19,
-  netToPayUsd: 14,
-  netToPayCdf: 14,
-  balanceUsd: 13,
-  balanceCdf: 13,
-  observations: 43,
+  index: 7,
+  name: 40,
+  ticket: 22,
+  checkInWeight: 16,
+  totalWeight: 16,
+  franchise: 15,
+  hand: 14,
+  excess: 15,
+  prix: 10,
+  netToPayUsd: 12,
+  netToPayCdf: 12,
+  balanceUsd: 12,
+  balanceCdf: 12,
+  observations: 74,
 } as const
 
 const TABLE_WIDTH_MM = USABLE_TABLE_WIDTH_MM
 
-const HEADER_ROW_MM = 10
-const ROW_HEIGHT_MM = 7
-const MIN_EMPTY_ROWS_AFTER_DATA = 3
+const HEADER_ROW_MM = 11
+const ROW_HEIGHT_MM = 6.5
+const MIN_EMPTY_ROWS_AFTER_DATA = 4
+
+const PRIX_CELL = `${CHECK_IN_EXCESS_PRICE_PER_KG_USD}$`
 
 function formatManifestDate(dateInput: string): string {
   const [year, month, day] = dateInput.split('-')
@@ -158,7 +167,10 @@ interface ManifestTableBuildResult {
 }
 
 function emptyManifestRow(): string[] {
-  return Array.from({ length: COLUMN_COUNT }, () => '')
+  const row = Array.from({ length: COLUMN_COUNT }, () => '')
+  // Colonne PRIX préremplie comme sur le modèle papier
+  row[8] = PRIX_CELL
+  return row
 }
 
 function buildCheckInManifestRows(checkIns: CheckIn[]): ManifestTableBuildResult {
@@ -186,9 +198,10 @@ function buildCheckInManifestRows(checkIns: CheckIn[]): ManifestTableBuildResult
       getCheckInTicketNumber(checkIn),
       formatCheckInWeightBreakdown(checkIn),
       formatKgCell(getTotalCheckInWeightKg(checkIn)),
-      formatKgCell(checkIn.checkInWeight),
+      formatKgCell(checkIn.baggageAllowanceKg),
       formatKgCell(checkIn.handBaggageWeight),
       formatKgCell(checkIn.excessWeightKg),
+      PRIX_CELL,
       netUsd,
       netCdf,
       balanceUsd,
@@ -205,6 +218,7 @@ function buildCheckInManifestRows(checkIns: CheckIn[]): ManifestTableBuildResult
     rows.push([
       '',
       'TOTAL',
+      '',
       '',
       '',
       '',
@@ -311,7 +325,7 @@ function buildTableBodyRows(
 
 function drawBrandTitle(doc: jsPDF, centerX: number, y: number) {
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(20)
+  doc.setFontSize(22)
 
   const kapPart = 'KAP '
   const fretPart = 'FRET'
@@ -335,7 +349,7 @@ function drawHeader(
   const pageWidth = doc.internal.pageSize.getWidth()
   const centerX = pageWidth / 2
   const rightX = pageWidth - MARGIN_X
-  const topY = 10
+  const topY = 8
 
   if (logoDataUrl) {
     try {
@@ -348,20 +362,22 @@ function drawHeader(
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
   doc.setTextColor(0, 0, 0)
-  doc.text(`DATE DU VOL : ${formatManifestDate(params.travelDate)}`, rightX, topY + 3, {
+  doc.text(`DATE DU VOL : ${formatManifestDate(params.travelDate)}`, rightX, topY + 4, {
     align: 'right',
   })
-  doc.text(`N° DU VOL : ${params.flightNumber}`, rightX, topY + 9, { align: 'right' })
+  doc.text(`N° DU VOL : ${params.flightNumber || '..........'}`, rightX, topY + 10, {
+    align: 'right',
+  })
 
-  drawBrandTitle(doc, centerX, topY + 10)
+  drawBrandTitle(doc, centerX, topY + 9)
 
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(10)
-  doc.setTextColor(NAVY.r, NAVY.g, NAVY.b)
+  doc.setTextColor(0, 0, 0)
   doc.text(
     `MANIFESTE PASSAGERS CHECK-IN ${params.departureLabel.toUpperCase()}`,
     centerX,
-    topY + 18,
+    topY + 17,
     { align: 'center' },
   )
 
@@ -371,20 +387,36 @@ function drawHeader(
   doc.text(
     `TRAJET : ${params.departureCode} – ${params.destinationCode}`,
     centerX,
-    topY + 25,
+    topY + 23,
     { align: 'center' },
   )
 
-  return topY + 32
+  return topY + 28
+}
+
+function drawWatermark(doc: jsPDF) {
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const pageHeight = doc.internal.pageSize.getHeight()
+
+  doc.saveGraphicsState()
+  doc.setGState(new GState({ opacity: 0.08 }))
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(64)
+  doc.setTextColor(ORANGE.r, ORANGE.g, ORANGE.b)
+  doc.text('KAP FRET', pageWidth / 2, pageHeight / 2 + 5, {
+    align: 'center',
+    angle: 28,
+  })
+  doc.restoreGraphicsState()
 }
 
 function drawFooter(doc: jsPDF, params: CheckInManifestParams) {
   const pageWidth = doc.internal.pageSize.getWidth()
   const pageHeight = doc.internal.pageSize.getHeight()
   const blockRight = pageWidth - MARGIN_X
-  const blockWidth = 98
+  const blockWidth = 100
   const blockLeft = blockRight - blockWidth
-  const signatureLineY = pageHeight - FOOTER_HEIGHT_MM + 4
+  const signatureLineY = pageHeight - FOOTER_HEIGHT_MM + 6
   const labelY = signatureLineY + 5
   const faitY = signatureLineY - 7
 
@@ -399,7 +431,7 @@ function drawFooter(doc: jsPDF, params: CheckInManifestParams) {
   )
 
   doc.setLineWidth(0.35)
-  doc.setDrawColor(60, 60, 60)
+  doc.setDrawColor(40, 40, 40)
   doc.line(blockLeft, signatureLineY, blockRight, signatureLineY)
 
   doc.setFont('helvetica', 'normal')
@@ -427,12 +459,13 @@ export async function generateCheckInManifestPdf(params: CheckInManifestParams):
         { content: 'N° BILLETS', rowSpan: 2 },
         { content: 'POIDS\nCHECK-IN', rowSpan: 2 },
         { content: 'POIDS TOTAL\nCHECK-IN', rowSpan: 2 },
-        { content: 'POIDS\nSOUTE', rowSpan: 2 },
+        { content: 'POIDS\nFRANCHISES', rowSpan: 2 },
         { content: 'BAGAGES\nA MAIN', rowSpan: 2 },
-        { content: 'EXCEDENT', rowSpan: 2 },
+        { content: 'TOTAL\nEXCEDENTS', rowSpan: 2 },
+        { content: 'PRIX', rowSpan: 2 },
         { content: 'NET A PAYER\nEXCEDENT', colSpan: 2 },
         { content: 'SOLDE', colSpan: 2 },
-        { content: 'OBSERVATIONS', rowSpan: 2 },
+        { content: 'OBSERVAT°', rowSpan: 2 },
       ],
       ['USD', 'CDF', 'USD', 'CDF'],
     ],
@@ -440,21 +473,25 @@ export async function generateCheckInManifestPdf(params: CheckInManifestParams):
     theme: 'grid',
     styles: {
       font: 'helvetica',
-      fontSize: 7,
-      cellPadding: 1.8,
-      lineColor: [180, 180, 180],
-      lineWidth: 0.2,
+      fontSize: 6.5,
+      cellPadding: 1.2,
+      lineColor: GRID_COLOR,
+      lineWidth: 0.25,
       valign: 'middle',
-      minCellHeight: 6,
+      minCellHeight: 5.5,
       overflow: 'linebreak',
+      textColor: [0, 0, 0],
     },
     headStyles: {
       fillColor: HEADER_FILL,
-      textColor: [40, 40, 40],
+      textColor: [20, 20, 20],
       fontStyle: 'bold',
       halign: 'center',
-      fontSize: 6.5,
-      cellPadding: 2,
+      fontSize: 5.8,
+      cellPadding: 1.4,
+      valign: 'middle',
+      lineColor: GRID_COLOR,
+      lineWidth: 0.25,
     },
     columnStyles: {
       0: { cellWidth: COLUMN_WIDTHS_MM.index, halign: 'center' },
@@ -462,22 +499,23 @@ export async function generateCheckInManifestPdf(params: CheckInManifestParams):
       2: { cellWidth: COLUMN_WIDTHS_MM.ticket, halign: 'center' },
       3: { cellWidth: COLUMN_WIDTHS_MM.checkInWeight, halign: 'center' },
       4: { cellWidth: COLUMN_WIDTHS_MM.totalWeight, halign: 'right' },
-      5: { cellWidth: COLUMN_WIDTHS_MM.allowance, halign: 'right' },
+      5: { cellWidth: COLUMN_WIDTHS_MM.franchise, halign: 'right' },
       6: { cellWidth: COLUMN_WIDTHS_MM.hand, halign: 'right' },
       7: { cellWidth: COLUMN_WIDTHS_MM.excess, halign: 'right' },
-      8: { cellWidth: COLUMN_WIDTHS_MM.netToPayUsd, halign: 'right' },
-      9: { cellWidth: COLUMN_WIDTHS_MM.netToPayCdf, halign: 'right' },
-      10: { cellWidth: COLUMN_WIDTHS_MM.balanceUsd, halign: 'right' },
-      11: { cellWidth: COLUMN_WIDTHS_MM.balanceCdf, halign: 'right' },
-      12: { cellWidth: COLUMN_WIDTHS_MM.observations },
+      8: { cellWidth: COLUMN_WIDTHS_MM.prix, halign: 'center', fontStyle: 'bold' },
+      9: { cellWidth: COLUMN_WIDTHS_MM.netToPayUsd, halign: 'right' },
+      10: { cellWidth: COLUMN_WIDTHS_MM.netToPayCdf, halign: 'right' },
+      11: { cellWidth: COLUMN_WIDTHS_MM.balanceUsd, halign: 'right' },
+      12: { cellWidth: COLUMN_WIDTHS_MM.balanceCdf, halign: 'right' },
+      13: { cellWidth: COLUMN_WIDTHS_MM.observations },
     },
     margin: { left: MARGIN_X, right: MARGIN_X, bottom: FOOTER_HEIGHT_MM },
     showHead: singlePage ? 'firstPage' : 'everyPage',
     didParseCell: (data) => {
       if (data.section !== 'body' || !totalRowIndexes.has(data.row.index)) return
       data.cell.styles.fontStyle = 'bold'
-      data.cell.styles.fillColor = [245, 245, 245]
-      if (data.column.index === 1 || (data.column.index >= 8 && data.column.index <= 11)) {
+      data.cell.styles.fillColor = [235, 245, 250]
+      if (data.column.index === 1 || (data.column.index >= 9 && data.column.index <= 12)) {
         data.cell.styles.halign = data.column.index === 1 ? 'left' : 'right'
       }
     },
@@ -486,6 +524,7 @@ export async function generateCheckInManifestPdf(params: CheckInManifestParams):
   const pageCount = doc.getNumberOfPages()
   for (let page = 1; page <= pageCount; page += 1) {
     doc.setPage(page)
+    drawWatermark(doc)
     drawFooter(doc, params)
   }
 

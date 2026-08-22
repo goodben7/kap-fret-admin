@@ -146,10 +146,24 @@ export function toFreightCreatePayload(data: FreightShipmentFormData): FreightSh
   }
 
   if (
-    (data.paymentMode === FREIGHT_PAYMENT_MODE.CASH || data.paymentMode === FREIGHT_PAYMENT_MODE.PARTIAL)
+    (data.paymentMode === FREIGHT_PAYMENT_MODE.CASH || data.paymentMode === FREIGHT_PAYMENT_MODE.ACC)
     && data.cashRegister?.trim()
   ) {
     payload.cashRegister = data.cashRegister
+  }
+
+  if (
+    data.mixedPayment
+    && (data.paymentMode === FREIGHT_PAYMENT_MODE.CASH || data.paymentMode === FREIGHT_PAYMENT_MODE.ACC)
+  ) {
+    payload.paidAmountUsd = formatDecimal(data.paidAmountUsd || '0')
+    payload.paidAmountCdf = formatDecimal(data.paidAmountCdf || '0')
+    payload.paymentCurrency = CURRENCY.USD
+  } else if (
+    data.paymentCurrency
+    && (data.paymentMode === FREIGHT_PAYMENT_MODE.CASH || data.paymentMode === FREIGHT_PAYMENT_MODE.ACC)
+  ) {
+    payload.paymentCurrency = normalizeCurrency(data.paymentCurrency)
   }
 
   return payload
@@ -322,8 +336,8 @@ export function shouldCollectFreightRemainingOnDelivery(shipment: FreightShipmen
   const remaining = parseFloat(shipment.remainingAmount) || 0
   if (remaining <= 0) return false
   return (
-    shipment.paymentMode === FREIGHT_PAYMENT_MODE.PARTIAL
-    || shipment.paymentMode === FREIGHT_PAYMENT_MODE.AT_ARRIVAL
+    shipment.paymentMode === FREIGHT_PAYMENT_MODE.ACC
+    || shipment.paymentMode === FREIGHT_PAYMENT_MODE.PTA
   )
 }
 

@@ -38,10 +38,12 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { formatMoney, formatDate, formatDateTime, cn } from '@/lib/utils'
 import { getCheckpointDisplayName } from '@/lib/checkpoint'
-import { getTicketTotal, toTicketPaymentPayload, toTicketReportTravelDatePayload } from '@/lib/ticket'
+import { getTicketPaidAmount, getTicketRemainingAmount, getTicketTotalAmount, toTicketPaymentPayload, toTicketReportTravelDatePayload } from '@/lib/ticket'
 import type { TicketReportTravelDateFormData } from '@/schemas/ticket-report-travel-date.schema'
 import type { TicketPaymentFormData } from '@/schemas/ticket-payment.schema'
 import { TicketReportTravelDateModal } from '@/components/tickets/TicketReportTravelDateModal'
+import { TicketContactActions } from '@/components/tickets/TicketContactActions'
+import { toTelHref } from '@/lib/phone'
 import { TicketPaymentModal } from '@/components/tickets/TicketPaymentModal'
 import { RelatedCashTransactionsPanel } from '@/components/cash-transactions/RelatedCashTransactionsPanel'
 import { CASH_TRANSACTION_REFERENCE_TYPE } from '@/constants/cash-transaction'
@@ -236,7 +238,9 @@ export function TicketDetailPage() {
 
   const canModify = ticket.status === TICKET_STATUS.ISSUED
   const isReserved = ticket.status === TICKET_STATUS.RESERVED
-  const total = getTicketTotal(ticket)
+  const total = getTicketTotalAmount(ticket)
+  const paid = getTicketPaidAmount(ticket)
+  const remaining = getTicketRemainingAmount(ticket)
   const money = (amount: number) => formatMoney(amount, ticket.currency)
   const currencyLabel = normalizeCurrency(ticket.currency)
   const confirm = pendingAction ? STATUS_CONFIRM[pendingAction] : undefined
@@ -324,9 +328,22 @@ export function TicketDetailPage() {
             <div>
               <p className="font-semibold">Billet réservé</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Encaissez {money(total)} pour émettre le billet au passager.
+                {paid > 0
+                  ? `Reste à encaisser : ${money(remaining)} (déjà payé ${money(paid)}).`
+                  : `Encaissez ${money(remaining)} pour émettre le billet, ou un acompte partiel.`}
               </p>
             </div>
+            <div className="flex flex-wrap gap-2 sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 shrink-0 rounded-xl"
+              onClick={() => setReportTravelDateOpen(true)}
+              disabled={actionPending}
+            >
+              <CalendarClock className="h-4 w-4" />
+              Modifier la date
+            </Button>
             <Button
               type="button"
               className="h-11 shrink-0 rounded-xl bg-brand-orange hover:bg-brand-orange/90"
@@ -336,6 +353,7 @@ export function TicketDetailPage() {
               <Banknote className="h-4 w-4" />
               Encaisser le billet
             </Button>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -352,7 +370,22 @@ export function TicketDetailPage() {
           )}
           <DetailRow label="Sexe" value={GENDER_LABELS[ticket.gender]} />
           {ticket.phone && (
-            <DetailRow label="Téléphone" value={ticket.phone} href={`tel:${ticket.phone}`} />
+            <div className="flex items-center justify-between gap-3 border-b border-border/40 py-2.5 last:border-0">
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">Téléphone</p>
+                <a
+                  href={toTelHref(ticket.phone) ?? undefined}
+                  className="font-medium text-primary hover:underline"
+                >
+                  {ticket.phone}
+                </a>
+              </div>
+              <TicketContactActions
+                phone={ticket.phone}
+                passengerName={ticket.passengerName}
+                size="sm"
+              />
+            </div>
           )}
         </DetailSection>
 
@@ -385,6 +418,8 @@ export function TicketDetailPage() {
             <span className="text-sm font-semibold">Total</span>
             <span className="text-lg font-bold tabular-nums text-brand-orange">{money(total)}</span>
           </div>
+          <DetailRow label="Montant payé" value={money(paid)} />
+          {remaining > 0 && <DetailRow label="Reste à payer" value={money(remaining)} />}
           <DetailRow label="Kilo total accordé" value={`${ticket.baggageAllowanceKg} kg`} />
         </DetailSection>
 
@@ -435,15 +470,25 @@ export function TicketDetailPage() {
 
       {isReserved && activeTab === 'details' && (
         <div className="fixed inset-x-0 bottom-[4.25rem] z-30 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85 lg:hidden">
-          <div className="mx-auto max-w-3xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <div className="mx-auto flex max-w-3xl gap-2 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
             <Button
               type="button"
-              className="h-11 w-full rounded-xl bg-brand-orange font-semibold hover:bg-brand-orange/90"
+              variant="outline"
+              className="h-11 flex-1 rounded-xl"
+              onClick={() => setReportTravelDateOpen(true)}
+              disabled={actionPending}
+            >
+              <CalendarClock className="h-4 w-4" />
+              Date
+            </Button>
+            <Button
+              type="button"
+              className="h-11 flex-[1.4] rounded-xl bg-brand-orange font-semibold hover:bg-brand-orange/90"
               onClick={() => setPaymentModalOpen(true)}
               disabled={actionPending}
             >
               <Banknote className="h-4 w-4" />
-              Encaisser le billet
+              Encaisser
             </Button>
           </div>
         </div>

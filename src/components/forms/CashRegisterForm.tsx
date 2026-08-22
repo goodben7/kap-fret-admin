@@ -10,9 +10,11 @@ import {
   type CashRegisterPatchFormData,
 } from '@/schemas/cash-register.schema'
 import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
+import { CASH_REGISTER_MODULE, CASH_REGISTER_MODULE_OPTIONS } from '@/constants/cash-register'
 import type { ReactNode } from 'react'
 
 const CREATE_FORM_ID = 'cash-register-create-form'
@@ -141,11 +143,13 @@ export function CashRegisterCreateForm({
       openingBalanceCDF: '0.00',
       openingBalanceUSD: '0.00',
       active: true,
+      module: CASH_REGISTER_MODULE.GENERAL,
       ...defaultValues,
     },
   })
 
   const isActive = watch('active')
+  const module = watch('module')
 
   return (
     <form id={CREATE_FORM_ID} onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -163,6 +167,18 @@ export function CashRegisterCreateForm({
           className={fieldClass}
           error={errors.name?.message}
           {...register('name')}
+        />
+        <Select
+          label="Module"
+          options={CASH_REGISTER_MODULE_OPTIONS}
+          value={module ?? CASH_REGISTER_MODULE.GENERAL}
+          onChange={(e) =>
+            setValue('module', e.target.value as CashRegisterCreateFormData['module'], {
+              shouldValidate: true,
+            })
+          }
+          error={errors.module?.message}
+          variant="filter"
         />
         <Input
           label="Solde d'ouverture USD"
@@ -228,11 +244,13 @@ export function CashRegisterPatchForm({
     resolver: zodResolver(cashRegisterPatchSchema),
     defaultValues: {
       active: true,
+      module: CASH_REGISTER_MODULE.GENERAL,
       ...defaultValues,
     },
   })
 
   const isActive = watch('active')
+  const module = watch('module')
 
   return (
     <form id={PATCH_FORM_ID} onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -250,6 +268,18 @@ export function CashRegisterPatchForm({
           className={fieldClass}
           error={errors.name?.message}
           {...register('name')}
+        />
+        <Select
+          label="Module"
+          options={CASH_REGISTER_MODULE_OPTIONS}
+          value={module ?? CASH_REGISTER_MODULE.GENERAL}
+          onChange={(e) =>
+            setValue('module', e.target.value as CashRegisterPatchFormData['module'], {
+              shouldValidate: true,
+            })
+          }
+          error={errors.module?.message}
+          variant="filter"
         />
         <div className="sm:col-span-2">
           <label

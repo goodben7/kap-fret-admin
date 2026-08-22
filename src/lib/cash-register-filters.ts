@@ -6,6 +6,7 @@ export interface CashRegisterFilters {
   code?: string
   name?: string
   active?: boolean
+  module?: string
   issuingOffice?: string
 }
 
@@ -45,6 +46,9 @@ export function buildCashRegisterFilterParams(
 
   const active = filters.active
   if (active != null) params.active = active
+
+  const module = filters.module?.trim()
+  if (module) params.module = module
 
   const issuingOffice = filters.issuingOffice?.trim()
   if (issuingOffice) params.issuingOffice = normalizeIri(issuingOffice)
