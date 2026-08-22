@@ -27,14 +27,14 @@ export function getCashTransactionCurrencyCode(
 }
 
 export function getCashTransactionCashRegisterRef(
-  cashRegister: string | CashTransactionCashRegisterRef | undefined,
+  cashRegister: string | CashTransactionCashRegisterRef | null | undefined,
 ): CashTransactionCashRegisterRef | null {
   if (!cashRegister || typeof cashRegister === 'string') return null
   return cashRegister
 }
 
 export function getCashTransactionCashRegisterLabel(
-  cashRegister: string | CashTransactionCashRegisterRef | undefined,
+  cashRegister: string | CashTransactionCashRegisterRef | null | undefined,
 ): string {
   const ref = getCashTransactionCashRegisterRef(cashRegister)
   if (ref?.code && ref?.name) return `${ref.code} — ${ref.name}`
@@ -44,7 +44,7 @@ export function getCashTransactionCashRegisterLabel(
 }
 
 export function getCashTransactionCashRegisterIri(
-  cashRegister: string | CashTransactionCashRegisterRef | undefined,
+  cashRegister: string | CashTransactionCashRegisterRef | null | undefined,
 ): string {
   return extractIri(cashRegister) ?? (typeof cashRegister === 'string' ? cashRegister : '')
 }

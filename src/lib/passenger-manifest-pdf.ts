@@ -66,12 +66,6 @@ const COLUMN_WIDTHS_MM = {
   observations: 54,
 } as const
 
-function formatManifestDate(dateInput: string): string {
-  const [year, month, day] = dateInput.split('-')
-  if (!year || !month || !day) return dateInput
-  return `${day}/${month}/${year}`
-}
-
 function formatRowIndex(index: number): string {
   return String(index).padStart(2, '0')
 }

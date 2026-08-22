@@ -46,7 +46,9 @@ export function downloadCashTransactionsListPdf({
   }
 
   const rows = transactions.map((tx) => {
-    const currency = getCashTransactionCurrencyCode(tx) ?? CURRENCY.USD
+    const currency = getCashTransactionCurrencyCode(tx.currency)
+      ?? getCashTransactionCurrencyCode(tx.transactionCurrency)
+      ?? CURRENCY.USD
     const amount = parseFloat(tx.transactionAmount ?? tx.amount ?? '0') || 0
     return [
       tx.id,
@@ -55,7 +57,7 @@ export function downloadCashTransactionsListPdf({
       currency,
       getCashTransactionReferenceTypeLabel(tx.referenceType),
       tx.referenceId ?? '—',
-      getCashTransactionStatusLabel(tx.status),
+      getCashTransactionStatusLabel(tx.status ?? ''),
       tx.transactionDate ? formatDateTime(tx.transactionDate) : '—',
       (tx.description ?? '').slice(0, 60),
     ]

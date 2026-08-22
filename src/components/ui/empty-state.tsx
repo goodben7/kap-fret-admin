@@ -7,11 +7,17 @@ interface EmptyStateProps {
   icon?: LucideIcon
   title: string
   description?: string
-  action?: {
+  action?: ReactNode | {
     label: string
     onClick: () => void
   }
   children?: ReactNode
+}
+
+function isEmptyStateAction(
+  action: NonNullable<EmptyStateProps['action']>,
+): action is { label: string; onClick: () => void } {
+  return typeof action === 'object' && action !== null && 'label' in action && 'onClick' in action
 }
 
 export function EmptyState({
@@ -29,9 +35,13 @@ export function EmptyState({
         <p className="mt-1 text-sm text-muted-foreground max-w-sm">{description}</p>
       )}
       {action && (
-        <Button className="mt-4" onClick={action.onClick}>
-          {action.label}
-        </Button>
+        isEmptyStateAction(action) ? (
+          <Button className="mt-4" onClick={action.onClick}>
+            {action.label}
+          </Button>
+        ) : (
+          <div className="mt-4">{action}</div>
+        )
       )}
       {children}
     </div>

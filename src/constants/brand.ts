@@ -3,6 +3,7 @@ export const BRAND = {
   logoIconSrc: '/logo.png',
   logoAlt: 'KAP FRET — Gestion transport aérien',
   tagline: 'Gestion Transport Aérien',
+  name: 'KAP FRET',
   legalName: 'KAP FRET S.A.R.L',
   rccm: 'CD/KIN RCCM/25-B-4354',
   idNat: '01-F4300-N87895S',

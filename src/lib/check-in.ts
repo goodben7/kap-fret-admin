@@ -9,11 +9,6 @@ import {
 } from '@/constants/check-in-baggage'
 import { CURRENCY, normalizeCurrency, type Currency } from '@/constants/ticket'
 import { convertAmountBetweenCurrencyCodes } from '@/lib/exchange-rate'
-import {
-  computeMixedPaymentUsdEquivalent,
-  isMixedPaymentWithinTolerance,
-  suggestMixedPaymentCdf,
-} from '@/lib/mixed-payment'
 import { extractResourceId } from '@/lib/hydra'
 import type { ExchangeRateResource } from '@/types/exchange-rate'
 import type { CheckIn, CheckInBaggage, CheckInCreatePayload, CheckInPatchPayload } from '@/types/check-in'
@@ -103,13 +98,18 @@ function getCheckInRegistrationTime(checkIn: {
   return Number.isNaN(time) ? Number.POSITIVE_INFINITY : time
 }
 
+function resolveCheckInTicketNumber(ticket: { ticketNumber?: string } | string | undefined): string {
+  if (!ticket || typeof ticket === 'string') return ''
+  return String(ticket.ticketNumber ?? '')
+}
+
 /** Premier check-in enregistré en premier (N° 1 / plus ancien en haut). */
 export function sortCheckInsByRegistrationOrder<
   T extends {
     createdAt?: string
     encodedAt?: string
     id?: string | number
-    ticket?: { ticketNumber?: string }
+    ticket?: { ticketNumber?: string } | string
   },
 >(checkIns: T[]): T[] {
   return [...checkIns].sort((a, b) => {
@@ -117,8 +117,8 @@ export function sortCheckInsByRegistrationOrder<
     const timeB = getCheckInRegistrationTime(b)
     if (timeA !== timeB) return timeA - timeB
 
-    const numberCmp = String(a.ticket?.ticketNumber ?? '').localeCompare(
-      String(b.ticket?.ticketNumber ?? ''),
+    const numberCmp = resolveCheckInTicketNumber(a.ticket).localeCompare(
+      resolveCheckInTicketNumber(b.ticket),
       undefined,
       { numeric: true },
     )
@@ -134,7 +134,7 @@ export function sortCheckInsByCreatedAtAsc<
     createdAt?: string
     encodedAt?: string
     id?: string | number
-    ticket?: { ticketNumber?: string }
+    ticket?: { ticketNumber?: string } | string
   },
 >(checkIns: T[]): T[] {
   return sortCheckInsByRegistrationOrder(checkIns)

@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf'
 import { BRAND } from '@/constants/brand'
 import { FREIGHT_PAYMENT_MODE_LABELS, FREIGHT_STATUS_LABELS } from '@/constants/freight'
-import { CURRENCY, normalizeCurrency } from '@/constants/ticket'
+import { normalizeCurrency } from '@/constants/ticket'
 import { formatFreightWeight, getFreightIssuingOfficeLabel } from '@/lib/freight'
 import { downloadBlob } from '@/lib/passenger-manifest-pdf'
 import { formatDateTime, formatMoney } from '@/lib/utils'

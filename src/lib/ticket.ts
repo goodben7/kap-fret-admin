@@ -3,7 +3,7 @@ import { extractIri, toIri } from '@/lib/hydra'
 import { convertAmountBetweenCurrencyCodes } from '@/lib/exchange-rate'
 import type { ExchangeRateResource } from '@/types/exchange-rate'
 import { GENDER, PAYMENT_MODE, CURRENCY, TICKET_CATEGORY_BASE_PRICE_USD, TICKET_STATUS, normalizeCurrency } from '@/constants/ticket'
-import type { Currency, Gender, TicketCategory } from '@/constants/ticket'
+import type { Currency, Gender, PaymentMode, TicketCategory } from '@/constants/ticket'
 import type { Ticket, TicketCreatePayload, TicketPatchPayload, TicketReportTravelDatePayload, TicketPaymentPayload } from '@/types/ticket'
 import type { TicketFormData, TicketPatchFormData } from '@/schemas/ticket.schema'
 import type { TicketReportTravelDateFormData } from '@/schemas/ticket-report-travel-date.schema'
@@ -307,6 +307,13 @@ export function getTicketIssuingOfficeLabel(ticket: Ticket): string {
   return String(ticket.issuingOffice)
 }
 
+function toFormPaymentMode(mode: PaymentMode): TicketFormData['paymentMode'] {
+  if (mode === PAYMENT_MODE.CASH || mode === PAYMENT_MODE.ACC || mode === PAYMENT_MODE.PTA) {
+    return mode
+  }
+  return PAYMENT_MODE.CASH
+}
+
 export function ticketToFormDefaults(ticket: Ticket): Partial<TicketFormData> {
   return {
     passengerName: ticket.passengerName,
@@ -328,7 +335,7 @@ export function ticketToFormDefaults(ticket: Ticket): Partial<TicketFormData> {
     fpt: ticket.fpt,
     rva: ticket.rva,
     baggageAllowanceKg: ticket.baggageAllowanceKg,
-    paymentMode: ticket.paymentMode,
+    paymentMode: toFormPaymentMode(ticket.paymentMode),
     sponsor: ticket.sponsor ?? '',
   }
 }
