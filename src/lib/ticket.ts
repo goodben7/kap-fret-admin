@@ -4,10 +4,16 @@ import { convertAmountBetweenCurrencyCodes } from '@/lib/exchange-rate'
 import type { ExchangeRateResource } from '@/types/exchange-rate'
 import { GENDER, PAYMENT_MODE, CURRENCY, TICKET_CATEGORY_BASE_PRICE_USD, TICKET_STATUS, normalizeCurrency } from '@/constants/ticket'
 import type { Currency, Gender, PaymentMode, TicketCategory } from '@/constants/ticket'
-import type { Ticket, TicketCreatePayload, TicketPatchPayload, TicketReportTravelDatePayload, TicketPaymentPayload } from '@/types/ticket'
+import type { Ticket, TicketBatchCreatePayload, TicketCreatePayload, TicketPatchPayload, TicketReportTravelDatePayload, TicketPaymentPayload } from '@/types/ticket'
 import type { TicketFormData, TicketPatchFormData } from '@/schemas/ticket.schema'
 import type { TicketReportTravelDateFormData } from '@/schemas/ticket-report-travel-date.schema'
 import type { TicketPaymentFormData } from '@/schemas/ticket-payment.schema'
+
+function formatDecimal(value: string | number): string {
+  const num = typeof value === 'number' ? value : parseFloat(String(value).replace(',', '.'))
+  if (Number.isNaN(num)) return '0.00'
+  return num.toFixed(2)
+}
 
 export function toTravelDateIso(date: string, time: string): string {
   const normalizedTime = time.length === 5 ? `${time}:00` : time
@@ -207,40 +213,113 @@ export function computeTicketPaymentAmount(
 }
 
 export function toTicketCreatePayload(data: TicketFormData): TicketCreatePayload {
+  const primary = data.passengers[0]
+  if (!primary) {
+    throw new Error('Au moins un passager est requis')
+  }
+
   const payload: TicketCreatePayload = {
-    passengerName: data.passengerName,
-    category: data.category,
-    gender: data.gender,
+    passengerName: primary.passengerName,
+    category: primary.category,
+    gender: primary.gender,
     phone: data.phone ?? '',
     departure: data.departure,
     destination: data.destination,
     travelDate: toTravelDateIso(data.travelDate, data.travelTime),
     travelTime: data.travelTime,
-    basePrice: String(data.basePrice),
+    basePrice: String(primary.basePrice),
     currency: CURRENCY.USD,
     paymentCurrency: data.paymentCurrency,
-    tva: String(data.tva),
-    fpt: String(data.fpt),
-    rva: String(data.rva),
-    baggageAllowanceKg: String(data.baggageAllowanceKg),
+    tva: String(primary.tva),
+    fpt: String(primary.fpt),
+    rva: String(primary.rva),
+    baggageAllowanceKg: String(primary.baggageAllowanceKg),
     paymentMode: data.paymentMode,
-    sponsor: null,
+    sponsor: data.sponsor?.trim() || null,
   }
 
-  const ticketNumber = data.ticketNumber?.trim()
+  const ticketNumber = primary.ticketNumber?.trim()
   if (ticketNumber) {
     payload.ticketNumber = ticketNumber
   }
 
-  if (data.age !== undefined) {
-    payload.age = data.age
+  if (primary.age !== undefined) {
+    payload.age = primary.age
   }
 
   if (data.paymentMode === PAYMENT_MODE.CASH && data.cashRegister?.trim() && !data.reserveForLater) {
     payload.cashRegister = data.cashRegister
   }
 
+  if (
+    data.paymentMode === PAYMENT_MODE.CASH
+    && !data.reserveForLater
+    && data.mixedPayment
+  ) {
+    payload.paidAmountUsd = formatDecimal(data.paidAmountUsd || '0')
+    payload.paidAmountCdf = formatDecimal(data.paidAmountCdf || '0')
+    payload.paymentCurrency = CURRENCY.USD
+  }
+
   return payload
+}
+
+/** Payload POST /api/tickets/batch — achat groupé (1+ passagers). */
+export function toTicketBatchPayload(data: TicketFormData): TicketBatchCreatePayload {
+  const payload: TicketBatchCreatePayload = {
+    phone: data.phone ?? '',
+    departure: data.departure,
+    destination: data.destination,
+    travelDate: toTravelDateIso(data.travelDate, data.travelTime),
+    travelTime: data.travelTime,
+    currency: CURRENCY.USD,
+    paymentCurrency: data.paymentCurrency,
+    paymentMode: data.paymentMode,
+    sponsor: data.sponsor?.trim() || null,
+    passengers: data.passengers.map((passenger) => {
+      const row: TicketBatchCreatePayload['passengers'][number] = {
+        passengerName: passenger.passengerName,
+        category: passenger.category,
+        gender: passenger.gender,
+        basePrice: formatDecimal(passenger.basePrice),
+        tva: formatDecimal(passenger.tva),
+        fpt: formatDecimal(passenger.fpt),
+        rva: formatDecimal(passenger.rva),
+        baggageAllowanceKg: formatDecimal(passenger.baggageAllowanceKg),
+      }
+      const ticketNumber = passenger.ticketNumber?.trim()
+      if (ticketNumber) row.ticketNumber = ticketNumber
+      if (passenger.age !== undefined) row.age = passenger.age
+      return row
+    }),
+  }
+
+  if (data.paymentMode === PAYMENT_MODE.CASH && data.cashRegister?.trim() && !data.reserveForLater) {
+    payload.cashRegister = data.cashRegister
+  }
+
+  if (
+    data.paymentMode === PAYMENT_MODE.CASH
+    && !data.reserveForLater
+    && data.mixedPayment
+  ) {
+    payload.paidAmountUsd = formatDecimal(data.paidAmountUsd || '0')
+    payload.paidAmountCdf = formatDecimal(data.paidAmountCdf || '0')
+    payload.paymentCurrency = CURRENCY.USD
+  }
+
+  return payload
+}
+
+export function getTicketFormGroupTotal(data: Pick<TicketFormData, 'passengers'>): number {
+  return data.passengers.reduce((sum, passenger) => {
+    return sum + getTicketTotal({
+      basePrice: passenger.basePrice,
+      tva: passenger.tva,
+      fpt: passenger.fpt,
+      rva: passenger.rva,
+    })
+  }, 0)
 }
 
 export function buildTicketPaymentDescription(ticket: Pick<Ticket, 'ticketNumber' | 'passengerName'>): string {
@@ -273,9 +352,10 @@ export function toTicketPaymentPayload(
   }
 }
 
-/** Payload PATCH strict — champs modifiables API uniquement */
+/** Payload PATCH — champs modifiables API */
 export function toTicketPatchPayload(data: TicketPatchFormData): TicketPatchPayload {
   const payload: TicketPatchPayload = {
+    ticketNumber: data.ticketNumber.trim(),
     passengerName: data.passengerName,
     gender: data.gender,
     phone: data.phone ?? '',
@@ -283,7 +363,16 @@ export function toTicketPatchPayload(data: TicketPatchFormData): TicketPatchPayl
     destination: data.destination,
     travelDate: toTravelDateIso(data.travelDate, data.travelTime),
     travelTime: data.travelTime,
+    basePrice: formatDecimal(data.basePrice),
+    tva: formatDecimal(data.tva),
+    fpt: formatDecimal(data.fpt),
+    rva: formatDecimal(data.rva),
+    baggageAllowanceKg: formatDecimal(data.baggageAllowanceKg),
+    paymentMode: data.paymentMode,
     sponsor: data.sponsor ?? '',
+  }
+  if (data.category) {
+    payload.category = data.category
   }
   if (data.age !== undefined) {
     payload.age = data.age
@@ -314,8 +403,9 @@ function toFormPaymentMode(mode: PaymentMode): TicketFormData['paymentMode'] {
   return PAYMENT_MODE.CASH
 }
 
-export function ticketToFormDefaults(ticket: Ticket): Partial<TicketFormData> {
+export function ticketToFormDefaults(ticket: Ticket): Partial<TicketPatchFormData> {
   return {
+    ticketNumber: ticket.ticketNumber,
     passengerName: ticket.passengerName,
     category: ticket.category,
     age: ticket.age,
@@ -330,7 +420,6 @@ export function ticketToFormDefaults(ticket: Ticket): Partial<TicketFormData> {
     travelDate: parseTravelDate(ticket.travelDate),
     travelTime: ticket.travelTime,
     basePrice: ticket.basePrice,
-    paymentCurrency: ticket.paymentCurrency ?? normalizeCurrency(ticket.currency),
     tva: ticket.tva,
     fpt: ticket.fpt,
     rva: ticket.rva,

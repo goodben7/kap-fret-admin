@@ -158,6 +158,7 @@ export function normalizeUser(data: unknown): AuthUser {
     holder,
     issuingOffice: holder,
     profile,
+    photoPath: pickString(raw, 'photoPath', 'photo_path') ?? null,
     active: !deleted && !locked,
   }
 }

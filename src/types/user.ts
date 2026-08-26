@@ -19,6 +19,8 @@ export interface AdminUser extends HydraResource {
   holderType?: string
   deleted: boolean
   locked: boolean
+  /** Chemin relatif public (uploads/users/…). */
+  photoPath?: string | null
   mustChangePassword?: boolean
   adminAccountCreated?: boolean
   confirmed?: boolean

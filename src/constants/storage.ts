@@ -15,4 +15,7 @@ export const STORAGE_KEYS = {
   CASH_REGISTERS_VIEW: 'kap_fret_cash_registers_view',
   ACTIVITIES_VIEW: 'kap_fret_activities_view',
   SIDEBAR_COLLAPSED: 'kap_fret_sidebar_collapsed',
+  DRAFT_TICKET_CREATE: 'kap_fret_draft_ticket_create',
+  DRAFT_CHECKIN_CREATE: 'kap_fret_draft_checkin_create',
+  DRAFT_FREIGHT_CREATE: 'kap_fret_draft_freight_create',
 } as const

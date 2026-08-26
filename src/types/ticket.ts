@@ -60,6 +60,38 @@ export interface Ticket extends HydraResource {
   createdAt?: string
   updatedAt?: string
   status: TicketStatus
+  /** UUID d'achat groupé (plusieurs billets d'une même vente). */
+  purchaseGroupId?: string | null
+}
+
+export interface TicketPassengerCreatePayload {
+  ticketNumber?: string | null
+  passengerName: string
+  age?: number
+  category: TicketCategory
+  gender: Gender
+  phone?: string
+  basePrice: string
+  tva: string
+  fpt: string
+  rva: string
+  baggageAllowanceKg: string
+}
+
+export interface TicketBatchCreatePayload {
+  phone: string
+  departure: string
+  destination: string
+  travelDate: string
+  travelTime: string
+  currency: Currency
+  paymentCurrency: Currency
+  paymentMode: PaymentMode
+  sponsor?: string | null
+  cashRegister?: string
+  paidAmountUsd?: string
+  paidAmountCdf?: string
+  passengers: TicketPassengerCreatePayload[]
 }
 
 export interface TicketCreatePayload {
@@ -85,6 +117,10 @@ export interface TicketCreatePayload {
   paymentMode: PaymentMode
   sponsor: string | null
   cashRegister?: string
+  /** Paiement mixte à la création : partie USD. */
+  paidAmountUsd?: string
+  /** Paiement mixte à la création : partie CDF. */
+  paidAmountCdf?: string
 }
 
 /**
@@ -93,14 +129,22 @@ export interface TicketCreatePayload {
  * issuingOffice est exclu (non modifiable côté API à la mise à jour).
  */
 export interface TicketPatchPayload {
+  ticketNumber?: string
   passengerName: string
   age?: number | null
+  category?: TicketCategory
   gender: Gender
   phone: string
   departure: string
   destination: string
   travelDate: string
   travelTime: string
+  basePrice?: string
+  tva?: string
+  fpt?: string
+  rva?: string
+  baggageAllowanceKg?: string
+  paymentMode?: PaymentMode
   sponsor: string
 }
 

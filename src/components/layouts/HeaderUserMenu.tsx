@@ -3,6 +3,7 @@ import { Building2, ChevronDown, LogOut, Mail, User } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { getDisplayName } from '@/lib/normalize-user'
+import { resolveUserPhotoUrl } from '@/lib/user-photo'
 import { cn } from '@/lib/utils'
 
 function getInitials(name: string): string {
@@ -42,6 +43,7 @@ export function HeaderUserMenu() {
 
   const userName = getDisplayName(user)
   const initials = getInitials(userName)
+  const photoUrl = resolveUserPhotoUrl(user.photoPath)
 
   return (
     <div className="flex items-center gap-2 lg:gap-3">
@@ -62,9 +64,17 @@ export function HeaderUserMenu() {
             )}
             aria-label="Menu compte"
           >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-orange/15 text-xs font-bold text-brand-orange ring-2 ring-brand-orange/10">
-              {initials}
-            </span>
+            {photoUrl ? (
+              <img
+                src={photoUrl}
+                alt=""
+                className="h-8 w-8 shrink-0 rounded-full object-cover ring-2 ring-brand-orange/10"
+              />
+            ) : (
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-orange/15 text-xs font-bold text-brand-orange ring-2 ring-brand-orange/10">
+                {initials}
+              </span>
+            )}
             <span className="hidden min-w-0 sm:block">
               <span className="block max-w-[7rem] truncate text-sm font-semibold leading-tight lg:max-w-[11rem]">
                 {userName}

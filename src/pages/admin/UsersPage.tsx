@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
+  Archive,
+  ArchiveRestore,
   ArrowLeft,
   Calendar,
   ChevronRight,
@@ -18,7 +20,7 @@ import {
   Users,
   X,
 } from 'lucide-react'
-import { useUsers, useDeleteUser, useToggleUserLock } from '@/hooks/useUsers'
+import { useUsers, useDeleteUser, useRestoreUser, useToggleUserLock } from '@/hooks/useUsers'
 import { useProfiles } from '@/hooks/useProfiles'
 import { PERSON_TYPE_LABELS } from '@/constants/profile'
 import type { PersonType } from '@/constants/profile'
@@ -52,10 +54,16 @@ const filterInputClass =
   'h-11 rounded-xl border-transparent bg-muted/40 focus-visible:bg-background focus-visible:border-input'
 
 const lockedFilterOptions = () => [
-  { value: '', label: 'Tous' },
-  { value: 'false', label: 'Actif' },
+  { value: '', label: 'Tous (verrouillage)' },
+  { value: 'false', label: 'Non verrouillé' },
   { value: 'true', label: 'Verrouillé' },
 ]
+
+function userStatusBadge(user: AdminUser): { label: string; variant: 'destructive' | 'success' | 'secondary' } {
+  if (user.deleted) return { label: 'Archivé', variant: 'secondary' }
+  if (user.locked) return { label: 'Verrouillé', variant: 'destructive' }
+  return { label: 'Actif', variant: 'success' }
+}
 
 type UsersViewMode = 'cards' | 'table'
 
@@ -230,14 +238,19 @@ function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }
 function UserCard({
   user,
   onToggleLock,
-  onDelete,
+  onArchive,
+  onRestore,
   lockPending,
+  restorePending,
 }: {
   user: AdminUser
   onToggleLock: (id: string) => void
-  onDelete: (id: string) => void
+  onArchive: (id: string) => void
+  onRestore: (id: string) => void
   lockPending: boolean
+  restorePending: boolean
 }) {
+  const status = userStatusBadge(user)
   return (
     <Card className="overflow-hidden rounded-2xl border-border/80 shadow-sm">
       <CardContent className="p-4">
@@ -246,8 +259,8 @@ function UserCard({
             <div className="min-w-0 flex-1 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="font-semibold leading-tight truncate">{user.displayName}</p>
-                <Badge variant={user.locked ? 'destructive' : 'success'} className="shrink-0">
-                  {user.locked ? 'Verrouillé' : 'Actif'}
+                <Badge variant={status.variant} className="shrink-0">
+                  {status.label}
                 </Badge>
               </div>
               <p className="inline-flex items-center gap-1.5 truncate text-sm text-muted-foreground">
@@ -271,27 +284,43 @@ function UserCard({
           <Button variant="outline" size="sm" asChild className="h-10 flex-1 rounded-xl">
             <Link to={`/admin/users/${user.id}/edit`}>Modifier</Link>
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="h-10 w-10 shrink-0 rounded-xl"
-            aria-label={user.locked ? 'Déverrouiller' : 'Verrouiller'}
-            onClick={() => onToggleLock(user.id)}
-            disabled={lockPending}
-          >
-            {user.locked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="h-10 w-10 shrink-0 rounded-xl text-destructive hover:text-destructive"
-            aria-label="Supprimer"
-            onClick={() => onDelete(user.id)}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          {!user.deleted && (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-10 w-10 shrink-0 rounded-xl"
+              aria-label={user.locked ? 'Déverrouiller' : 'Verrouiller'}
+              onClick={() => onToggleLock(user.id)}
+              disabled={lockPending}
+            >
+              {user.locked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+            </Button>
+          )}
+          {user.deleted ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-10 w-10 shrink-0 rounded-xl"
+              aria-label="Restaurer"
+              onClick={() => onRestore(user.id)}
+              disabled={restorePending}
+            >
+              <ArchiveRestore className="h-4 w-4" />
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-10 w-10 shrink-0 rounded-xl text-destructive hover:text-destructive"
+              aria-label="Archiver"
+              onClick={() => onArchive(user.id)}
+            >
+              <Archive className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -301,13 +330,17 @@ function UserCard({
 function UserTable({
   users,
   onToggleLock,
-  onDelete,
+  onArchive,
+  onRestore,
   lockPending,
+  restorePending,
 }: {
   users: AdminUser[]
   onToggleLock: (id: string) => void
-  onDelete: (id: string) => void
+  onArchive: (id: string) => void
+  onRestore: (id: string) => void
   lockPending: boolean
+  restorePending: boolean
 }) {
   const navigate = useNavigate()
 
@@ -325,7 +358,9 @@ function UserTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {users.map((user) => (
+          {users.map((user) => {
+            const status = userStatusBadge(user)
+            return (
             <TableRow key={user.id}>
               <TableCell
                 className="cursor-pointer font-medium"
@@ -341,8 +376,8 @@ function UserTable({
                 </Badge>
               </TableCell>
               <TableCell>
-                <Badge variant={user.locked ? 'destructive' : 'success'}>
-                  {user.locked ? 'Verrouillé' : 'Actif'}
+                <Badge variant={status.variant}>
+                  {status.label}
                 </Badge>
               </TableCell>
               <TableCell>
@@ -350,27 +385,42 @@ function UserTable({
                   <Button variant="ghost" size="sm" asChild>
                     <Link to={`/admin/users/${user.id}/edit`}>Modifier</Link>
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={user.locked ? 'Déverrouiller' : 'Verrouiller'}
-                    onClick={() => onToggleLock(user.id)}
-                    disabled={lockPending}
-                  >
-                    {user.locked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Supprimer"
-                    onClick={() => onDelete(user.id)}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
+                  {!user.deleted && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={user.locked ? 'Déverrouiller' : 'Verrouiller'}
+                      onClick={() => onToggleLock(user.id)}
+                      disabled={lockPending}
+                    >
+                      {user.locked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                    </Button>
+                  )}
+                  {user.deleted ? (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Restaurer"
+                      onClick={() => onRestore(user.id)}
+                      disabled={restorePending}
+                    >
+                      <ArchiveRestore className="h-4 w-4" />
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Archiver"
+                      onClick={() => onArchive(user.id)}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  )}
                 </div>
               </TableCell>
             </TableRow>
-          ))}
+            )
+          })}
         </TableBody>
       </Table>
     </div>
@@ -420,7 +470,9 @@ export function UsersPage() {
   })
   const { data: profilesData, isLoading: profilesLoading } = useProfiles({ itemsPerPage: 100 })
   const deleteUser = useDeleteUser()
+  const restoreUser = useRestoreUser()
   const toggleLock = useToggleUserLock()
+  const showingArchived = filters.deleted === 'true'
 
   const profileOptions = useMemo(
     () =>
@@ -550,6 +602,16 @@ export function UsersPage() {
           <ViewModeToggle value={viewMode} onChange={handleViewModeChange} />
           <Button
             type="button"
+            variant={showingArchived ? 'default' : 'outline'}
+            className="h-11 shrink-0 rounded-xl px-3"
+            onClick={() => patchFilters({ deleted: showingArchived ? '' : 'true' })}
+            aria-pressed={showingArchived}
+          >
+            <Archive className="h-4 w-4 sm:mr-1.5" />
+            <span className="hidden sm:inline">{showingArchived ? 'Actifs' : 'Archivés'}</span>
+          </Button>
+          <Button
+            type="button"
             variant={filtersOpen ? 'default' : 'outline'}
             size="icon"
             className="h-11 w-11 shrink-0 rounded-xl relative"
@@ -650,8 +712,14 @@ export function UsersPage() {
           )}
           {filters.locked && (
             <FilterChip
-              label={filters.locked === 'true' ? 'Verrouillé' : 'Actif'}
+              label={filters.locked === 'true' ? 'Verrouillé' : 'Non verrouillé'}
               onRemove={() => patchFilters({ locked: '' })}
+            />
+          )}
+          {filters.deleted === 'true' && (
+            <FilterChip
+              label="Archivés"
+              onRemove={() => patchFilters({ deleted: '' })}
             />
           )}
           {filters.profile && (
@@ -698,8 +766,10 @@ export function UsersPage() {
                 key={user.id}
                 user={user}
                 onToggleLock={(id) => toggleLock.mutate(id)}
-                onDelete={setDeleteUserId}
+                onArchive={setDeleteUserId}
+                onRestore={(id) => restoreUser.mutate(id)}
                 lockPending={toggleLock.isPending}
+                restorePending={restoreUser.isPending}
               />
             ))}
           </div>
@@ -714,8 +784,10 @@ export function UsersPage() {
             <UserTable
               users={data.items}
               onToggleLock={(id) => toggleLock.mutate(id)}
-              onDelete={setDeleteUserId}
+              onArchive={setDeleteUserId}
+              onRestore={(id) => restoreUser.mutate(id)}
               lockPending={toggleLock.isPending}
+              restorePending={restoreUser.isPending}
             />
           </div>
 
@@ -731,9 +803,9 @@ export function UsersPage() {
       <ConfirmDialog
         open={deleteUserId != null}
         onOpenChange={(open) => !open && setDeleteUserId(null)}
-        title="Supprimer l'utilisateur"
-        description="Cette action est irréversible. Le compte sera définitivement supprimé."
-        confirmLabel="Supprimer"
+        title="Archiver l'utilisateur"
+        description="Le compte sera archivé et ne pourra plus se connecter. Vous pourrez le restaurer depuis la vue Archivés."
+        confirmLabel="Archiver"
         variant="destructive"
         onConfirm={handleDelete}
         loading={deleteUser.isPending}

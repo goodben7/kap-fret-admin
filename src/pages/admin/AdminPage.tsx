@@ -10,6 +10,7 @@ import {
   Users,
   Banknote,
   ArrowLeftRight,
+  Book,
   Receipt,
   Tags,
   type LucideIcon,
@@ -74,8 +75,14 @@ const adminSections: AdminSection[] = [
         icon: Tags,
       },
       {
+        title: 'Comptes Financiers',
+        description: 'Caisses, soldes multi-devises et registres',
+        path: '/admin/cash-registers',
+        icon: Book,
+      },
+      {
         title: 'Mouvements Financiers',
-        description: 'Encaissements, décaissements et soldes multi-devises',
+        description: 'Encaissements, décaissements et transferts',
         path: '/cash-transactions',
         icon: Receipt,
       },

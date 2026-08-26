@@ -18,7 +18,6 @@ import { CURRENCY, CURRENCY_OPTIONS } from '@/constants/ticket'
 import {
   FREIGHT_PAYMENT_MODE,
   FREIGHT_PAYMENT_MODE_LABELS,
-  FREIGHT_ORDINARY_PRICE_PER_KG_USD,
   NATURE_OF_GOODS,
   NATURE_OF_GOODS_LABELS,
   PACKAGING_TYPE,
@@ -43,11 +42,12 @@ import { resolveUserIssuingOfficeIri } from '@/lib/issuing-office'
 import { getCheckpointIri } from '@/services/issuing-office.service'
 import { getUpcomingFlightTravelDateInput } from '@/lib/ticket'
 import {
-  computeFreightOrdinaryAmount,
+  computeFreightOrdinaryFromUnitPrice,
   computeFreightPackagesTotalWeight,
   computeFreightRemainingAmount,
   computeFreightTotalAmount,
   clampFreightPartialPaidAmount,
+  defaultFreightUnitPrice,
 } from '@/lib/freight'
 import {
   computeMixedPaymentEquivalentInCurrency,
@@ -55,6 +55,8 @@ import {
   suggestMixedPaymentCdf,
 } from '@/lib/mixed-payment'
 import { formatMoney, cn } from '@/lib/utils'
+import { useFormDraft } from '@/hooks/useFormDraft'
+import { STORAGE_KEYS } from '@/constants/storage'
 import type { ReactNode } from 'react'
 
 const FORM_ID = 'freight-shipment-form'
@@ -204,6 +206,7 @@ export function FreightShipmentForm({
     watch,
     control,
     trigger,
+    reset,
     formState: { errors },
   } = useForm<FreightShipmentFormData>({
     resolver: zodResolver(freightShipmentSchema),
@@ -225,6 +228,8 @@ export function FreightShipmentForm({
       rva: '0.00',
       ltaFees: '0.00',
       ordinaryFreight: '0.00',
+      unitPrice: defaultFreightUnitPrice(CURRENCY.USD),
+      renegotiatedPrice: '',
       paidAmount: '0.00',
       remainingAmount: '0.00',
       packageCount: 1,
@@ -234,9 +239,17 @@ export function FreightShipmentForm({
     },
   })
 
+  useFormDraft({
+    key: STORAGE_KEYS.DRAFT_FREIGHT_CREATE,
+    watch,
+    reset,
+  })
+
   const { fields, append, remove } = useFieldArray({ control, name: 'packages' })
   const watchedPackages = useWatch({ control, name: 'packages' })
   const ordinaryFreight = useWatch({ control, name: 'ordinaryFreight' })
+  const unitPrice = useWatch({ control, name: 'unitPrice' })
+  const renegotiatedPrice = useWatch({ control, name: 'renegotiatedPrice' })
   const volumeFreight = useWatch({ control, name: 'volumeFreight' })
   const rva = useWatch({ control, name: 'rva' })
   const ltaFees = useWatch({ control, name: 'ltaFees' })
@@ -342,10 +355,17 @@ export function FreightShipmentForm({
     setValue('totalWeight', packagesTotalWeight, { shouldValidate: true })
     setValue(
       'ordinaryFreight',
-      computeFreightOrdinaryAmount(packagesTotalWeight, currency ?? CURRENCY.USD, exchangeRates),
+      computeFreightOrdinaryFromUnitPrice(packagesTotalWeight, unitPrice, renegotiatedPrice),
       { shouldValidate: true },
     )
-  }, [packagesTotalWeight, currency, exchangeRates, setValue])
+  }, [packagesTotalWeight, unitPrice, renegotiatedPrice, setValue])
+
+  useEffect(() => {
+    if (defaultValues?.unitPrice) return
+    setValue('unitPrice', defaultFreightUnitPrice(currency ?? CURRENCY.USD, exchangeRates), {
+      shouldValidate: true,
+    })
+  }, [currency, exchangeRates, setValue, defaultValues?.unitPrice])
 
   useEffect(() => {
     setValue('totalAmount', computedTotalAmount, { shouldValidate: true })
@@ -374,23 +394,18 @@ export function FreightShipmentForm({
 
   const syncPackagesTotalWeight = () => {
     const total = computeFreightPackagesTotalWeight(getValues('packages'))
-    const formCurrency = getValues('currency') ?? CURRENCY.USD
     setValue('totalWeight', total, { shouldValidate: true })
     setValue(
       'ordinaryFreight',
-      computeFreightOrdinaryAmount(total, formCurrency, exchangeRates),
+      computeFreightOrdinaryFromUnitPrice(total, getValues('unitPrice'), getValues('renegotiatedPrice')),
       { shouldValidate: true },
     )
   }
 
   const handleCurrencyChange = (nextCurrency: FreightShipmentFormData['currency']) => {
     setValue('currency', nextCurrency, { shouldValidate: true })
-    const weight = getValues('totalWeight') || packagesTotalWeight
-    setValue(
-      'ordinaryFreight',
-      computeFreightOrdinaryAmount(weight, nextCurrency, exchangeRates),
-      { shouldValidate: true },
-    )
+    setValue('unitPrice', defaultFreightUnitPrice(nextCurrency, exchangeRates), { shouldValidate: true })
+    setValue('renegotiatedPrice', '', { shouldValidate: true })
   }
 
   const handleUnitWeightChange = (index: number, value: string) => {
@@ -425,6 +440,16 @@ export function FreightShipmentForm({
       }
     }
     setValue('remainingAmount', computeFreightRemainingAmount(total, paid), { shouldValidate: true })
+  }
+
+  const syncOrdinaryFromUnitPrices = () => {
+    const total = getValues('totalWeight') || packagesTotalWeight
+    setValue(
+      'ordinaryFreight',
+      computeFreightOrdinaryFromUnitPrice(total, getValues('unitPrice'), getValues('renegotiatedPrice')),
+      { shouldValidate: true },
+    )
+    syncPricingTotals()
   }
 
   const syncRemainingAmount = () => {
@@ -520,13 +545,14 @@ export function FreightShipmentForm({
       <FormSection title="Destinataire" icon={User}>
         <Input label="Nom" className={fieldClass} error={errors.receiverName?.message} {...register('receiverName')} />
         <Input label="Téléphone" inputMode="tel" className={fieldClass} error={errors.receiverPhone?.message} {...register('receiverPhone')} />
+        <p className="-mt-2 text-xs text-muted-foreground sm:col-span-2">Téléphone destinataire optionnel</p>
         <div className="sm:col-span-2">
           <Input label="Adresse" className={fieldClass} error={errors.receiverAddress?.message} {...register('receiverAddress')} />
         </div>
       </FormSection>
 
       <FormSection
-        title="Colis"
+        title="Colis du groupe"
         icon={Box}
         action={
           <Button
@@ -651,6 +677,29 @@ export function FreightShipmentForm({
           tabIndex={-1}
           {...register('totalWeight')}
         />
+        <Input
+          label="Prix unitaire (/kg)"
+          inputMode="decimal"
+          className={fieldClass}
+          error={errors.unitPrice?.message}
+          {...register('unitPrice', {
+            onChange: () => {
+              syncOrdinaryFromUnitPrices()
+            },
+          })}
+        />
+        <Input
+          label="Prix renégocié (/kg)"
+          inputMode="decimal"
+          className={fieldClass}
+          error={errors.renegotiatedPrice?.message}
+          placeholder="Optionnel"
+          {...register('renegotiatedPrice', {
+            onChange: () => {
+              syncOrdinaryFromUnitPrices()
+            },
+          })}
+        />
         {(['ordinaryFreight', 'volumeFreight', 'rva', 'ltaFees'] as const).map((name) => {
           const field = register(name)
           const labels = {
@@ -664,21 +713,21 @@ export function FreightShipmentForm({
               <Input
                 label={labels[name]}
                 inputMode="decimal"
-                className={fieldClass}
+                className={name === 'ordinaryFreight' ? lockedFieldClass : fieldClass}
                 error={errors[name]?.message}
                 name={field.name}
                 ref={field.ref}
                 onBlur={field.onBlur}
+                readOnly={name === 'ordinaryFreight'}
+                tabIndex={name === 'ordinaryFreight' ? -1 : undefined}
                 onChange={(e) => {
                   void field.onChange(e)
-                  syncPricingTotals()
+                  if (name !== 'ordinaryFreight') syncPricingTotals()
                 }}
               />
               {name === 'ordinaryFreight' && (
                 <p className="mt-1.5 text-xs text-muted-foreground">
-                  Calcul auto : {FREIGHT_ORDINARY_PRICE_PER_KG_USD} $ / kg
-                  {currency === CURRENCY.CDF ? ' (converti en CDF via le taux de change actif)' : ''}
-                  {' — modifiable'}
+                  Calcul auto : poids × (prix renégocié ou prix unitaire)
                 </p>
               )}
             </div>

@@ -1,19 +1,23 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Ticket } from 'lucide-react'
-import { useCreateTicket } from '@/hooks/useTickets'
+import { useCreateTicketBatch } from '@/hooks/useTickets'
 import { TicketForm } from '@/components/forms/TicketForm'
 import { useAuth } from '@/hooks/useAuth'
-import { toTicketCreatePayload } from '@/lib/ticket'
+import { toTicketBatchPayload } from '@/lib/ticket'
+import { clearFormDraft } from '@/lib/form-draft'
+import { STORAGE_KEYS } from '@/constants/storage'
 import type { TicketFormData } from '@/schemas/ticket.schema'
 
 export function TicketCreatePage() {
   const navigate = useNavigate()
-  const createTicket = useCreateTicket()
+  const createBatch = useCreateTicketBatch()
   const { issuingOfficeName } = useAuth()
 
   const handleSubmit = async (data: TicketFormData) => {
-    await createTicket.mutateAsync(toTicketCreatePayload(data))
-    void navigate('/tickets')
+    const tickets = await createBatch.mutateAsync(toTicketBatchPayload(data))
+    clearFormDraft(STORAGE_KEYS.DRAFT_TICKET_CREATE)
+    const primary = tickets[0]
+    void navigate(primary ? `/tickets/${primary.id}` : '/tickets')
   }
 
   return (
@@ -35,14 +39,14 @@ export function TicketCreatePage() {
         </div>
         <p className="text-sm text-muted-foreground pl-11">
           {issuingOfficeName
-            ? `Émission depuis ${issuingOfficeName}`
-            : 'Renseignez les informations du passager et du voyage'}
+            ? `Émission depuis ${issuingOfficeName} — un ou plusieurs passagers`
+            : 'Un ou plusieurs passagers pour le même vol'}
         </p>
       </div>
 
       <TicketForm
         onSubmit={handleSubmit}
-        isLoading={createTicket.isPending}
+        isLoading={createBatch.isPending}
         submitLabel="Créer le billet"
         cancelHref="/tickets"
       />

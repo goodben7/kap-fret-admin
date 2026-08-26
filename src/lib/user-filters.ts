@@ -23,6 +23,8 @@ export type UserFiltersState = {
   email: string
   phone: string
   locked: '' | 'true' | 'false'
+  /** '' = actifs (non archivés), 'true' = archivés uniquement */
+  deleted: '' | 'true'
   profile: string
   createdAt: string
 }
@@ -32,6 +34,7 @@ export const emptyUserFilters: UserFiltersState = {
   email: '',
   phone: '',
   locked: '',
+  deleted: '',
   profile: '',
   createdAt: '',
 }
@@ -41,6 +44,7 @@ const FILTER_PARAM_KEYS = [
   'email',
   'phone',
   'locked',
+  'deleted',
   'profile',
   'createdAt',
 ] as const satisfies readonly (keyof UserFiltersState)[]
@@ -102,16 +106,20 @@ export function userFiltersStateToApi(filters: UserFiltersState): Omit<UserFilte
     locked: parseLocked(filters.locked),
     profile: filters.profile.trim() || undefined,
     createdAt: filters.createdAt.trim() || undefined,
+    // Par défaut : masquer les archivés ; deleted=true = vue archivés
+    deleted: filters.deleted === 'true',
   }
 }
 
 export function parseUserFiltersFromSearchParams(searchParams: URLSearchParams): UserFiltersState {
   const locked = searchParams.get('locked')
+  const deleted = searchParams.get('deleted')
   return {
     displayName: searchParams.get('displayName') ?? '',
     email: searchParams.get('email') ?? '',
     phone: searchParams.get('phone') ?? '',
     locked: locked === 'true' || locked === 'false' ? locked : '',
+    deleted: deleted === 'true' ? 'true' : '',
     profile: searchParams.get('profile') ?? '',
     createdAt: searchParams.get('createdAt') ?? '',
   }
@@ -126,6 +134,8 @@ export function userFiltersToSearchParams(
     const value = filters[key]
     if (key === 'locked') {
       if (value === 'true' || value === 'false') sp.set(key, value)
+    } else if (key === 'deleted') {
+      if (value === 'true') sp.set(key, 'true')
     } else if (typeof value === 'string' && value.trim()) {
       sp.set(key, value.trim())
     }
@@ -138,6 +148,7 @@ export function countActiveUserFilters(filters: UserFiltersState): number {
   return FILTER_PARAM_KEYS.filter((key) => {
     const value = filters[key]
     if (key === 'locked') return value === 'true' || value === 'false'
+    if (key === 'deleted') return value === 'true'
     return typeof value === 'string' && Boolean(value.trim())
   }).length
 }

@@ -160,6 +160,11 @@ export function DebtsReportPage() {
                               {ticket.ticketNumber}
                             </Link>
                             <p className="truncate font-medium">{ticket.passengerName}</p>
+                            {ticket.sponsor?.trim() && (
+                              <p className="truncate text-xs text-muted-foreground">
+                                Consignataire : {ticket.sponsor.trim()}
+                              </p>
+                            )}
                           </div>
                           <Badge variant="warning">
                             {PAYMENT_MODE_LABELS[ticket.paymentMode] ?? ticket.paymentMode}
@@ -213,7 +218,10 @@ export function DebtsReportPage() {
                               {shipment.ltaNumber}
                             </Link>
                             <p className="truncate text-sm text-muted-foreground">
-                              {shipment.senderName} → {shipment.receiverName}
+                              Exp. {shipment.senderName}
+                            </p>
+                            <p className="truncate text-sm">
+                              Consignataire : {shipment.receiverName}
                             </p>
                           </div>
                           <Badge variant="secondary">

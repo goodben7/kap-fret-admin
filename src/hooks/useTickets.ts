@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ticketService } from '@/services/ticket.service'
 import { buildTicketFilterParams, type TicketFilters } from '@/lib/ticket-filters'
-import type { TicketCreatePayload, TicketPatchPayload, TicketReportTravelDatePayload, TicketPaymentPayload } from '@/types/ticket'
+import type { TicketBatchCreatePayload, TicketCreatePayload, TicketPatchPayload, TicketReportTravelDatePayload, TicketPaymentPayload } from '@/types/ticket'
 import type { TicketStatus } from '@/constants/ticket'
 import { toast } from 'sonner'
 
@@ -11,6 +11,7 @@ export const ticketKeys = {
   list: (filters: TicketFilters) => [...ticketKeys.lists(), buildTicketFilterParams(filters)] as const,
   details: () => [...ticketKeys.all, 'detail'] as const,
   detail: (id: string) => [...ticketKeys.details(), id] as const,
+  group: (purchaseGroupId: string) => [...ticketKeys.all, 'group', purchaseGroupId] as const,
 }
 
 export function useTickets(filters: TicketFilters = {}) {
@@ -29,6 +30,18 @@ export function useTicket(id: string) {
   })
 }
 
+export function useTicketGroup(purchaseGroupId: string | null | undefined) {
+  return useQuery({
+    queryKey: ticketKeys.group(purchaseGroupId ?? ''),
+    queryFn: () => ticketService.getAll({
+      purchaseGroupId: purchaseGroupId!,
+      itemsPerPage: 50,
+      page: 1,
+    }),
+    enabled: !!purchaseGroupId?.trim(),
+  })
+}
+
 export function useCreateTicket() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -37,6 +50,27 @@ export function useCreateTicket() {
       void queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
       toast.success(
         ticket.status === 'RESERVED' ? 'Billet réservé avec succès' : 'Billet créé avec succès',
+      )
+    },
+  })
+}
+
+export function useCreateTicketBatch() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: TicketBatchCreatePayload) => ticketService.createBatch(payload),
+    onSuccess: (tickets) => {
+      void queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
+      const count = tickets.length
+      const reserved = tickets.every((t) => t.status === 'RESERVED')
+      toast.success(
+        reserved
+          ? count > 1
+            ? `${count} billets réservés`
+            : 'Billet réservé avec succès'
+          : count > 1
+            ? `${count} billets créés`
+            : 'Billet créé avec succès',
       )
     },
   })

@@ -11,12 +11,13 @@ import {
   History,
   MapPin,
   Pencil,
+  Printer,
   Receipt,
   RotateCcw,
   Ticket,
   User,
 } from 'lucide-react'
-import { useTicket, useReportTicketTravelDate, useUpdateTicketStatus, usePayTicket } from '@/hooks/useTickets'
+import { useTicket, useTicketGroup, useReportTicketTravelDate, useUpdateTicketStatus, usePayTicket } from '@/hooks/useTickets'
 import { useTicketActivities } from '@/hooks/useActivities'
 import { mergeTicketHistory } from '@/lib/ticket-history'
 import { EntityHistoryTimeline } from '@/components/history/EntityHistoryTimeline'
@@ -39,6 +40,8 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { formatMoney, formatDate, formatDateTime, cn } from '@/lib/utils'
 import { getCheckpointDisplayName } from '@/lib/checkpoint'
 import { getTicketPaidAmount, getTicketRemainingAmount, getTicketTotalAmount, toTicketPaymentPayload, toTicketReportTravelDatePayload } from '@/lib/ticket'
+import { downloadTicketThermalReceiptPdf } from '@/lib/ticket-thermal-receipt-pdf'
+import { toast } from 'sonner'
 import type { TicketReportTravelDateFormData } from '@/schemas/ticket-report-travel-date.schema'
 import type { TicketPaymentFormData } from '@/schemas/ticket-payment.schema'
 import { TicketReportTravelDateModal } from '@/components/tickets/TicketReportTravelDateModal'
@@ -203,6 +206,7 @@ export function TicketDetailPage() {
   const { id } = useParams<{ id: string }>()
   const ticketId = id ?? ''
   const { data: ticket, isLoading } = useTicket(ticketId)
+  const { data: groupData } = useTicketGroup(ticket?.purchaseGroupId)
   const { data: activitiesData, isLoading: activitiesLoading } = useTicketActivities(ticketId)
   const updateStatus = useUpdateTicketStatus()
   const reportTravelDate = useReportTicketTravelDate()
@@ -211,6 +215,11 @@ export function TicketDetailPage() {
   const [reportTravelDateOpen, setReportTravelDateOpen] = useState(false)
   const [paymentModalOpen, setPaymentModalOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<TicketDetailTab>('details')
+
+  const companions = useMemo(() => {
+    if (!ticket?.purchaseGroupId) return []
+    return (groupData?.items ?? []).filter((t) => t.id !== ticket.id)
+  }, [ticket, groupData?.items])
 
   const historyEntries = useMemo(() => {
     if (!ticket) return []
@@ -311,6 +320,52 @@ export function TicketDetailPage() {
 
       <DetailTabs value={activeTab} onChange={setActiveTab} />
 
+      {activeTab === 'details' && (
+        <Card className="rounded-2xl border-border/80 shadow-sm">
+          <CardContent className="flex flex-wrap gap-2 p-4">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 rounded-xl"
+              onClick={() => {
+                downloadTicketThermalReceiptPdf(ticket)
+                toast.success('Reçu thermique 80 mm téléchargé')
+              }}
+            >
+              <Printer className="h-4 w-4" />
+              Thermique 80 mm
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {activeTab === 'details' && companions.length > 0 && (
+        <Card className="rounded-2xl border-border/80 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold">
+              Groupe d&apos;achat ({companions.length + 1} passagers)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 pt-0">
+            {companions.map((companion) => (
+              <Link
+                key={companion.id}
+                to={`/tickets/${companion.id}`}
+                className="flex items-center justify-between gap-3 rounded-xl border border-border/60 px-4 py-3 transition-colors hover:border-brand-orange/40 hover:bg-muted/30"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{companion.passengerName}</p>
+                  <p className="font-mono text-xs text-muted-foreground">{companion.ticketNumber}</p>
+                </div>
+                <Badge variant="outline">
+                  {TICKET_STATUS_LABELS[companion.status] ?? companion.status}
+                </Badge>
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Actions desktop */}
       {canModify && activeTab === 'details' && (
         <TicketActions
@@ -334,6 +389,12 @@ export function TicketDetailPage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2 sm:justify-end">
+            <Button variant="outline" asChild className="h-11 shrink-0 rounded-xl">
+              <Link to={`/tickets/${ticket.id}/edit`}>
+                <Pencil className="h-4 w-4" />
+                Modifier
+              </Link>
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -471,6 +532,12 @@ export function TicketDetailPage() {
       {isReserved && activeTab === 'details' && (
         <div className="fixed inset-x-0 bottom-[4.25rem] z-30 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85 lg:hidden">
           <div className="mx-auto flex max-w-3xl gap-2 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <Button variant="outline" asChild className="h-11 flex-1 rounded-xl">
+              <Link to={`/tickets/${ticket.id}/edit`}>
+                <Pencil className="h-4 w-4" />
+                Modifier
+              </Link>
+            </Button>
             <Button
               type="button"
               variant="outline"

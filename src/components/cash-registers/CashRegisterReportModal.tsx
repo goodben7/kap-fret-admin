@@ -17,7 +17,8 @@ import {
   generateCashRegisterReportPdf,
 } from '@/lib/cash-register-report-pdf'
 import { cashTransactionService } from '@/services/cash-transaction.service'
-import { toIri } from '@/lib/hydra'
+import { extractResourceId, toIri } from '@/lib/hydra'
+import { useIssuingOffice } from '@/hooks/useIssuingOffices'
 import { isAxiosError } from 'axios'
 import { extractApiErrorMessage } from '@/services/api'
 import { toast } from 'sonner'
@@ -49,6 +50,10 @@ export function CashRegisterReportModal({
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null)
   const [transactionCount, setTransactionCount] = useState(0)
   const [fileName, setFileName] = useState('RAPPORT_MOUVEMENTS_FINANCIERS.pdf')
+
+  const officeId = extractResourceId(register.issuingOffice) ?? ''
+  const { data: issuingOffice } = useIssuingOffice(officeId)
+  const locationLabel = issuingOffice?.name?.trim() || undefined
 
   const {
     register: registerField,
@@ -106,6 +111,7 @@ export function CashRegisterReportModal({
         transactions,
         reportDate,
         dateRange,
+        locationLabel,
       })
 
       const nextFileName = buildCashRegisterReportFileName(register, dateRange)

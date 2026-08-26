@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, type ReactNode } from 'react'
-import { useForm } from 'react-hook-form'
+import { useFieldArray, useForm } from 'react-hook-form'
 import { LoaderIcon } from '@/components/ui/loading-spinner'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link } from 'react-router-dom'
@@ -9,10 +9,18 @@ import {
   CreditCard,
   Lock,
   MapPin,
+  Plus,
+  Trash2,
   User,
 } from 'lucide-react'
-import { ticketSchema, ticketPatchSchema, type TicketFormData, type TicketPatchFormData } from '@/schemas/ticket.schema'
-import { GENDER_LABELS, PAYMENT_MODE, PAYMENT_MODE_LABELS, PAYMENT_MODE_OPTIONS, CURRENCY, CURRENCY_OPTIONS, TICKET_CATEGORY_OPTIONS } from '@/constants/ticket'
+import {
+  createEmptyTicketPassenger,
+  ticketSchema,
+  ticketPatchSchema,
+  type TicketFormData,
+  type TicketPatchFormData,
+} from '@/schemas/ticket.schema'
+import { GENDER_LABELS, PAYMENT_MODE, PAYMENT_MODE_OPTIONS, CURRENCY, CURRENCY_OPTIONS, TICKET_CATEGORY_OPTIONS } from '@/constants/ticket'
 import { useAuth } from '@/hooks/useAuth'
 import { useCashRegistersForSelect } from '@/hooks/useCashRegisters'
 import { useCurrenciesForSelect } from '@/hooks/useCurrencies'
@@ -31,8 +39,21 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CheckpointAsyncSelect } from '@/components/ui/checkpoint-async-select'
 import { ConversionPreviewCard } from '@/components/tickets/ConversionPreviewCard'
 import { formatMoney } from '@/lib/utils'
-import { getTicketTotal, getDefaultWednesdayTravelDateInput, getBasePriceForCategory, computeTicketPaymentAmount } from '@/lib/ticket'
+import {
+  getTicketTotal,
+  getTicketFormGroupTotal,
+  getDefaultWednesdayTravelDateInput,
+  getBasePriceForCategory,
+  computeTicketPaymentAmount,
+} from '@/lib/ticket'
+import {
+  computeMixedPaymentUsdEquivalent,
+  isMixedPaymentWithinTolerance,
+  suggestMixedPaymentCdf,
+} from '@/lib/mixed-payment'
 import { useTicketCategoryPrices } from '@/hooks/useTicketCategoryPrices'
+import { useFormDraft } from '@/hooks/useFormDraft'
+import { STORAGE_KEYS } from '@/constants/storage'
 import type { TicketCategory } from '@/constants/ticket'
 
 const FORM_ID = 'ticket-form'
@@ -41,7 +62,7 @@ const fieldClass =
   'h-11 rounded-xl border-transparent bg-muted/40 focus-visible:bg-background focus-visible:border-input'
 
 interface TicketFormBaseProps {
-  defaultValues?: Partial<TicketFormData>
+  defaultValues?: Partial<TicketFormData> | Partial<TicketPatchFormData>
   isLoading?: boolean
   submitLabel?: string
   cancelHref?: string
@@ -171,7 +192,7 @@ function TicketCreateForm({
   const { data: exchangeRatesData } = useExchangeRates({ pagination: false })
   const exchangeRates = exchangeRatesData?.items ?? []
   const locked = readOnly
-  const departurePrefillDone = useRef(!!defaultValues?.departure)
+  const departurePrefillDone = useRef(!!(defaultValues as Partial<TicketFormData> | undefined)?.departure)
 
   const { data: categoryPricesData } = useTicketCategoryPrices({ activeOnly: true })
   const categoryPricesByCode = useMemo(() => {
@@ -182,43 +203,56 @@ function TicketCreateForm({
     return map
   }, [categoryPricesData?.items])
 
+  const createDefaults = defaultValues as Partial<TicketFormData> | undefined
+
   const {
     register,
+    control,
     handleSubmit,
     setValue,
     watch,
+    reset,
     formState: { errors },
   } = useForm<TicketFormData>({
     resolver: zodResolver(ticketSchema),
     defaultValues: {
+      phone: '',
       paymentMode: PAYMENT_MODE.CASH,
       paymentCurrency: CURRENCY.USD,
       travelDate: getDefaultWednesdayTravelDateInput(),
       travelTime: '06:30',
-      basePrice: '',
-      tva: '0.00',
-      fpt: '0.00',
-      rva: '0.00',
-      baggageAllowanceKg: '20',
       cashRegister: '',
       reserveForLater: false,
-      ticketNumber: '',
-      departure: defaultValues?.departure ?? '',
-      ...defaultValues,
+      mixedPayment: false,
+      paidAmountUsd: '',
+      paidAmountCdf: '',
+      departure: createDefaults?.departure ?? '',
+      ...createDefaults,
+      passengers: createDefaults?.passengers?.length
+        ? createDefaults.passengers
+        : [createEmptyTicketPassenger()],
     },
   })
 
+  const { fields, append, remove } = useFieldArray({ control, name: 'passengers' })
+
+  useFormDraft({
+    key: STORAGE_KEYS.DRAFT_TICKET_CREATE,
+    watch,
+    reset,
+    enabled: !readOnly,
+  })
+
   const paymentMode = watch('paymentMode')
-  const category = watch('category')
   const departure = watch('departure')
   const destination = watch('destination')
-  const basePrice = watch('basePrice')
   const paymentCurrency = watch('paymentCurrency')
-  const tva = watch('tva')
-  const fpt = watch('fpt')
-  const rva = watch('rva')
   const cashRegister = watch('cashRegister')
   const reserveForLater = watch('reserveForLater')
+  const mixedPayment = watch('mixedPayment')
+  const paidAmountUsd = watch('paidAmountUsd')
+  const paidAmountCdf = watch('paidAmountCdf')
+  const passengers = watch('passengers')
 
   useEffect(() => {
     if (departurePrefillDone.current) return
@@ -240,15 +274,44 @@ function TicketCreateForm({
     setValue('cashRegister', iri, { shouldValidate: true })
   }
 
+  const handlePassengerCategoryChange = (index: number, category: TicketFormData['passengers'][number]['category']) => {
+    setValue(`passengers.${index}.category`, category, { shouldValidate: true })
+    setValue(
+      `passengers.${index}.basePrice`,
+      getBasePriceForCategory(category, categoryPricesByCode),
+      { shouldValidate: true },
+    )
+  }
+
+  const handleAddPassenger = () => {
+    const empty = createEmptyTicketPassenger()
+    append(
+      createEmptyTicketPassenger({
+        basePrice: getBasePriceForCategory(empty.category, categoryPricesByCode),
+      }),
+    )
+  }
+
   useEffect(() => {
-    if (!category) return
-    setValue('basePrice', getBasePriceForCategory(category, categoryPricesByCode), { shouldValidate: true })
-  }, [category, categoryPricesByCode, setValue])
+    if (Object.keys(categoryPricesByCode).length === 0) return
+    const list = watch('passengers') ?? []
+    list.forEach((passenger, index) => {
+      if (!passenger?.category || String(passenger.basePrice ?? '').trim()) return
+      setValue(
+        `passengers.${index}.basePrice`,
+        getBasePriceForCategory(passenger.category, categoryPricesByCode),
+        { shouldValidate: true },
+      )
+    })
+  }, [categoryPricesByCode, setValue, watch])
 
   useEffect(() => {
     if (paymentMode !== PAYMENT_MODE.CASH) {
       setValue('cashRegister', '', { shouldValidate: true })
       setValue('reserveForLater', false, { shouldValidate: true })
+      setValue('mixedPayment', false, { shouldValidate: true })
+      setValue('paidAmountUsd', '', { shouldValidate: true })
+      setValue('paidAmountCdf', '', { shouldValidate: true })
     }
   }, [paymentMode, setValue])
 
@@ -256,10 +319,21 @@ function TicketCreateForm({
     if (reserveForLater) {
       setValue('cashRegister', '', { shouldValidate: true })
       setValue('paymentMode', PAYMENT_MODE.CASH, { shouldValidate: true })
+      setValue('mixedPayment', false, { shouldValidate: true })
+      setValue('paidAmountUsd', '', { shouldValidate: true })
+      setValue('paidAmountCdf', '', { shouldValidate: true })
     }
   }, [reserveForLater, setValue])
 
-  const totalPreview = getTicketTotal({ basePrice, tva, fpt, rva })
+  const totalPreview = getTicketFormGroupTotal({ passengers: passengers ?? [] })
+  const mixedUsdEquivalent = useMemo(() => {
+    if (!mixedPayment) return null
+    return computeMixedPaymentUsdEquivalent(paidAmountUsd ?? '', paidAmountCdf ?? '', exchangeRates)
+  }, [mixedPayment, paidAmountUsd, paidAmountCdf, exchangeRates])
+  const mixedPaymentOk =
+    !!mixedPayment
+    && isMixedPaymentWithinTolerance(totalPreview, paidAmountUsd ?? '', paidAmountCdf ?? '', exchangeRates)
+
   const usdCurrencyIri = resolveCurrencyIriByCode(currencies, CURRENCY.USD)
   const paymentCurrencyIri = resolveCurrencyIriByCode(currencies, paymentCurrency ?? CURRENCY.USD)
   const fallbackPaymentAmount = useMemo(() => {
@@ -269,6 +343,7 @@ function TicketCreateForm({
   const previewEnabled =
     paymentMode === PAYMENT_MODE.CASH
     && !reserveForLater
+    && !mixedPayment
     && !!cashRegister
     && !!usdCurrencyIri
     && !!paymentCurrencyIri
@@ -286,9 +361,13 @@ function TicketCreateForm({
     enabled: previewEnabled,
   })
 
-  const canSubmit = !locked && !isLoading
+  const canSubmit = !locked && !isLoading && (!mixedPayment || mixedPaymentOk || reserveForLater || paymentMode !== PAYMENT_MODE.CASH)
   const officeLabel = issuingOfficeName
-  const resolvedSubmitLabel = reserveForLater ? 'Réserver le billet' : submitLabel
+  const resolvedSubmitLabel = reserveForLater
+    ? 'Réserver le billet'
+    : (passengers?.length ?? 0) > 1
+      ? 'Créer les billets'
+      : submitLabel
 
   return (
     <>
@@ -305,67 +384,167 @@ function TicketCreateForm({
           </Card>
         )}
 
-        <FormSection title="Passager" icon={User}>
-          <Input
-            label="N° billet"
-            placeholder="Auto si vide — ou saisie manuelle"
-            error={errors.ticketNumber?.message}
-            disabled={locked}
-            className={fieldClass}
-            {...register('ticketNumber')}
-          />
-          <Input
-            label="Nom complet"
-            placeholder="Nom et prénom du passager"
-            error={errors.passengerName?.message}
-            disabled={locked}
-            className={fieldClass}
-            {...register('passengerName')}
-          />
-          <Select
-            label="Catégorie"
-            placeholder="Sélectionner..."
-            options={TICKET_CATEGORY_OPTIONS}
-            error={errors.category?.message}
-            disabled={locked}
-            variant="filter"
-            value={category ?? ''}
-            onChange={(e) =>
-              setValue('category', e.target.value as TicketFormData['category'], { shouldValidate: true })
-            }
-          />
-          <Input
-            label="Âge"
-            type="number"
-            inputMode="numeric"
-            min={0}
-            max={120}
-            placeholder="Optionnel"
-            error={errors.age?.message}
-            disabled={locked}
-            className={fieldClass}
-            {...register('age', { valueAsNumber: true })}
-          />
-          <Select
-            label="Sexe"
-            placeholder="Sélectionner..."
-            options={Object.entries(GENDER_LABELS).map(([value, label]) => ({ value, label }))}
-            error={errors.gender?.message}
-            disabled={locked}
-            variant="filter"
-            className={fieldClass}
-            {...register('gender')}
-          />
-          <Input
-            label="Téléphone"
-            type="tel"
-            inputMode="tel"
-            placeholder="+243..."
-            error={errors.phone?.message}
-            disabled={locked}
-            className={fieldClass}
-            {...register('phone')}
-          />
+        <FormSection title="Passagers" icon={User}>
+          <div className="sm:col-span-2">
+            <Input
+              label="Téléphone"
+              type="tel"
+              inputMode="tel"
+              placeholder="+243..."
+              error={errors.phone?.message}
+              disabled={locked}
+              className={fieldClass}
+              {...register('phone')}
+            />
+          </div>
+
+          {fields.map((field, index) => {
+            const passengerErrors = errors.passengers?.[index]
+            const passengerCategory = passengers?.[index]?.category
+            return (
+              <div
+                key={field.id}
+                className="space-y-4 rounded-xl border border-border/60 bg-muted/10 p-4 sm:col-span-2"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold">Passager {index + 1}</h3>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-9 gap-1.5 text-destructive hover:text-destructive"
+                    disabled={locked || fields.length <= 1}
+                    onClick={() => remove(index)}
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                    Retirer
+                  </Button>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <Input
+                    label="N° billet"
+                    placeholder="Auto si vide — ou saisie manuelle"
+                    error={passengerErrors?.ticketNumber?.message}
+                    disabled={locked}
+                    className={fieldClass}
+                    {...register(`passengers.${index}.ticketNumber`)}
+                  />
+                  <Input
+                    label="Nom complet"
+                    placeholder="Nom et prénom du passager"
+                    error={passengerErrors?.passengerName?.message}
+                    disabled={locked}
+                    className={fieldClass}
+                    {...register(`passengers.${index}.passengerName`)}
+                  />
+                  <Select
+                    label="Catégorie"
+                    placeholder="Sélectionner..."
+                    options={TICKET_CATEGORY_OPTIONS}
+                    error={passengerErrors?.category?.message}
+                    disabled={locked}
+                    variant="filter"
+                    value={passengerCategory ?? ''}
+                    onChange={(e) =>
+                      handlePassengerCategoryChange(
+                        index,
+                        e.target.value as TicketFormData['passengers'][number]['category'],
+                      )
+                    }
+                  />
+                  <Input
+                    label="Âge"
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    max={120}
+                    placeholder="Optionnel"
+                    error={passengerErrors?.age?.message}
+                    disabled={locked}
+                    className={fieldClass}
+                    {...register(`passengers.${index}.age`, { valueAsNumber: true })}
+                  />
+                  <Select
+                    label="Sexe"
+                    placeholder="Sélectionner..."
+                    options={Object.entries(GENDER_LABELS).map(([value, label]) => ({ value, label }))}
+                    error={passengerErrors?.gender?.message}
+                    disabled={locked}
+                    variant="filter"
+                    className={fieldClass}
+                    {...register(`passengers.${index}.gender`)}
+                  />
+                  <Input
+                    label="Prix de base (USD)"
+                    inputMode="decimal"
+                    error={passengerErrors?.basePrice?.message}
+                    disabled={locked}
+                    className={fieldClass}
+                    {...register(`passengers.${index}.basePrice`)}
+                  />
+                  <Input
+                    label="TVA"
+                    inputMode="decimal"
+                    error={passengerErrors?.tva?.message}
+                    disabled={locked}
+                    className={fieldClass}
+                    {...register(`passengers.${index}.tva`)}
+                  />
+                  <Input
+                    label="FPT"
+                    inputMode="decimal"
+                    error={passengerErrors?.fpt?.message}
+                    disabled={locked}
+                    className={fieldClass}
+                    {...register(`passengers.${index}.fpt`)}
+                  />
+                  <Input
+                    label="RVA"
+                    inputMode="decimal"
+                    error={passengerErrors?.rva?.message}
+                    disabled={locked}
+                    className={fieldClass}
+                    {...register(`passengers.${index}.rva`)}
+                  />
+                  <Input
+                    label="Kilo total accordé"
+                    inputMode="decimal"
+                    error={passengerErrors?.baggageAllowanceKg?.message}
+                    disabled={locked}
+                    className={fieldClass}
+                    {...register(`passengers.${index}.baggageAllowanceKg`)}
+                  />
+                </div>
+              </div>
+            )
+          })}
+
+          {!locked && (
+            <div className="sm:col-span-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 w-full rounded-xl gap-2"
+                onClick={handleAddPassenger}
+              >
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                Ajouter un passager
+              </Button>
+            </div>
+          )}
+
+          {errors.passengers && typeof errors.passengers.message === 'string' && (
+            <p className="text-sm text-destructive sm:col-span-2">{errors.passengers.message}</p>
+          )}
+
+          <div className="flex items-center justify-between rounded-xl bg-brand-orange/10 px-4 py-3 sm:col-span-2">
+            <span className="text-sm font-semibold">
+              {fields.length > 1 ? 'Total groupe estimé' : 'Total estimé'}
+            </span>
+            <span className="text-lg font-bold tabular-nums text-brand-orange">
+              {formatMoney(totalPreview, CURRENCY.USD)}
+            </span>
+          </div>
         </FormSection>
 
         <FormSection title="Voyage" icon={MapPin}>
@@ -373,7 +552,7 @@ function TicketCreateForm({
             <CheckpointAsyncSelect
               label="Départ"
               placeholder="Rechercher le checkpoint de départ..."
-              initialCheckpointIri={defaultValues?.departure || userCheckpointIri || undefined}
+              initialCheckpointIri={createDefaults?.departure || userCheckpointIri || undefined}
               value={departure ?? ''}
               onChange={(iri) => setValue('departure', iri, { shouldValidate: true })}
               error={errors.departure?.message}
@@ -385,7 +564,7 @@ function TicketCreateForm({
             <CheckpointAsyncSelect
               label="Destination"
               placeholder="Rechercher le checkpoint de destination..."
-              initialCheckpointIri={defaultValues?.destination}
+              initialCheckpointIri={createDefaults?.destination}
               value={destination ?? ''}
               onChange={(iri) => setValue('destination', iri, { shouldValidate: true })}
               error={errors.destination?.message}
@@ -409,35 +588,6 @@ function TicketCreateForm({
             className={fieldClass}
             {...register('travelTime')}
           />
-        </FormSection>
-
-        <FormSection title="Tarification" icon={Banknote}>
-          <p className="text-sm text-muted-foreground sm:col-span-2">
-            Les montants du billet sont exprimés en USD.
-          </p>
-          <Input
-            label="Prix de base (USD)"
-            inputMode="decimal"
-            error={errors.basePrice?.message}
-            disabled={locked}
-            className={fieldClass}
-            {...register('basePrice')}
-          />
-          <Input label="TVA" inputMode="decimal" error={errors.tva?.message} disabled={locked} className={fieldClass} {...register('tva')} />
-          <Input label="FPT" inputMode="decimal" error={errors.fpt?.message} disabled={locked} className={fieldClass} {...register('fpt')} />
-          <Input label="RVA" inputMode="decimal" error={errors.rva?.message} disabled={locked} className={fieldClass} {...register('rva')} />
-          <Input
-            label="Kilo total accordé"
-            inputMode="decimal"
-            error={errors.baggageAllowanceKg?.message}
-            disabled={locked}
-            className={fieldClass}
-            {...register('baggageAllowanceKg')}
-          />
-          <div className="flex items-center justify-between rounded-xl bg-brand-orange/10 px-4 py-3 sm:col-span-2">
-            <span className="text-sm font-semibold">Total estimé</span>
-            <span className="text-lg font-bold tabular-nums text-brand-orange">{formatMoney(totalPreview, CURRENCY.USD)}</span>
-          </div>
         </FormSection>
 
         <FormSection title="Paiement" icon={CreditCard}>
@@ -505,20 +655,112 @@ function TicketCreateForm({
                       onChange={(e) => handleCashRegisterChange(e.target.value)}
                     />
                   )}
-                  <Select
-                    label="Devise de paiement"
-                    options={CURRENCY_OPTIONS}
-                    error={errors.paymentCurrency?.message}
-                    disabled={locked}
-                    variant="filter"
-                    value={paymentCurrency ?? CURRENCY.USD}
-                    onChange={(e) =>
-                      setValue('paymentCurrency', e.target.value as TicketFormData['paymentCurrency'], {
-                        shouldValidate: true,
-                      })
-                    }
-                  />
                 </div>
+                {paymentMode === PAYMENT_MODE.CASH && (
+                  <label
+                    className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${
+                      mixedPayment
+                        ? 'border-brand-orange/40 bg-brand-orange/5'
+                        : 'border-border/60 bg-muted/10'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 rounded border-input"
+                      disabled={locked}
+                      checked={!!mixedPayment}
+                      onChange={(e) => {
+                        const checked = e.target.checked
+                        setValue('mixedPayment', checked, { shouldValidate: true })
+                        if (!checked) {
+                          setValue('paidAmountUsd', '', { shouldValidate: true })
+                          setValue('paidAmountCdf', '', { shouldValidate: true })
+                        } else {
+                          setValue('paymentCurrency', CURRENCY.USD, { shouldValidate: true })
+                        }
+                      }}
+                    />
+                    <span className="space-y-0.5">
+                      <span className="block text-sm font-medium">Paiement mixte (USD + CDF)</span>
+                      <span className="block text-xs text-muted-foreground">
+                        Encaisser une partie en dollars et le reste en francs congolais sur la même caisse.
+                      </span>
+                    </span>
+                  </label>
+                )}
+                {paymentMode === PAYMENT_MODE.CASH && mixedPayment ? (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <Input
+                      label="Montant encaissé (USD)"
+                      type="number"
+                      inputMode="decimal"
+                      step="0.01"
+                      min="0"
+                      placeholder="0,00"
+                      className={fieldClass}
+                      error={errors.paidAmountUsd?.message}
+                      disabled={locked}
+                      value={paidAmountUsd ?? ''}
+                      onChange={(e) => {
+                        const nextUsd = e.target.value
+                        setValue('paidAmountUsd', nextUsd, { shouldValidate: true })
+                        const suggested = suggestMixedPaymentCdf(totalPreview, nextUsd, exchangeRates)
+                        if (suggested != null) {
+                          setValue('paidAmountCdf', suggested, { shouldValidate: true })
+                        }
+                      }}
+                    />
+                    <Input
+                      label="Montant encaissé (CDF)"
+                      type="number"
+                      inputMode="decimal"
+                      step="0.01"
+                      min="0"
+                      placeholder="0,00"
+                      className={fieldClass}
+                      error={errors.paidAmountCdf?.message}
+                      disabled={locked}
+                      {...register('paidAmountCdf')}
+                    />
+                    <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 text-sm sm:col-span-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground">Équivalent total</span>
+                        <span className="font-semibold tabular-nums">
+                          {mixedUsdEquivalent != null
+                            ? formatMoney(mixedUsdEquivalent, CURRENCY.USD)
+                            : '—'}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground">Total billet</span>
+                        <span className="font-semibold tabular-nums">
+                          {formatMoney(totalPreview, CURRENCY.USD)}
+                        </span>
+                      </div>
+                      {paidAmountUsd && paidAmountCdf && mixedUsdEquivalent != null && !mixedPaymentOk && (
+                        <p className="mt-2 text-xs text-destructive">
+                          L&apos;équivalent mixte doit correspondre au total (± 0,05 USD). Vérifiez le taux de change.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <Select
+                      label="Devise de paiement"
+                      options={CURRENCY_OPTIONS}
+                      error={errors.paymentCurrency?.message}
+                      disabled={locked}
+                      variant="filter"
+                      value={paymentCurrency ?? CURRENCY.USD}
+                      onChange={(e) =>
+                        setValue('paymentCurrency', e.target.value as TicketFormData['paymentCurrency'], {
+                          shouldValidate: true,
+                        })
+                      }
+                    />
+                  </div>
+                )}
                 {(paymentMode === PAYMENT_MODE.ACC || paymentMode === PAYMENT_MODE.PTA) && (
                   <p className="text-xs text-muted-foreground">
                     {paymentMode === PAYMENT_MODE.PTA
@@ -539,6 +781,7 @@ function TicketCreateForm({
                 )}
                 {paymentMode === PAYMENT_MODE.CASH
                   && !reserveForLater
+                  && !mixedPayment
                   && !!cashRegister
                   && paymentCurrency !== CURRENCY.USD
                   && fallbackPaymentAmount == null
@@ -579,6 +822,7 @@ function TicketEditForm({
 }: TicketEditFormProps) {
   const { issuingOfficeName } = useAuth()
   const locked = readOnly
+  const patchDefaults = defaultValues as Partial<TicketPatchFormData> | undefined
 
   const {
     register,
@@ -589,27 +833,40 @@ function TicketEditForm({
   } = useForm<TicketPatchFormData>({
     resolver: zodResolver(ticketPatchSchema),
     defaultValues: {
-      passengerName: defaultValues?.passengerName ?? '',
-      age: defaultValues?.age,
-      gender: defaultValues?.gender,
-      phone: defaultValues?.phone ?? '',
-      departure: defaultValues?.departure ?? '',
-      destination: defaultValues?.destination ?? '',
-      travelDate: defaultValues?.travelDate ?? '',
-      travelTime: defaultValues?.travelTime ?? '',
-      sponsor: defaultValues?.sponsor ?? '',
+      ticketNumber: patchDefaults?.ticketNumber ?? ticketNumber ?? '',
+      passengerName: patchDefaults?.passengerName ?? '',
+      category: patchDefaults?.category,
+      age: patchDefaults?.age,
+      gender: patchDefaults?.gender,
+      phone: patchDefaults?.phone ?? '',
+      departure: patchDefaults?.departure ?? '',
+      destination: patchDefaults?.destination ?? '',
+      travelDate: patchDefaults?.travelDate ?? '',
+      travelTime: patchDefaults?.travelTime ?? '',
+      basePrice: patchDefaults?.basePrice ?? '',
+      tva: patchDefaults?.tva ?? '0.00',
+      fpt: patchDefaults?.fpt ?? '0.00',
+      rva: patchDefaults?.rva ?? '0.00',
+      baggageAllowanceKg: patchDefaults?.baggageAllowanceKg ?? '20',
+      paymentMode: patchDefaults?.paymentMode ?? PAYMENT_MODE.CASH,
+      sponsor: patchDefaults?.sponsor ?? '',
     },
   })
 
   const departure = watch('departure')
   const destination = watch('destination')
-  const paymentMode = defaultValues?.paymentMode ?? PAYMENT_MODE.CASH
+  const category = watch('category')
+  const paymentMode = watch('paymentMode')
+  const basePrice = watch('basePrice')
+  const tva = watch('tva')
+  const fpt = watch('fpt')
+  const rva = watch('rva')
 
   const totalPreview = getTicketTotal({
-    basePrice: defaultValues?.basePrice ?? '0',
-    tva: defaultValues?.tva ?? '0',
-    fpt: defaultValues?.fpt ?? '0',
-    rva: defaultValues?.rva ?? '0',
+    basePrice: basePrice ?? '0',
+    tva: tva ?? '0',
+    fpt: fpt ?? '0',
+    rva: rva ?? '0',
   })
 
   const canSubmit = !locked && !isLoading
@@ -628,9 +885,6 @@ function TicketEditForm({
             </CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-1 gap-4 pt-0 sm:grid-cols-2">
-            {ticketNumber && (
-              <Input label="N° billet" value={ticketNumber} disabled readOnly className={fieldClass} />
-            )}
             <Input
               label="Bureau d'émission"
               value={officeLabel ?? '—'}
@@ -646,12 +900,31 @@ function TicketEditForm({
 
         <FormSection title="Passager" icon={User}>
           <Input
+            label="N° billet"
+            error={errors.ticketNumber?.message}
+            disabled={locked}
+            className={fieldClass}
+            {...register('ticketNumber')}
+          />
+          <Input
             label="Nom complet"
             placeholder="Nom et prénom du passager"
             error={errors.passengerName?.message}
             disabled={locked}
             className={fieldClass}
             {...register('passengerName')}
+          />
+          <Select
+            label="Catégorie"
+            placeholder="Sélectionner..."
+            options={TICKET_CATEGORY_OPTIONS}
+            error={errors.category?.message}
+            disabled={locked}
+            variant="filter"
+            value={category ?? ''}
+            onChange={(e) =>
+              setValue('category', e.target.value as TicketPatchFormData['category'], { shouldValidate: true })
+            }
           />
           <Input
             label="Âge"
@@ -692,7 +965,7 @@ function TicketEditForm({
             <CheckpointAsyncSelect
               label="Départ"
               placeholder="Rechercher le checkpoint de départ..."
-              initialCheckpointIri={defaultValues?.departure}
+              initialCheckpointIri={patchDefaults?.departure}
               value={departure ?? ''}
               onChange={(iri) => setValue('departure', iri, { shouldValidate: true })}
               error={errors.departure?.message}
@@ -704,7 +977,7 @@ function TicketEditForm({
             <CheckpointAsyncSelect
               label="Destination"
               placeholder="Rechercher le checkpoint de destination..."
-              initialCheckpointIri={defaultValues?.destination}
+              initialCheckpointIri={patchDefaults?.destination}
               value={destination ?? ''}
               onChange={(iri) => setValue('destination', iri, { shouldValidate: true })}
               error={errors.destination?.message}
@@ -731,23 +1004,27 @@ function TicketEditForm({
         </FormSection>
 
         <FormSection title="Tarification" icon={Banknote}>
+          <p className="text-sm text-muted-foreground sm:col-span-2">
+            Les montants du billet sont exprimés en USD.
+          </p>
           <Input
-            label="Devise"
-            value="USD — Dollar US"
-            disabled
-            readOnly
+            label="Prix de base (USD)"
+            inputMode="decimal"
+            error={errors.basePrice?.message}
+            disabled={locked}
             className={fieldClass}
+            {...register('basePrice')}
           />
-          <Input label="Prix de base" value={defaultValues?.basePrice ?? ''} disabled readOnly className={fieldClass} />
-          <Input label="TVA" value={defaultValues?.tva ?? ''} disabled readOnly className={fieldClass} />
-          <Input label="FPT" value={defaultValues?.fpt ?? ''} disabled readOnly className={fieldClass} />
-          <Input label="RVA" value={defaultValues?.rva ?? ''} disabled readOnly className={fieldClass} />
+          <Input label="TVA" inputMode="decimal" error={errors.tva?.message} disabled={locked} className={fieldClass} {...register('tva')} />
+          <Input label="FPT" inputMode="decimal" error={errors.fpt?.message} disabled={locked} className={fieldClass} {...register('fpt')} />
+          <Input label="RVA" inputMode="decimal" error={errors.rva?.message} disabled={locked} className={fieldClass} {...register('rva')} />
           <Input
             label="Kilo total accordé"
-            value={defaultValues?.baggageAllowanceKg ?? ''}
-            disabled
-            readOnly
+            inputMode="decimal"
+            error={errors.baggageAllowanceKg?.message}
+            disabled={locked}
             className={fieldClass}
+            {...register('baggageAllowanceKg')}
           />
           <div className="flex items-center justify-between rounded-xl bg-brand-orange/10 px-4 py-3 sm:col-span-2">
             <span className="text-sm font-semibold">Total</span>
@@ -758,12 +1035,18 @@ function TicketEditForm({
         </FormSection>
 
         <FormSection title="Paiement" icon={CreditCard}>
-          <Input
+          <Select
             label="Mode de paiement"
-            value={PAYMENT_MODE_LABELS[paymentMode as keyof typeof PAYMENT_MODE_LABELS] ?? paymentMode}
-            disabled
-            readOnly
-            className={fieldClass}
+            options={PAYMENT_MODE_OPTIONS}
+            error={errors.paymentMode?.message}
+            disabled={locked}
+            variant="filter"
+            value={paymentMode ?? PAYMENT_MODE.CASH}
+            onChange={(e) =>
+              setValue('paymentMode', e.target.value as TicketPatchFormData['paymentMode'], {
+                shouldValidate: true,
+              })
+            }
           />
           <Input
             label="Sponsor"
@@ -786,7 +1069,7 @@ function TicketEditForm({
 
         {readOnly && (
           <p className="text-sm text-muted-foreground text-center lg:text-right">
-            Ce billet ne peut plus être modifié (statut autre que Émis).
+            Ce billet ne peut plus être modifié (statut autre que Émis / Réservé).
           </p>
         )}
       </form>

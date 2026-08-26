@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CheckpointAsyncSelect } from '@/components/ui/checkpoint-async-select'
 import {
   clampFreightPartialPaidAmount,
+  computeFreightOrdinaryFromUnitPrice,
   computeFreightRemainingAmount,
   computeFreightTotalAmount,
 } from '@/lib/freight'
@@ -86,10 +87,13 @@ export function FreightShipmentPatchForm({
   })
 
   const ordinaryFreight = useWatch({ control, name: 'ordinaryFreight' })
+  const unitPrice = useWatch({ control, name: 'unitPrice' })
+  const renegotiatedPrice = useWatch({ control, name: 'renegotiatedPrice' })
   const volumeFreight = useWatch({ control, name: 'volumeFreight' })
   const rva = useWatch({ control, name: 'rva' })
   const ltaFees = useWatch({ control, name: 'ltaFees' })
   const paidAmount = useWatch({ control, name: 'paidAmount' })
+  const totalWeight = useWatch({ control, name: 'totalWeight' })
   const loadingPlace = watch('loadingPlace') ?? ''
   const unloadingPlace = watch('unloadingPlace') ?? ''
   const currency = watch('currency')
@@ -100,6 +104,14 @@ export function FreightShipmentPatchForm({
   const isCashPayment = paymentMode === FREIGHT_PAYMENT_MODE.CASH
   const isAccPayment = paymentMode === FREIGHT_PAYMENT_MODE.ACC
   const canEditPaidAmount = isAccPayment
+
+  useEffect(() => {
+    setValue(
+      'ordinaryFreight',
+      computeFreightOrdinaryFromUnitPrice(totalWeight, unitPrice, renegotiatedPrice),
+      { shouldValidate: true },
+    )
+  }, [totalWeight, unitPrice, renegotiatedPrice, setValue])
 
   useEffect(() => {
     setValue('totalAmount', computedTotalAmount, { shouldValidate: true })
@@ -226,6 +238,7 @@ export function FreightShipmentPatchForm({
       <FormSection title="Destinataire" icon={User}>
         <Input label="Nom" className={fieldClass} error={errors.receiverName?.message} {...register('receiverName')} />
         <Input label="Téléphone" className={fieldClass} error={errors.receiverPhone?.message} {...register('receiverPhone')} />
+        <p className="-mt-2 text-xs text-muted-foreground sm:col-span-2">Téléphone destinataire optionnel</p>
         <div className="sm:col-span-2">
           <Input label="Adresse" className={fieldClass} error={errors.receiverAddress?.message} {...register('receiverAddress')} />
         </div>
@@ -251,6 +264,21 @@ export function FreightShipmentPatchForm({
           tabIndex={-1}
           {...register('totalWeight')}
         />
+        <Input
+          label="Prix unitaire (/kg)"
+          inputMode="decimal"
+          className={fieldClass}
+          error={errors.unitPrice?.message}
+          {...register('unitPrice')}
+        />
+        <Input
+          label="Prix renégocié (/kg)"
+          inputMode="decimal"
+          className={fieldClass}
+          error={errors.renegotiatedPrice?.message}
+          placeholder="Optionnel"
+          {...register('renegotiatedPrice')}
+        />
         {(['ordinaryFreight', 'volumeFreight', 'rva', 'ltaFees'] as const).map((name) => {
           const field = register(name)
           const labels = {
@@ -264,14 +292,16 @@ export function FreightShipmentPatchForm({
               key={name}
               label={labels[name]}
               inputMode="decimal"
-              className={fieldClass}
+              className={name === 'ordinaryFreight' ? lockedFieldClass : fieldClass}
               error={errors[name]?.message}
               name={field.name}
               ref={field.ref}
               onBlur={field.onBlur}
+              readOnly={name === 'ordinaryFreight'}
+              tabIndex={name === 'ordinaryFreight' ? -1 : undefined}
               onChange={(e) => {
                 void field.onChange(e)
-                syncPricingTotals()
+                if (name !== 'ordinaryFreight') syncPricingTotals()
               }}
             />
           )

@@ -8,6 +8,7 @@ import {
   User,
   Receipt,
   Wallet,
+  Book,
   Bookmark,
   Scale,
 } from 'lucide-react'
@@ -30,6 +31,7 @@ const iconMap = {
   Settings,
   Receipt,
   Wallet,
+  Book,
   Bookmark,
   Scale,
 }

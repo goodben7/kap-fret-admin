@@ -43,6 +43,31 @@ export function computeFreightPackagesTotalWeight(
   return sum.toFixed(2)
 }
 
+/** Prix effectif au kg : renégocié si renseigné, sinon prix unitaire, sinon défaut 3,5 USD. */
+export function resolveFreightEffectiveUnitPrice(
+  unitPrice: string | number | undefined,
+  renegotiatedPrice?: string | number | null,
+  fallbackUsd = FREIGHT_ORDINARY_PRICE_PER_KG_USD,
+): number {
+  const renegotiated = parseFloat(String(renegotiatedPrice ?? '').replace(',', '.'))
+  if (Number.isFinite(renegotiated) && renegotiated > 0) return renegotiated
+  const unit = parseFloat(String(unitPrice ?? '').replace(',', '.'))
+  if (Number.isFinite(unit) && unit > 0) return unit
+  return fallbackUsd
+}
+
+/** Fret ordinaire = poids × prix effectif (devise du formulaire). */
+export function computeFreightOrdinaryFromUnitPrice(
+  totalWeightKg: string | number | undefined,
+  unitPrice: string | number | undefined,
+  renegotiatedPrice?: string | number | null,
+): string {
+  const kg = parseFloat(String(totalWeightKg ?? '')) || 0
+  if (kg <= 0) return '0.00'
+  const price = resolveFreightEffectiveUnitPrice(unitPrice, renegotiatedPrice)
+  return (kg * price).toFixed(2)
+}
+
 /** Fret ordinaire = poids total × 3,5 USD/kg, converti selon la devise */
 export function computeFreightOrdinaryAmount(
   totalWeightKg: string | number | undefined,
@@ -61,6 +86,23 @@ export function computeFreightOrdinaryAmount(
     exchangeRates,
   )
   if (converted == null) return usdAmount.toFixed(2)
+  return converted.toFixed(2)
+}
+
+/** Prix unitaire défaut (3,5 USD/kg) dans la devise choisie. */
+export function defaultFreightUnitPrice(
+  currency: Currency = CURRENCY.USD,
+  exchangeRates: ExchangeRateResource[] = [],
+): string {
+  const normalized = normalizeCurrency(currency)
+  if (normalized === CURRENCY.USD) return FREIGHT_ORDINARY_PRICE_PER_KG_USD.toFixed(2)
+  const converted = convertAmountBetweenCurrencyCodes(
+    FREIGHT_ORDINARY_PRICE_PER_KG_USD,
+    CURRENCY.USD,
+    normalized,
+    exchangeRates,
+  )
+  if (converted == null) return FREIGHT_ORDINARY_PRICE_PER_KG_USD.toFixed(2)
   return converted.toFixed(2)
 }
 
@@ -123,9 +165,13 @@ export function toFreightCreatePayload(data: FreightShipmentFormData): FreightSh
     senderPhone: data.senderPhone,
     receiverName: data.receiverName,
     receiverAddress: data.receiverAddress,
-    receiverPhone: data.receiverPhone,
+    receiverPhone: optionalText(data.receiverPhone) ?? '',
     packageCount: data.packageCount,
     totalWeight: formatDecimal(data.totalWeight),
+    unitPrice: formatDecimal(data.unitPrice),
+    renegotiatedPrice: data.renegotiatedPrice?.trim()
+      ? formatDecimal(data.renegotiatedPrice)
+      : null,
     ordinaryFreight: formatDecimal(data.ordinaryFreight),
     volumeFreight: formatDecimal(data.volumeFreight),
     rva: formatDecimal(data.rva),
@@ -183,9 +229,13 @@ export function toFreightPatchPayload(data: FreightShipmentPatchFormData): Freig
     senderPhone: data.senderPhone,
     receiverName: data.receiverName,
     receiverAddress: data.receiverAddress,
-    receiverPhone: data.receiverPhone,
+    receiverPhone: optionalText(data.receiverPhone) ?? '',
     packageCount: data.packageCount,
     totalWeight: formatDecimal(data.totalWeight),
+    unitPrice: formatDecimal(data.unitPrice),
+    renegotiatedPrice: data.renegotiatedPrice?.trim()
+      ? formatDecimal(data.renegotiatedPrice)
+      : null,
     ordinaryFreight: formatDecimal(data.ordinaryFreight),
     volumeFreight: formatDecimal(data.volumeFreight),
     rva: formatDecimal(data.rva),
@@ -224,9 +274,11 @@ export function shipmentToFormDefaults(shipment: FreightShipment): Partial<Freig
     senderPhone: shipment.senderPhone,
     receiverName: shipment.receiverName,
     receiverAddress: shipment.receiverAddress,
-    receiverPhone: shipment.receiverPhone,
+    receiverPhone: shipment.receiverPhone ?? '',
     packageCount: shipment.packageCount,
     totalWeight: shipment.totalWeight,
+    unitPrice: shipment.unitPrice || defaultFreightUnitPrice(normalizeCurrency(shipment.currency)),
+    renegotiatedPrice: shipment.renegotiatedPrice ?? '',
     ordinaryFreight: shipment.ordinaryFreight,
     volumeFreight: shipment.volumeFreight,
     rva: shipment.rva,
@@ -261,9 +313,11 @@ export function shipmentToPatchFormDefaults(shipment: FreightShipment): Partial<
     senderPhone: shipment.senderPhone,
     receiverName: shipment.receiverName,
     receiverAddress: shipment.receiverAddress,
-    receiverPhone: shipment.receiverPhone,
+    receiverPhone: shipment.receiverPhone ?? '',
     packageCount: shipment.packageCount,
     totalWeight: shipment.totalWeight,
+    unitPrice: shipment.unitPrice || defaultFreightUnitPrice(normalizeCurrency(shipment.currency)),
+    renegotiatedPrice: shipment.renegotiatedPrice ?? '',
     ordinaryFreight: shipment.ordinaryFreight,
     volumeFreight: shipment.volumeFreight,
     rva: shipment.rva,

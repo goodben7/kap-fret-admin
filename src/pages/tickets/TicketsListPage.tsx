@@ -87,7 +87,7 @@ function statusVariant(status: TicketStatus) {
 }
 
 function canEditTicket(ticket: TicketType) {
-  return ticket.status === TICKET_STATUS.ISSUED
+  return ticket.status === TICKET_STATUS.ISSUED || ticket.status === TICKET_STATUS.RESERVED
 }
 
 function canCancelTicket(ticket: TicketType) {

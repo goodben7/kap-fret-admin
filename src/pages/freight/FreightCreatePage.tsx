@@ -3,6 +3,8 @@ import { ArrowLeft, Package } from 'lucide-react'
 import { useCreateFreightShipment } from '@/hooks/useFreight'
 import { FreightShipmentForm } from '@/components/forms/FreightShipmentForm'
 import { toFreightCreatePayload } from '@/lib/freight'
+import { clearFormDraft } from '@/lib/form-draft'
+import { STORAGE_KEYS } from '@/constants/storage'
 import type { FreightShipmentFormData } from '@/schemas/freight.schema'
 
 export function FreightCreatePage() {
@@ -11,6 +13,7 @@ export function FreightCreatePage() {
 
   const handleSubmit = async (data: FreightShipmentFormData) => {
     const shipment = await createShipment.mutateAsync(toFreightCreatePayload(data))
+    clearFormDraft(STORAGE_KEYS.DRAFT_FREIGHT_CREATE)
     void navigate(`/freight/${shipment.id}`)
   }
 
@@ -32,7 +35,7 @@ export function FreightCreatePage() {
           <h1 className="text-2xl font-bold tracking-tight">Nouvelle expédition</h1>
         </div>
         <p className="pl-11 text-sm text-muted-foreground">
-          Renseignez les informations de l'expédition fret
+          Une LTA peut regrouper plusieurs colis (même expéditeur / destinataire)
         </p>
       </div>
 

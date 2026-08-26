@@ -3,6 +3,8 @@ import { ArrowLeft, ClipboardCheck } from 'lucide-react'
 import { useCreateCheckIn } from '@/hooks/useCheckIns'
 import { CheckInForm } from '@/components/forms/CheckInForm'
 import { toCheckInCreatePayload } from '@/lib/check-in'
+import { clearFormDraft } from '@/lib/form-draft'
+import { STORAGE_KEYS } from '@/constants/storage'
 import type { CheckInCreateFormData } from '@/schemas/checkin.schema'
 
 export function CheckInCreatePage() {
@@ -11,6 +13,7 @@ export function CheckInCreatePage() {
 
   const handleSubmit = async (data: CheckInCreateFormData) => {
     await createCheckIn.mutateAsync(toCheckInCreatePayload(data))
+    clearFormDraft(STORAGE_KEYS.DRAFT_CHECKIN_CREATE)
     void navigate('/checkins')
   }
 

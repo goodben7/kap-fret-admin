@@ -25,6 +25,11 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     config.headers.delete('Content-Type')
   }
 
+  // FormData : laisser le navigateur poser le boundary multipart
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    config.headers.delete('Content-Type')
+  }
+
   return config
 })
 

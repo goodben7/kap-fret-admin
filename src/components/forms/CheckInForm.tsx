@@ -62,6 +62,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { HydraAutocomplete } from '@/components/ui/hydra-autocomplete'
 import { ConversionPreviewCard } from '@/components/tickets/ConversionPreviewCard'
 import { formatDate, formatMoney, cn } from '@/lib/utils'
+import { useFormDraft } from '@/hooks/useFormDraft'
+import { STORAGE_KEYS } from '@/constants/storage'
 
 const FORM_ID = 'checkin-form'
 
@@ -274,6 +276,7 @@ export function CheckInForm(props: CheckInFormProps) {
     getValues,
     watch,
     control,
+    reset,
     formState: { errors, isValid },
   } = useForm<CheckInPatchFormData>({
     resolver: (isEdit
@@ -302,6 +305,13 @@ export function CheckInForm(props: CheckInFormProps) {
       ...defaultValues,
       baggages: initialBaggages,
     },
+  })
+
+  useFormDraft({
+    key: STORAGE_KEYS.DRAFT_CHECKIN_CREATE,
+    watch,
+    reset,
+    enabled: !isEdit,
   })
 
   const { fields, prepend, remove, replace } = useFieldArray({ control, name: 'baggages' })
@@ -802,65 +812,66 @@ export function CheckInForm(props: CheckInFormProps) {
           </div>
 
           <div className="space-y-4 sm:col-span-2">
-            <label
-              className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${
-                hasWeightReduction
-                  ? 'border-sky-500/40 bg-sky-500/5'
-                  : 'border-border/60 bg-muted/20'
-              }`}
-            >
-              <input
-                type="checkbox"
-                className="mt-0.5 h-4 w-4 rounded border-input"
-                {...register('hasWeightReduction')}
-              />
-              <span className="space-y-0.5">
-                <span className="block text-sm font-medium">Réduction de poids accordée</span>
-                <span className="block text-xs text-muted-foreground">
-                  Pointage couleur sur la liste — ex. accord direction / franchise exceptionnelle.
-                </span>
-              </span>
-            </label>
+            <details className="rounded-xl border border-border/60 bg-muted/10">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
+                Accords &amp; observations
+                <span className="ml-2 text-xs font-normal text-muted-foreground">(optionnel)</span>
+              </summary>
+              <div className="space-y-4 border-t border-border/50 px-4 py-4">
+                <label
+                  className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${
+                    hasWeightReduction
+                      ? 'border-sky-500/40 bg-sky-500/5'
+                      : 'border-border/60 bg-muted/20'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 rounded border-input"
+                    {...register('hasWeightReduction')}
+                  />
+                  <span className="space-y-0.5">
+                    <span className="block text-sm font-medium">Réduction de poids accordée</span>
+                    <span className="block text-xs text-muted-foreground">
+                      Accord direction / franchise exceptionnelle.
+                    </span>
+                  </span>
+                </label>
 
-            <Textarea
-              label="Justification poids"
-              placeholder="Motif de l'accord exceptionnel (obligatoire si réduction)..."
-              rows={3}
-              error={errors.weightJustification?.message}
-              {...register('weightJustification')}
-            />
+                <Textarea
+                  label="Justification poids"
+                  placeholder="Motif de l'accord (obligatoire si réduction)..."
+                  rows={2}
+                  error={errors.weightJustification?.message}
+                  {...register('weightJustification')}
+                />
 
-            <Textarea
-              label="Observations"
-              placeholder="Remarques générales..."
-              rows={2}
-              error={errors.observations?.message}
-              {...register('observations')}
-            />
+                <Textarea
+                  label="Observations"
+                  placeholder="Remarques générales..."
+                  rows={2}
+                  error={errors.observations?.message}
+                  {...register('observations')}
+                />
 
-            <Textarea
-              label="Observation paiement à destination"
-              placeholder="Détails du montant / modalités à régler à l'arrivée..."
-              rows={2}
-              error={errors.destinationObservations?.message}
-              {...register('destinationObservations')}
-            />
+                <Textarea
+                  label="Paiement à destination"
+                  placeholder="Modalités à régler à l'arrivée..."
+                  rows={2}
+                  error={errors.destinationObservations?.message}
+                  {...register('destinationObservations')}
+                />
+              </div>
+            </details>
           </div>
         </div>
       </FormSection>
 
-      {!isEdit && (
+      {!isEdit && hasExcessPayment && (
       <FormSection
-        title="Tarification"
+        title="Tarification excédent"
         icon={Banknote}
-        className={tarificationInactive ? 'border-border/50 bg-muted/20' : undefined}
       >
-        {tarificationInactive && (
-          <p className="text-sm text-muted-foreground sm:col-span-2">
-            Aucun excédent bagage — la tarification n&apos;est pas requise. Vous pouvez enregistrer le check-in
-            directement.
-          </p>
-        )}
         {!isEdit && hasExcessPayment && (
           <div className="sm:col-span-2">
             <Select
@@ -1055,6 +1066,12 @@ export function CheckInForm(props: CheckInFormProps) {
           </div>
         )}
       </FormSection>
+      )}
+
+      {!isEdit && !hasExcessPayment && (
+        <p className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+          Aucun excédent — enregistrement direct sans encaissement.
+        </p>
       )}
 
       <input type="hidden" {...register('ticketIri')} />

@@ -19,6 +19,21 @@ export function useUpdateMyProfile() {
   })
 }
 
+export function useUploadMyPhoto() {
+  const { user, refreshUser } = useAuth()
+
+  return useMutation({
+    mutationFn: (file: File) => {
+      if (!user?.id) throw new Error('Utilisateur non connecté')
+      return userService.uploadPhoto(String(user.id), file)
+    },
+    onSuccess: async () => {
+      await refreshUser()
+      toast.success('Photo de profil mise à jour')
+    },
+  })
+}
+
 export function useChangeMyPassword() {
   const { user } = useAuth()
 

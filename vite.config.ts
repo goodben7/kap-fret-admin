@@ -46,6 +46,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
         },
+        '/uploads': {
+          target: env.VITE_PROXY_TARGET || 'https://localhost:8000',
+          changeOrigin: true,
+          secure: false,
+        },
       },
     },
   }

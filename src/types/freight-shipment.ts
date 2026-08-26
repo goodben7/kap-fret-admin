@@ -32,6 +32,8 @@ export interface FreightShipment extends HydraResource {
   receiverPhone: string
   packageCount: number
   totalWeight: string
+  unitPrice?: string
+  renegotiatedPrice?: string | null
   ordinaryFreight: string
   volumeFreight: string
   rva: string
@@ -81,6 +83,8 @@ export interface FreightShipmentCreatePayload {
   receiverPhone: string
   packageCount: number
   totalWeight: string
+  unitPrice?: string
+  renegotiatedPrice?: string | null
   ordinaryFreight: string
   volumeFreight: string
   rva: string
@@ -115,6 +119,8 @@ export interface FreightShipmentPatchPayload {
   receiverPhone: string
   packageCount: number
   totalWeight: string
+  unitPrice?: string
+  renegotiatedPrice?: string | null
   ordinaryFreight: string
   volumeFreight: string
   rva: string

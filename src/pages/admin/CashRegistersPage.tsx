@@ -8,6 +8,7 @@ import {
   Search,
   SlidersHorizontal,
   Table2,
+  Book,
   Wallet,
   X,
 } from 'lucide-react'
@@ -246,11 +247,11 @@ export function CashRegistersPage() {
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-orange/10 text-brand-orange">
-              <Wallet className="h-5 w-5" />
+              <Book className="h-5 w-5" />
             </span>
-            <h1 className="text-2xl font-bold tracking-tight">Mouvements Financiers</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Comptes Financiers</h1>
           </div>
-          {data && <p className="pl-11 text-sm text-muted-foreground">{data.totalItems} registre{data.totalItems !== 1 ? 's' : ''}</p>}
+          {data && <p className="pl-11 text-sm text-muted-foreground">{data.totalItems} compte{data.totalItems !== 1 ? 's' : ''}</p>}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <ViewModeToggle value={viewMode} onChange={(m) => { setViewMode(m); try { localStorage.setItem(STORAGE_KEYS.CASH_REGISTERS_VIEW, m) } catch { /* ignore */ } }} />
@@ -308,7 +309,7 @@ export function CashRegistersPage() {
       {isLoading ? (
         <div className="flex justify-center py-16"><LoadingSpinner label="Chargement..." /></div>
       ) : !data?.items.length ? (
-        <EmptyState icon={Wallet} title="Aucun registre" description={activeCount > 0 ? 'Aucun résultat pour ces filtres.' : 'Créez un registre pour gérer les mouvements financiers.'} action={{ label: 'Nouveau registre', onClick: () => { window.location.href = '/admin/cash-registers/new' } }} />
+        <EmptyState icon={Book} title="Aucun compte" description={activeCount > 0 ? 'Aucun résultat pour ces filtres.' : 'Créez un compte pour gérer les mouvements financiers.'} action={{ label: 'Nouveau compte', onClick: () => { window.location.href = '/admin/cash-registers/new' } }} />
       ) : (
         <>
           <div className={cn('space-y-3', viewMode === 'table' && 'lg:hidden', isFetching && 'opacity-60 pointer-events-none')}>

@@ -1,12 +1,13 @@
-import { useState } from 'react'
-import { Building2, KeyRound, LogOut, Mail, Phone, Shield, User } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Building2, Camera, KeyRound, LogOut, Mail, Phone, Shield, User } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
-import { useChangeMyPassword, useUpdateMyProfile } from '@/hooks/useMyProfile'
+import { useChangeMyPassword, useUpdateMyProfile, useUploadMyPhoto } from '@/hooks/useMyProfile'
 import { ROLE_LABELS } from '@/constants/roles'
 import { PERSON_TYPE_LABELS } from '@/constants/profile'
 import type { Role } from '@/constants/roles'
 import type { PersonType } from '@/constants/profile'
 import { getDisplayName } from '@/lib/normalize-user'
+import { resolveUserPhotoUrl } from '@/lib/user-photo'
 import { UserEditForm } from '@/components/forms/UserEditForm'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -53,7 +54,9 @@ function InfoRow({
 export function ProfilePage() {
   const { user, issuingOfficeName, logout } = useAuth()
   const updateProfile = useUpdateMyProfile()
+  const uploadPhoto = useUploadMyPhoto()
   const changePassword = useChangeMyPassword()
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
   const [actualPassword, setActualPassword] = useState('')
@@ -62,9 +65,17 @@ export function ProfilePage() {
   if (!user) return null
 
   const displayName = getDisplayName(user)
+  const photoUrl = resolveUserPhotoUrl(user.photoPath)
 
   const handleUpdate = async (data: UserUpdateFormData) => {
     await updateProfile.mutateAsync(data)
+  }
+
+  const handlePhotoChange = async (fileList: FileList | null) => {
+    const file = fileList?.[0]
+    if (!file) return
+    await uploadPhoto.mutateAsync(file)
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const handleChangePassword = async () => {
@@ -91,9 +102,37 @@ export function ProfilePage() {
       <Card className="overflow-hidden rounded-2xl border-border/80 shadow-sm">
         <CardContent className="p-5 sm:p-6">
           <div className="flex items-start gap-4">
-            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-brand-orange/10 text-brand-orange">
-              <User className="h-7 w-7" aria-hidden="true" />
-            </span>
+            <div className="relative shrink-0">
+              {photoUrl ? (
+                <img
+                  src={photoUrl}
+                  alt=""
+                  className="h-14 w-14 rounded-2xl object-cover ring-2 ring-brand-orange/15"
+                />
+              ) : (
+                <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-orange/10 text-brand-orange">
+                  <User className="h-7 w-7" aria-hidden="true" />
+                </span>
+              )}
+              <button
+                type="button"
+                className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background text-brand-orange shadow-sm hover:bg-muted"
+                aria-label="Changer la photo"
+                disabled={uploadPhoto.isPending}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Camera className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  void handlePhotoChange(e.target.files)
+                }}
+              />
+            </div>
             <div className="min-w-0 flex-1 space-y-2">
               <p className="text-xl font-bold tracking-tight truncate">{displayName}</p>
               {user.email && (
@@ -109,6 +148,9 @@ export function ProfilePage() {
                   </Badge>
                 )}
               </div>
+              <p className="text-xs text-muted-foreground">
+                JPEG, PNG ou WebP — max. 2 Mo
+              </p>
             </div>
           </div>
         </CardContent>

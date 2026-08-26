@@ -38,7 +38,8 @@ export function TicketEditPage() {
     )
   }
 
-  const canEdit = ticket.status === TICKET_STATUS.ISSUED
+  const canEdit =
+    ticket.status === TICKET_STATUS.ISSUED || ticket.status === TICKET_STATUS.RESERVED
 
   const handleSubmit = async (data: TicketPatchFormData) => {
     await updateTicket.mutateAsync({ id: ticketId, payload: toTicketPatchPayload(data) })

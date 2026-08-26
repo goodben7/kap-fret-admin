@@ -56,6 +56,22 @@ export const userService = {
     await api.delete(`/api/users/${id}`)
   },
 
+  async restore(id: string) {
+    const { data } = await api.post<AdminUser>(`/api/users/${id}/restore`, {}, {
+      headers: JSON_HEADERS,
+    })
+    return data
+  },
+
+  async uploadPhoto(id: string, file: File) {
+    const formData = new FormData()
+    formData.append('file', file)
+    const { data } = await api.post<AdminUser>(`/api/users/${id}/photo`, formData, {
+      headers: { Accept: 'application/ld+json' },
+    })
+    return data
+  },
+
   async toggleLock(id: string) {
     const { data } = await api.post(`/api/users/${id}/lock_toggle`, {}, {
       headers: JSON_HEADERS,

@@ -13,6 +13,7 @@ import {
   Package,
   Pencil,
   Plane,
+  Printer,
   Receipt,
   RefreshCw,
   Send,
@@ -47,6 +48,7 @@ import {
   buildFreightLtaReceiptWhatsAppText,
   downloadFreightLtaReceiptPdf,
 } from '@/lib/freight-lta-receipt-pdf'
+import { downloadFreightLtaThermalReceiptPdf } from '@/lib/freight-lta-thermal-receipt-pdf'
 import { toWhatsAppUrl } from '@/lib/phone'
 import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -490,6 +492,18 @@ export function FreightDetailPage() {
               <Download className="h-4 w-4" />
               Télécharger le reçu
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 rounded-xl"
+              onClick={() => {
+                downloadFreightLtaThermalReceiptPdf(shipment)
+                toast.success('Reçu thermique 80 mm téléchargé')
+              }}
+            >
+              <Printer className="h-4 w-4" />
+              Thermique 80 mm
+            </Button>
             {shipment.senderPhone && (
               <Button
                 type="button"
@@ -546,6 +560,10 @@ export function FreightDetailPage() {
 
         <DetailSection title="Tarification" icon={Banknote}>
           <DetailRow label="Poids total" value={formatFreightWeight(shipment.totalWeight)} />
+          <DetailRow label="Prix unitaire" value={money(shipment.unitPrice ?? '0')} />
+          {shipment.renegotiatedPrice && (
+            <DetailRow label="Prix renégocié" value={money(shipment.renegotiatedPrice)} />
+          )}
           <DetailRow label="Fret ordinaire" value={money(shipment.ordinaryFreight)} />
           <DetailRow label="Fret volume" value={money(shipment.volumeFreight)} />
           <DetailRow label="RVA" value={money(shipment.rva)} />

@@ -3,7 +3,7 @@ import { extractHydraMember, extractHydraTotalItems } from '@/lib/hydra'
 import { filterTicketsByTravelDateInput, filterTicketsForList, sortTicketsByCreatedAtAsc } from '@/lib/ticket'
 import { buildTicketFilterParams, type TicketFilters } from '@/lib/ticket-filters'
 import type { HydraCollection } from '@/types/hydra'
-import type { Ticket, TicketCreatePayload, TicketStatusPayload, TicketPatchPayload, TicketReportTravelDatePayload, TicketPaymentPayload } from '@/types/ticket'
+import type { Ticket, TicketBatchCreatePayload, TicketCreatePayload, TicketStatusPayload, TicketPatchPayload, TicketReportTravelDatePayload, TicketPaymentPayload } from '@/types/ticket'
 import { TICKET_STATUS, type TicketStatus } from '@/constants/ticket'
 
 export type { TicketFilters } from '@/lib/ticket-filters'
@@ -69,6 +69,18 @@ export const ticketService = {
   async create(payload: TicketCreatePayload) {
     const { data } = await api.post<Ticket>('/api/tickets', payload, { headers: JSON_HEADERS })
     return data
+  },
+
+  /** POST /api/tickets/batch — retourne la liste des billets créés. */
+  async createBatch(payload: TicketBatchCreatePayload) {
+    const { data } = await api.post<Ticket | Ticket[]>('/api/tickets/batch', payload, {
+      headers: JSON_HEADERS,
+    })
+    if (Array.isArray(data)) return data
+    // Hydra / wrapper éventuel
+    const member = (data as { 'hydra:member'?: Ticket[] })['hydra:member']
+    if (Array.isArray(member)) return member
+    return [data as Ticket]
   },
 
   async update(id: string, payload: TicketPatchPayload) {

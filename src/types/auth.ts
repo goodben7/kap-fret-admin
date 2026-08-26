@@ -41,6 +41,8 @@ export interface AuthUser {
     id: string
     label: string
   }
+  /** Chemin relatif public (uploads/users/…). */
+  photoPath?: string | null
   active: boolean
 }
 

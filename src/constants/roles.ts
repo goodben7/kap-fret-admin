@@ -32,7 +32,8 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Check-In', path: '/checkins', icon: 'UserCheck', roles: [ROLES.SPADM, ROLES.ADM, ROLES.CHK] },
   { label: 'Fret', path: '/freight', icon: 'Package', roles: [ROLES.SPADM, ROLES.ADM, ROLES.FRT] },
   { label: 'Dettes', path: '/finance/debts', icon: 'Scale', roles: [ROLES.SPADM, ROLES.ADM, ROLES.MGR] },
-  { label: 'Mouvements Financiers', path: '/admin/cash-registers', icon: 'Wallet', roles: [ROLES.SPADM, ROLES.ADM, ROLES.MGR, ROLES.TKT, ROLES.CHK, ROLES.FRT] },
+  { label: 'Comptes Financiers', path: '/admin/cash-registers', icon: 'Book', roles: [ROLES.SPADM, ROLES.ADM, ROLES.MGR, ROLES.TKT, ROLES.CHK, ROLES.FRT] },
+  { label: 'Mouvements Financiers', path: '/cash-transactions', icon: 'Wallet', roles: [ROLES.SPADM, ROLES.ADM, ROLES.MGR, ROLES.TKT, ROLES.CHK, ROLES.FRT] },
   { label: 'Administration', path: '/admin', icon: 'Settings', roles: [ROLES.SPADM, ROLES.ADM] },
 ]
 
@@ -41,7 +42,8 @@ export const MOBILE_ACTION_NAV_ITEMS: NavItem[] = [
   { label: 'Tickets', path: '/tickets', icon: 'Ticket', roles: [ROLES.SPADM, ROLES.ADM, ROLES.TKT] },
   { label: 'Check-In', path: '/checkins', icon: 'UserCheck', roles: [ROLES.SPADM, ROLES.ADM, ROLES.CHK] },
   { label: 'Fret', path: '/freight', icon: 'Package', roles: [ROLES.SPADM, ROLES.ADM, ROLES.FRT] },
-  { label: 'Mouvements Financiers', path: '/admin/cash-registers', icon: 'Wallet', roles: [ROLES.SPADM, ROLES.ADM, ROLES.MGR, ROLES.TKT, ROLES.CHK, ROLES.FRT] },
+  { label: 'Comptes Financiers', path: '/admin/cash-registers', icon: 'Book', roles: [ROLES.SPADM, ROLES.ADM, ROLES.MGR, ROLES.TKT, ROLES.CHK, ROLES.FRT] },
+  { label: 'Mouvements Financiers', path: '/cash-transactions', icon: 'Wallet', roles: [ROLES.SPADM, ROLES.ADM, ROLES.MGR, ROLES.TKT, ROLES.CHK, ROLES.FRT] },
   { label: 'Administration', path: '/admin', icon: 'Settings', roles: [ROLES.SPADM, ROLES.ADM] },
 ]
 
@@ -70,6 +72,9 @@ export function isNavPathActive(pathname: string, path: string): boolean {
   }
   if (path === '/admin/cash-registers') {
     return pathname === '/admin/cash-registers' || pathname.startsWith('/admin/cash-registers/')
+  }
+  if (path === '/cash-transactions') {
+    return pathname === '/cash-transactions' || pathname.startsWith('/cash-transactions/')
   }
   if (path === '/tickets') {
     return (

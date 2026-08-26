@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Menu, Package, Receipt, Settings, Ticket, User, UserCheck, Wallet, X, Bookmark, Scale } from 'lucide-react'
+import { LayoutDashboard, Menu, Package, Receipt, Settings, Ticket, User, UserCheck, Wallet, Book, X, Bookmark, Scale } from 'lucide-react'
 import type { NavItem } from '@/constants/roles'
 import { isNavPathActive } from '@/constants/roles'
 import { Button } from '@/components/ui/button'
@@ -15,6 +15,7 @@ const iconMap = {
   Menu,
   Receipt,
   Wallet,
+  Book,
   Bookmark,
   Scale,
 }

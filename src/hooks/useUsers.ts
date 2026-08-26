@@ -72,7 +72,30 @@ export function useDeleteUser() {
     mutationFn: (id: string) => userService.delete(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: userKeys.lists() })
-      toast.success('Utilisateur supprimé')
+      toast.success('Utilisateur archivé')
+    },
+  })
+}
+
+export function useRestoreUser() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => userService.restore(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: userKeys.lists() })
+      toast.success('Utilisateur restauré')
+    },
+  })
+}
+
+export function useUploadUserPhoto() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, file }: { id: string; file: File }) => userService.uploadPhoto(id, file),
+    onSuccess: (user) => {
+      void queryClient.invalidateQueries({ queryKey: userKeys.lists() })
+      void queryClient.invalidateQueries({ queryKey: userKeys.detail(user.id) })
+      toast.success('Photo de profil mise à jour')
     },
   })
 }

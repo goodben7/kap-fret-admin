@@ -31,6 +31,7 @@ export interface TicketFilters {
   status?: string
   paymentMode?: string
   currency?: string
+  purchaseGroupId?: string
 }
 
 export type TicketFiltersState = Required<
@@ -101,6 +102,7 @@ export function buildTicketFilterParams(filters: TicketFilters): Record<string, 
 
   if (filters.departure?.trim()) params.departure = normalizeIri(filters.departure.trim())
   if (filters.destination?.trim()) params.destination = normalizeIri(filters.destination.trim())
+  if (filters.purchaseGroupId?.trim()) params.purchaseGroupId = filters.purchaseGroupId.trim()
 
   params['order[createdAt]'] = 'asc'
   params['order[ticketNumber]'] = 'asc'
