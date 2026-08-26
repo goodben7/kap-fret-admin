@@ -69,6 +69,28 @@ export interface CheckInCreatePayload {
   baggages: CheckInBaggageInput[]
 }
 
+/** POST /api/check_ins/batch — check-in groupé */
+export interface CheckInBatchCreatePayload {
+  tickets: string[]
+  cashRegister?: string
+  checkInWeight: string
+  baggageAllowanceKg: string
+  excessWeightKg: string
+  excessPrice: string
+  currency: string
+  paymentCurrency: string
+  paidAmountUsd?: string
+  paidAmountCdf?: string
+  netToPay: string
+  handBaggageWeight: string
+  observations: string
+  weightJustification?: string | null
+  hasWeightReduction: boolean
+  destinationObservations?: string | null
+  encodedAt?: string
+  baggages: CheckInBaggageInput[]
+}
+
 /** PATCH /api/check_ins/{id} — sans ticket, caisse ni issuingOffice */
 export interface CheckInPatchPayload {
   checkInWeight: string

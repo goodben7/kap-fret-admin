@@ -1,21 +1,38 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ClipboardCheck } from 'lucide-react'
-import { useCreateCheckIn } from '@/hooks/useCheckIns'
+import { useCreateCheckIn, useCreateCheckInBatch } from '@/hooks/useCheckIns'
 import { CheckInForm } from '@/components/forms/CheckInForm'
-import { toCheckInCreatePayload } from '@/lib/check-in'
+import { toCheckInBatchPayload, toCheckInCreatePayload } from '@/lib/check-in'
 import { clearFormDraft } from '@/lib/form-draft'
 import { STORAGE_KEYS } from '@/constants/storage'
 import type { CheckInCreateFormData } from '@/schemas/checkin.schema'
 
 export function CheckInCreatePage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const initialTicketId = searchParams.get('ticket') ?? undefined
   const createCheckIn = useCreateCheckIn()
+  const createCheckInBatch = useCreateCheckInBatch()
 
-  const handleSubmit = async (data: CheckInCreateFormData) => {
-    await createCheckIn.mutateAsync(toCheckInCreatePayload(data))
+  const handleSubmit = async (
+    data: CheckInCreateFormData,
+    options: { ticketIris: string[] },
+  ) => {
+    if (options.ticketIris.length > 1) {
+      await createCheckInBatch.mutateAsync(toCheckInBatchPayload(data, options.ticketIris))
+    } else {
+      await createCheckIn.mutateAsync(
+        toCheckInCreatePayload({
+          ...data,
+          ticketIri: options.ticketIris[0] ?? data.ticketIri,
+        }),
+      )
+    }
     clearFormDraft(STORAGE_KEYS.DRAFT_CHECKIN_CREATE)
     void navigate('/checkins')
   }
+
+  const isLoading = createCheckIn.isPending || createCheckInBatch.isPending
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 pb-44 lg:max-w-4xl lg:pb-6">
@@ -35,15 +52,16 @@ export function CheckInCreatePage() {
           <h1 className="text-2xl font-bold tracking-tight">Nouveau check-in</h1>
         </div>
         <p className="pl-11 text-sm text-muted-foreground">
-          Recherchez un billet et enregistrez le check-in du passager
+          Recherchez un billet — pour un achat groupé, sélectionnez les passagers à enregistrer ensemble
         </p>
       </div>
 
       <CheckInForm
         onSubmit={handleSubmit}
-        isLoading={createCheckIn.isPending}
+        isLoading={isLoading}
         submitLabel="Enregistrer le check-in"
         cancelHref="/checkins"
+        initialTicketId={initialTicketId}
       />
     </div>
   )

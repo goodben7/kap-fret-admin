@@ -3,7 +3,7 @@ import { buildCheckInFilterParams, type CheckInFilters } from '@/lib/check-in-fi
 import { extractHydraMember, extractHydraTotalItems } from '@/lib/hydra'
 import { normalizeCheckInResource, sortCheckInsByCreatedAtAsc } from '@/lib/check-in'
 import type { HydraCollection } from '@/types/hydra'
-import type { CheckIn, CheckInCreatePayload, CheckInPatchPayload } from '@/types/check-in'
+import type { CheckIn, CheckInBatchCreatePayload, CheckInCreatePayload, CheckInPatchPayload } from '@/types/check-in'
 
 export type { CheckInFilters } from '@/lib/check-in-filters'
 
@@ -67,6 +67,16 @@ export const checkInService = {
   async create(payload: CheckInCreatePayload) {
     const { data } = await api.post<CheckIn>('/api/check_ins', payload, { headers: JSON_HEADERS })
     return data
+  },
+
+  async createBatch(payload: CheckInBatchCreatePayload) {
+    const { data } = await api.post<CheckIn | CheckIn[]>('/api/check_ins/batch', payload, {
+      headers: JSON_HEADERS,
+    })
+    if (Array.isArray(data)) return data
+    const member = (data as { 'hydra:member'?: CheckIn[] })['hydra:member']
+    if (Array.isArray(member)) return member
+    return [data as CheckIn]
   },
 
   async update(id: string, payload: CheckInPatchPayload) {

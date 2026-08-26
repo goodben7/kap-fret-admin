@@ -30,12 +30,13 @@ import {
   getWeightForBaggageType,
   type BaggageType,
 } from '@/constants/check-in-baggage'
-import { CURRENCY, CURRENCY_OPTIONS } from '@/constants/ticket'
+import { CURRENCY, CURRENCY_OPTIONS, TICKET_STATUS } from '@/constants/ticket'
 import { useAuth } from '@/hooks/useAuth'
 import { useCashRegistersForSelect } from '@/hooks/useCashRegisters'
 import { useCurrenciesForSelect } from '@/hooks/useCurrencies'
 import { useExchangeRates } from '@/hooks/useExchangeRates'
 import { usePreviewConversion } from '@/hooks/usePreviewConversion'
+import { useTicketGroup } from '@/hooks/useTickets'
 import { formatCashRegisterSelectLabel } from '@/lib/cash-register'
 import { resolveCurrencyIriByCode } from '@/lib/currency-resource'
 import { toIri, extractIri } from '@/lib/hydra'
@@ -45,11 +46,13 @@ import {
   computeCheckInPaymentAmount,
   computeCheckInExcessPrice,
   computeExcessWeightFromBaggages,
+  computeGroupExcessFromBaggages,
   computeMixedPaymentUsdEquivalent,
   computeWeightsFromBaggages,
   formatCheckInWeight,
   isMixedPaymentWithinTolerance,
   suggestMixedPaymentCdf,
+  sumTicketBaggageAllowances,
   toEncodedAtDateInput,
 } from '@/lib/check-in'
 import { ticketService } from '@/services/ticket.service'
@@ -104,11 +107,13 @@ interface CheckInFormBaseProps {
   cancelHref?: string
   ticketLabel?: string
   issuingOfficeLabel?: string
+  /** Pré-sélectionne un billet (ex. depuis la fiche billet). */
+  initialTicketId?: string
 }
 
 interface CheckInCreateFormProps extends CheckInFormBaseProps {
   isEdit?: false
-  onSubmit: (data: CheckInCreateFormData) => void
+  onSubmit: (data: CheckInCreateFormData, options: { ticketIris: string[] }) => void
 }
 
 interface CheckInEditFormProps extends CheckInFormBaseProps {
@@ -254,6 +259,7 @@ export function CheckInForm(props: CheckInFormProps) {
     isEdit = false,
     ticketLabel,
     issuingOfficeLabel,
+    initialTicketId,
   } = props
 
   const { user, issuingOfficeName } = useAuth()
@@ -267,7 +273,32 @@ export function CheckInForm(props: CheckInFormProps) {
 
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
   const [isLoadingTicket, setIsLoadingTicket] = useState(false)
+  const [selectedGroupTicketIds, setSelectedGroupTicketIds] = useState<string[]>([])
+  const initialTicketLoadedRef = useRef(false)
   const initialBaggages = resolveInitialBaggages(defaultValues, isEdit)
+
+  const { data: groupData } = useTicketGroup(
+    !isEdit ? selectedTicket?.purchaseGroupId : undefined,
+  )
+
+  const groupIssuedTickets = useMemo(() => {
+    if (!selectedTicket?.purchaseGroupId) return []
+    const items = groupData?.items ?? []
+    const byId = new Map(items.map((t) => [t.id, t]))
+    if (!byId.has(selectedTicket.id)) byId.set(selectedTicket.id, selectedTicket)
+    return Array.from(byId.values()).filter((t) => t.status === TICKET_STATUS.ISSUED)
+  }, [groupData?.items, selectedTicket])
+
+  const selectedGroupTickets = useMemo(
+    () => groupIssuedTickets.filter((t) => selectedGroupTicketIds.includes(t.id)),
+    [groupIssuedTickets, selectedGroupTicketIds],
+  )
+
+  const isGroupCheckIn = !isEdit && selectedGroupTickets.length > 1
+  const groupAllowanceKg = useMemo(
+    () => (isGroupCheckIn ? sumTicketBaggageAllowances(selectedGroupTickets) : 0),
+    [isGroupCheckIn, selectedGroupTickets],
+  )
 
   const {
     register,
@@ -342,22 +373,57 @@ export function CheckInForm(props: CheckInFormProps) {
   )
 
   const syncDerivedWeights = useCallback(
-    (options?: { updateExcessPrice?: boolean; baggages?: CheckInPatchFormData['baggages'] }) => {
+    (options?: {
+      updateExcessPrice?: boolean
+      baggages?: CheckInPatchFormData['baggages']
+    }) => {
       const baggages = options?.baggages ?? getValues('baggages') ?? []
       const { checkInWeight: computedCheckIn, handBaggageWeight: computedHand } =
         computeWeightsFromBaggages(baggages)
-      const excess = computeExcessWeightFromBaggages(baggages)
+      const excess = isGroupCheckIn
+        ? computeGroupExcessFromBaggages(baggages, groupAllowanceKg)
+        : computeExcessWeightFromBaggages(baggages)
       setValue('checkInWeight', computedCheckIn, { shouldValidate: true })
       setValue('handBaggageWeight', computedHand, { shouldValidate: true })
       setValue('excessWeightKg', excess, { shouldValidate: true })
+      if (isGroupCheckIn) {
+        setValue('baggageAllowanceKg', groupAllowanceKg.toFixed(2), { shouldValidate: true })
+      } else if (!isEdit) {
+        const sole =
+          selectedGroupTickets.length === 1 ? selectedGroupTickets[0] : selectedTicket
+        if (sole?.baggageAllowanceKg != null && sole.baggageAllowanceKg !== '') {
+          setValue('baggageAllowanceKg', sole.baggageAllowanceKg, { shouldValidate: true })
+        }
+      }
       if (options?.updateExcessPrice) {
         const price = computeCheckInExcessPrice(excess, CURRENCY.USD, exchangeRates)
         setValue('excessPrice', price, { shouldValidate: true })
         setValue('netToPay', price, { shouldValidate: true })
       }
     },
-    [exchangeRates, getValues, setValue],
+    [
+      exchangeRates,
+      getValues,
+      groupAllowanceKg,
+      isEdit,
+      isGroupCheckIn,
+      selectedGroupTickets,
+      selectedTicket,
+      setValue,
+    ],
   )
+
+  const autoSelectedGroupRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (isEdit || !selectedTicket?.purchaseGroupId) {
+      autoSelectedGroupRef.current = null
+      return
+    }
+    if (groupIssuedTickets.length <= 1) return
+    if (autoSelectedGroupRef.current === selectedTicket.purchaseGroupId) return
+    autoSelectedGroupRef.current = selectedTicket.purchaseGroupId
+    setSelectedGroupTicketIds(groupIssuedTickets.map((t) => t.id))
+  }, [groupIssuedTickets, isEdit, selectedTicket?.purchaseGroupId])
 
   const excessWeightKg = watch('excessWeightKg')
   const paymentCurrency = watch('paymentCurrency')
@@ -484,6 +550,9 @@ export function CheckInForm(props: CheckInFormProps) {
     try {
       const fullTicket = await ticketService.getById(ticket.id)
       setSelectedTicket(fullTicket)
+      setSelectedGroupTicketIds(
+        fullTicket.status === TICKET_STATUS.ISSUED ? [fullTicket.id] : [],
+      )
       const ticketIri = fullTicket['@id'] ?? toIri('tickets', fullTicket.id)
       setValue('ticketIri', ticketIri, { shouldValidate: true, shouldDirty: true })
       setValue('baggageAllowanceKg', fullTicket.baggageAllowanceKg, {
@@ -494,6 +563,7 @@ export function CheckInForm(props: CheckInFormProps) {
       syncDerivedWeights({ updateExcessPrice: true })
     } catch {
       setSelectedTicket(ticket)
+      setSelectedGroupTicketIds(ticket.status === TICKET_STATUS.ISSUED ? [ticket.id] : [])
       const ticketIri = ticket['@id'] ?? toIri('tickets', ticket.id)
       setValue('ticketIri', ticketIri, { shouldValidate: true, shouldDirty: true })
       if (ticket.baggageAllowanceKg != null && ticket.baggageAllowanceKg !== '') {
@@ -511,9 +581,52 @@ export function CheckInForm(props: CheckInFormProps) {
 
   const handleTicketClear = () => {
     setSelectedTicket(null)
+    setSelectedGroupTicketIds([])
+    autoSelectedGroupRef.current = null
     setValue('ticketIri', '', { shouldValidate: true })
     setValue('baggageAllowanceKg', '', { shouldValidate: true })
   }
+
+  const toggleGroupTicket = (ticketId: string) => {
+    setSelectedGroupTicketIds((prev) => {
+      if (prev.includes(ticketId)) {
+        if (prev.length <= 1) return prev
+        return prev.filter((id) => id !== ticketId)
+      }
+      return [...prev, ticketId]
+    })
+  }
+
+  const selectAllGroupTickets = () => {
+    setSelectedGroupTicketIds(groupIssuedTickets.map((t) => t.id))
+  }
+
+  useEffect(() => {
+    if (isEdit || !initialTicketId?.trim() || initialTicketLoadedRef.current) return
+    initialTicketLoadedRef.current = true
+    void (async () => {
+      setIsLoadingTicket(true)
+      try {
+        const ticket = await ticketService.getById(initialTicketId.trim())
+        setSelectedTicket(ticket)
+        setSelectedGroupTicketIds(
+          ticket.status === TICKET_STATUS.ISSUED ? [ticket.id] : [],
+        )
+        const ticketIri = ticket['@id'] ?? toIri('tickets', ticket.id)
+        setValue('ticketIri', ticketIri, { shouldValidate: true, shouldDirty: true })
+        setValue('baggageAllowanceKg', ticket.baggageAllowanceKg, {
+          shouldValidate: true,
+          shouldDirty: true,
+        })
+        setValue('currency', CURRENCY.USD, { shouldValidate: true, shouldDirty: true })
+        syncDerivedWeights({ updateExcessPrice: true })
+      } catch {
+        initialTicketLoadedRef.current = false
+      } finally {
+        setIsLoadingTicket(false)
+      }
+    })()
+  }, [initialTicketId, isEdit, setValue, syncDerivedWeights])
 
   const computedFieldsLocked = true
 
@@ -552,7 +665,17 @@ export function CheckInForm(props: CheckInFormProps) {
 
   const handleFormSubmit = isEdit
     ? handleSubmit((data) => (onSubmit as CheckInEditFormProps['onSubmit'])(data))
-    : handleSubmit((data) => (onSubmit as CheckInCreateFormProps['onSubmit'])(data as CheckInCreateFormData))
+    : handleSubmit((data) => {
+        const iris = selectedGroupTickets.map((t) => t['@id'] ?? toIri('tickets', t.id))
+        const ticketIris = iris.length > 0
+          ? iris
+          : data.ticketIri
+            ? [data.ticketIri]
+            : []
+        ;(onSubmit as CheckInCreateFormProps['onSubmit'])(data as CheckInCreateFormData, {
+          ticketIris,
+        })
+      })
 
   return (
     <form id={FORM_ID} onSubmit={handleFormSubmit} className="space-y-4">
@@ -601,6 +724,58 @@ export function CheckInForm(props: CheckInFormProps) {
               </p>
             )}
             {selectedTicket && !isLoadingTicket && <SelectedTicketCard ticket={selectedTicket} />}
+            {!isEdit && groupIssuedTickets.length > 1 && (
+              <div className="space-y-3 rounded-xl border border-brand-orange/30 bg-brand-orange/5 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold">Check-in groupé</p>
+                    <p className="text-xs text-muted-foreground">
+                      Achat groupé détecté — franchise cumulée des passagers sélectionnés
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="rounded-lg"
+                    onClick={selectAllGroupTickets}
+                  >
+                    Tout sélectionner
+                  </Button>
+                </div>
+                <ul className="space-y-2">
+                  {groupIssuedTickets.map((ticket) => {
+                    const checked = selectedGroupTicketIds.includes(ticket.id)
+                    return (
+                      <li key={ticket.id}>
+                        <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/60 bg-background/80 px-3 py-2.5">
+                          <input
+                            type="checkbox"
+                            className="mt-1 h-4 w-4 rounded border-input"
+                            checked={checked}
+                            onChange={() => toggleGroupTicket(ticket.id)}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium">
+                              {ticket.passengerName}
+                            </span>
+                            <span className="block font-mono text-xs text-muted-foreground">
+                              {ticket.ticketNumber} · franchise {formatCheckInWeight(ticket.baggageAllowanceKg)}
+                            </span>
+                          </span>
+                        </label>
+                      </li>
+                    )
+                  })}
+                </ul>
+                {isGroupCheckIn && (
+                  <p className="text-sm font-medium text-brand-orange">
+                    Franchise groupe : {formatCheckInWeight(groupAllowanceKg.toFixed(2))} (
+                    {selectedGroupTickets.length} passagers)
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
       </FormSection>
@@ -732,7 +907,7 @@ export function CheckInForm(props: CheckInFormProps) {
             </p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Input
-                label="Kilo total accordé"
+                label={isGroupCheckIn ? 'Franchise cumulée (groupe)' : 'Kilo total accordé'}
                 type="number"
                 inputMode="decimal"
                 step="0.01"
@@ -1081,7 +1256,11 @@ export function CheckInForm(props: CheckInFormProps) {
         formId={FORM_ID}
         canSubmit={isValid && (!mixedPayment || !hasExcessPayment || mixedPaymentOk)}
         isLoading={isLoading}
-        submitLabel={submitLabel}
+        submitLabel={
+          isGroupCheckIn
+            ? `Enregistrer le check-in groupé (${selectedGroupTickets.length})`
+            : submitLabel
+        }
         cancelHref={cancelHref}
       />
     </form>

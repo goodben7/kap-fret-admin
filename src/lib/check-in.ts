@@ -438,6 +438,66 @@ export function toCheckInCreatePayload(data: CheckInCreateFormData): CheckInCrea
   return payload
 }
 
+/** Payload POST /api/check_ins/batch */
+export function toCheckInBatchPayload(
+  data: CheckInCreateFormData,
+  ticketIris: string[],
+): import('@/types/check-in').CheckInBatchCreatePayload {
+  const excess = parseFloat(data.excessWeightKg) || 0
+  const payload: import('@/types/check-in').CheckInBatchCreatePayload = {
+    tickets: ticketIris,
+    checkInWeight: formatDecimal(data.checkInWeight),
+    baggageAllowanceKg: formatDecimal(data.baggageAllowanceKg),
+    excessWeightKg: formatDecimal(data.excessWeightKg),
+    excessPrice: formatDecimal(data.excessPrice),
+    currency: CURRENCY.USD,
+    paymentCurrency: data.mixedPayment
+      ? CURRENCY.USD
+      : normalizeCurrency(data.paymentCurrency),
+    netToPay: formatDecimal(data.netToPay),
+    handBaggageWeight: formatDecimal(data.handBaggageWeight || '0'),
+    observations: data.observations?.trim() ?? '',
+    weightJustification: data.weightJustification?.trim() || null,
+    hasWeightReduction: !!data.hasWeightReduction,
+    destinationObservations: data.destinationObservations?.trim() || null,
+    encodedAt: encodedAtDateInputToIso(data.encodedAt),
+    baggages: data.baggages.filter(hasBaggageWeight).map(toBaggageCreateInput),
+  }
+
+  if (excess > 0 && data.cashRegister?.trim()) {
+    payload.cashRegister = data.cashRegister
+  }
+
+  if (data.mixedPayment && excess > 0) {
+    payload.paidAmountUsd = formatDecimal(data.paidAmountUsd || '0')
+    payload.paidAmountCdf = formatDecimal(data.paidAmountCdf || '0')
+  }
+
+  return payload
+}
+
+/** Somme des franchises billets (kg) pour un check-in groupé. */
+export function sumTicketBaggageAllowances(
+  tickets: Array<{ baggageAllowanceKg?: string }>,
+): number {
+  return tickets.reduce((sum, ticket) => {
+    const value = parseFloat(String(ticket.baggageAllowanceKg ?? ''))
+    return sum + (Number.isFinite(value) ? value : 0)
+  }, 0)
+}
+
+/** Excédent groupé = max(0, poids total bagages − franchise cumulée billets). */
+export function computeGroupExcessFromBaggages(
+  baggages: Array<{ weight?: string }>,
+  groupAllowanceKg: number,
+): string {
+  const totalWeight = baggages.reduce((sum, baggage) => sum + parseBaggageWeight(baggage.weight), 0)
+  if (!Number.isFinite(groupAllowanceKg) || groupAllowanceKg < 0) {
+    return totalWeight.toFixed(2)
+  }
+  return Math.max(0, totalWeight - groupAllowanceKg).toFixed(2)
+}
+
 export function toCheckInPatchPayload(data: CheckInPatchFormData): CheckInPatchPayload {
   return {
     checkInWeight: formatDecimal(data.checkInWeight),

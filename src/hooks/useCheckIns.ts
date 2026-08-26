@@ -4,7 +4,7 @@ import {
   type CheckInFilters,
 } from '@/services/checkin.service'
 import { checkInFiltersKey } from '@/lib/check-in-filters'
-import type { CheckInCreatePayload, CheckInPatchPayload } from '@/types/check-in'
+import type { CheckInBatchCreatePayload, CheckInCreatePayload, CheckInPatchPayload } from '@/types/check-in'
 import { toast } from 'sonner'
 
 export const checkInKeys = {
@@ -37,6 +37,22 @@ export function useCreateCheckIn() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: checkInKeys.lists() })
       toast.success('Check-in enregistré avec succès')
+    },
+  })
+}
+
+export function useCreateCheckInBatch() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: CheckInBatchCreatePayload) => checkInService.createBatch(payload),
+    onSuccess: (checkIns) => {
+      void queryClient.invalidateQueries({ queryKey: checkInKeys.lists() })
+      const count = checkIns.length
+      toast.success(
+        count > 1
+          ? `Check-in groupé enregistré (${count} passagers)`
+          : 'Check-in enregistré avec succès',
+      )
     },
   })
 }

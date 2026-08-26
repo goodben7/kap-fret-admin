@@ -6,6 +6,7 @@ import {
   Banknote,
   CalendarClock,
   CheckCircle2,
+  ClipboardCheck,
   CreditCard,
   FileText,
   History,
@@ -335,6 +336,14 @@ export function TicketDetailPage() {
               <Printer className="h-4 w-4" />
               Thermique 80 mm
             </Button>
+            {ticket.status === TICKET_STATUS.ISSUED && (
+              <Button type="button" variant="outline" className="h-11 rounded-xl" asChild>
+                <Link to={`/checkins/new?ticket=${encodeURIComponent(ticket.id)}`}>
+                  <ClipboardCheck className="h-4 w-4" />
+                  {companions.length > 0 ? 'Check-in groupé' : 'Check-in'}
+                </Link>
+              </Button>
+            )}
           </CardContent>
         </Card>
       )}
