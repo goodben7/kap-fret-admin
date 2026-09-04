@@ -89,8 +89,12 @@ export interface TicketBatchCreatePayload {
   paymentMode: PaymentMode
   sponsor?: string | null
   cashRegister?: string
+  /** Acompte ACC total du groupe (USD). */
+  paidAmount?: string
   paidAmountUsd?: string
   paidAmountCdf?: string
+  /** Paiement mixte : taux manuel 1 USD = N CDF. */
+  exchangeRate?: string
   passengers: TicketPassengerCreatePayload[]
 }
 
@@ -117,10 +121,14 @@ export interface TicketCreatePayload {
   paymentMode: PaymentMode
   sponsor: string | null
   cashRegister?: string
+  /** Acompte ACC (USD). */
+  paidAmount?: string
   /** Paiement mixte à la création : partie USD. */
   paidAmountUsd?: string
   /** Paiement mixte à la création : partie CDF. */
   paidAmountCdf?: string
+  /** Paiement mixte : taux manuel 1 USD = N CDF. */
+  exchangeRate?: string
 }
 
 /**
@@ -167,6 +175,8 @@ export interface TicketPaymentPayload {
   paidAmountUsd?: string
   /** Paiement mixte : partie CDF. */
   paidAmountCdf?: string
+  /** Paiement mixte : taux manuel 1 USD = N CDF. */
+  exchangeRate?: string
   cashRegister: string
   description: string
 }

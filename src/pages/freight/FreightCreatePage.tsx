@@ -35,7 +35,7 @@ export function FreightCreatePage() {
           <h1 className="text-2xl font-bold tracking-tight">Nouvelle expédition</h1>
         </div>
         <p className="pl-11 text-sm text-muted-foreground">
-          Une LTA peut regrouper plusieurs colis (même expéditeur / destinataire)
+          Saisissez les colis et les parties — le n° d&apos;expédition est attribué automatiquement
         </p>
       </div>
 

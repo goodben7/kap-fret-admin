@@ -39,7 +39,7 @@ export function downloadFreightLtaThermalReceiptPdf(shipment: FreightShipment): 
   thermalPair(ctx, 'Fret ordinaire', money(shipment.ordinaryFreight, currency))
   thermalPair(ctx, 'Fret volume', money(shipment.volumeFreight, currency))
   thermalPair(ctx, 'RVA', money(shipment.rva, currency))
-  thermalPair(ctx, 'Frais LTA', money(shipment.ltaFees, currency))
+  thermalPair(ctx, 'Frais doc.', money(shipment.ltaFees, currency))
   thermalPair(ctx, 'Mode', FREIGHT_PAYMENT_MODE_LABELS[shipment.paymentMode] ?? shipment.paymentMode)
   thermalPair(ctx, 'Payé', money(shipment.paidAmount, currency))
   const remaining = parseFloat(shipment.remainingAmount) || 0

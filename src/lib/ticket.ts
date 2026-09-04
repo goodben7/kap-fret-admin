@@ -1,6 +1,7 @@
 import { resolveCheckpointIri } from '@/lib/checkpoint'
 import { extractIri, toIri } from '@/lib/hydra'
 import { convertAmountBetweenCurrencyCodes } from '@/lib/exchange-rate'
+import { formatExchangeRateForPayload } from '@/lib/mixed-payment'
 import type { ExchangeRateResource } from '@/types/exchange-rate'
 import { GENDER, PAYMENT_MODE, CURRENCY, TICKET_CATEGORY_BASE_PRICE_USD, TICKET_STATUS } from '@/constants/ticket'
 import type { Currency, Gender, PaymentMode, TicketCategory } from '@/constants/ticket'
@@ -247,18 +248,28 @@ export function toTicketCreatePayload(data: TicketFormData): TicketCreatePayload
     payload.age = primary.age
   }
 
-  if (data.paymentMode === PAYMENT_MODE.CASH && data.cashRegister?.trim() && !data.reserveForLater) {
+  if (
+    (data.paymentMode === PAYMENT_MODE.CASH || data.paymentMode === PAYMENT_MODE.ACC)
+    && data.cashRegister?.trim()
+    && !data.reserveForLater
+  ) {
     payload.cashRegister = data.cashRegister
   }
 
+  if (data.paymentMode === PAYMENT_MODE.ACC && data.paidAmount?.trim()) {
+    payload.paidAmount = formatDecimal(data.paidAmount)
+  }
+
   if (
-    data.paymentMode === PAYMENT_MODE.CASH
+    (data.paymentMode === PAYMENT_MODE.CASH || data.paymentMode === PAYMENT_MODE.ACC)
     && !data.reserveForLater
     && data.mixedPayment
   ) {
     payload.paidAmountUsd = formatDecimal(data.paidAmountUsd || '0')
     payload.paidAmountCdf = formatDecimal(data.paidAmountCdf || '0')
     payload.paymentCurrency = CURRENCY.USD
+    const exchangeRate = formatExchangeRateForPayload(data.exchangeRate)
+    if (exchangeRate) payload.exchangeRate = exchangeRate
   }
 
   return payload
@@ -294,18 +305,28 @@ export function toTicketBatchPayload(data: TicketFormData): TicketBatchCreatePay
     }),
   }
 
-  if (data.paymentMode === PAYMENT_MODE.CASH && data.cashRegister?.trim() && !data.reserveForLater) {
+  if (
+    (data.paymentMode === PAYMENT_MODE.CASH || data.paymentMode === PAYMENT_MODE.ACC)
+    && data.cashRegister?.trim()
+    && !data.reserveForLater
+  ) {
     payload.cashRegister = data.cashRegister
   }
 
+  if (data.paymentMode === PAYMENT_MODE.ACC && data.paidAmount?.trim()) {
+    payload.paidAmount = formatDecimal(data.paidAmount)
+  }
+
   if (
-    data.paymentMode === PAYMENT_MODE.CASH
+    (data.paymentMode === PAYMENT_MODE.CASH || data.paymentMode === PAYMENT_MODE.ACC)
     && !data.reserveForLater
     && data.mixedPayment
   ) {
     payload.paidAmountUsd = formatDecimal(data.paidAmountUsd || '0')
     payload.paidAmountCdf = formatDecimal(data.paidAmountCdf || '0')
     payload.paymentCurrency = CURRENCY.USD
+    const exchangeRate = formatExchangeRateForPayload(data.exchangeRate)
+    if (exchangeRate) payload.exchangeRate = exchangeRate
   }
 
   return payload
@@ -335,13 +356,16 @@ export function toTicketPaymentPayload(
   data: TicketPaymentFormData,
 ): TicketPaymentPayload {
   if (data.mixedPayment) {
-    return {
+    const payload: TicketPaymentPayload = {
       paymentCurrency: CURRENCY.USD,
       paidAmountUsd: data.paidAmountUsd?.trim() || '0',
       paidAmountCdf: data.paidAmountCdf?.trim() || '0',
       cashRegister: data.cashRegister,
       description: data.description.trim(),
     }
+    const exchangeRate = formatExchangeRateForPayload(data.exchangeRate)
+    if (exchangeRate) payload.exchangeRate = exchangeRate
+    return payload
   }
 
   return {

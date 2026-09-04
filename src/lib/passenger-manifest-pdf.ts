@@ -70,6 +70,12 @@ function formatRowIndex(index: number): string {
   return String(index).padStart(2, '0')
 }
 
+function formatManifestDate(dateInput: string): string {
+  const [year, month, day] = dateInput.split('-')
+  if (!year || !month || !day) return dateInput
+  return `${day}/${month}/${year}`
+}
+
 /**
  * Classement manifeste :
  * - I : bébé 0–1 an (catégorie INF ou âge ≤ 1)
@@ -245,6 +251,16 @@ function drawHeader(doc: jsPDF, params: PassengerManifestParams, logoDataUrl: st
     `TRAJET : ${params.departureLabel.toUpperCase()} – ${params.destinationLabel.toUpperCase()}`,
     pageWidth - MARGIN_X,
     titleY,
+    { align: 'right' },
+  )
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(9)
+  doc.setTextColor(0, 0, 0)
+  doc.text(
+    `DATE DU VOL : ${formatManifestDate(params.travelDate)}`,
+    pageWidth - MARGIN_X,
+    titleY + 5,
     { align: 'right' },
   )
 

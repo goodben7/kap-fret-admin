@@ -4,6 +4,7 @@ import {
   ArrowDownLeft,
   ArrowLeft,
   ArrowLeftRight,
+  RefreshCw,
   ArrowUpRight,
   ChevronRight,
   LayoutGrid,
@@ -406,6 +407,12 @@ export function CashTransactionsListPage() {
           >
             <Printer className="h-4 w-4 sm:mr-1.5" />
             <span className="hidden sm:inline">Imprimer</span>
+          </Button>
+          <Button asChild size="sm" variant="outline" className="rounded-full px-4 shadow-sm">
+            <Link to="/cash-transactions/convert">
+              <RefreshCw className="h-4 w-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">Conversion</span>
+            </Link>
           </Button>
           <Button asChild size="sm" variant="outline" className="rounded-full px-4 shadow-sm">
             <Link to="/admin/cash-registers/transfer">

@@ -21,7 +21,7 @@ import {
   parseCashRegisterFiltersFromSearchParams,
   type CashRegisterFiltersState,
 } from '@/lib/cash-register-filters'
-import { formatCashRegisterBalancesSummary, normalizeCashRegisterModule } from '@/lib/cash-register'
+import { formatCashRegisterBalancesSummary, formatCashRegisterDisplayName, normalizeCashRegisterModule } from '@/lib/cash-register'
 import { CASH_REGISTER_MODULE_LABELS } from '@/constants/cash-register'
 import { CURRENCY } from '@/constants/ticket'
 import { Button } from '@/components/ui/button'
@@ -121,7 +121,7 @@ function CashRegisterCard({ register }: { register: CashRegisterResource }) {
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="font-semibold truncate">{register.name}</p>
+                <p className="font-semibold truncate">{formatCashRegisterDisplayName(register.name)}</p>
                 <Badge variant={register.active ? 'success' : 'destructive'}>{register.active ? 'Actif' : 'Inactif'}</Badge>
                 <Badge variant="secondary">
                   {CASH_REGISTER_MODULE_LABELS[normalizeCashRegisterModule(register.module)]}
@@ -162,7 +162,7 @@ function CashRegisterTable({ registers }: { registers: CashRegisterResource[] })
           {registers.map((register) => (
               <TableRow key={register.id}>
                 <TableCell className="cursor-pointer font-mono text-xs" onClick={() => void navigate(`/admin/cash-registers/${register.id}`)}>{register.code}</TableCell>
-                <TableCell className="cursor-pointer font-medium" onClick={() => void navigate(`/admin/cash-registers/${register.id}`)}>{register.name}</TableCell>
+                <TableCell className="cursor-pointer font-medium" onClick={() => void navigate(`/admin/cash-registers/${register.id}`)}>{formatCashRegisterDisplayName(register.name)}</TableCell>
                 <TableCell>
                   <Badge variant="secondary">
                     {CASH_REGISTER_MODULE_LABELS[normalizeCashRegisterModule(register.module)]}
@@ -265,6 +265,12 @@ export function CashRegistersPage() {
             <Link to="/finance/debts">
               <span className="hidden sm:inline">Dettes</span>
               <span className="sm:hidden">Dettes</span>
+            </Link>
+          </Button>
+          <Button asChild size="sm" variant="outline" className="rounded-full px-4 shadow-sm">
+            <Link to="/reports/flights">
+              <span className="hidden sm:inline">Rapports vol</span>
+              <span className="sm:hidden">Rapports</span>
             </Link>
           </Button>
           <Button asChild size="sm" className="rounded-full px-4 shadow-sm">

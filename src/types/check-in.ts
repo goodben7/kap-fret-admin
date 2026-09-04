@@ -59,6 +59,8 @@ export interface CheckInCreatePayload {
   paidAmountUsd?: string
   /** Paiement mixte : partie CDF (avec paidAmountUsd). */
   paidAmountCdf?: string
+  /** Paiement mixte : taux manuel 1 USD = N CDF. */
+  exchangeRate?: string
   netToPay: string
   handBaggageWeight: string
   observations: string
@@ -81,6 +83,8 @@ export interface CheckInBatchCreatePayload {
   paymentCurrency: string
   paidAmountUsd?: string
   paidAmountCdf?: string
+  /** Paiement mixte : taux manuel 1 USD = N CDF. */
+  exchangeRate?: string
   netToPay: string
   handBaggageWeight: string
   observations: string

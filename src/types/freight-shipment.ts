@@ -94,6 +94,8 @@ export interface FreightShipmentCreatePayload {
   paymentCurrency?: string
   paidAmountUsd?: string
   paidAmountCdf?: string
+  /** Paiement mixte : taux manuel 1 USD = N CDF. */
+  exchangeRate?: string
   paidAmount: string
   remainingAmount: string
   paymentMode: string
@@ -102,9 +104,8 @@ export interface FreightShipmentCreatePayload {
   packages: FreightPackageCreatePayload[]
 }
 
-/** PATCH /api/freight_shipments/{id} */
+/** PATCH /api/freight_shipments/{id} — n° LTA auto, non modifiable */
 export interface FreightShipmentPatchPayload {
-  ltaNumber: string
   shipmentDate: string
   airline?: string | null
   aircraft?: string | null

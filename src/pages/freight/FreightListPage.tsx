@@ -15,6 +15,7 @@ import {
   User,
   X,
   FileText,
+  Send,
 } from 'lucide-react'
 import { FreightManifestModal } from '@/components/freight/FreightManifestModal'
 import { TicketContactActions } from '@/components/tickets/TicketContactActions'
@@ -135,10 +136,10 @@ function FreightFiltersFields({
 }) {
   return (
     <div className="space-y-6">
-      <FilterSection title="LTA" icon={Package}>
+      <FilterSection title="N° expédition" icon={Package}>
         <Input
-          label="N° LTA"
-          placeholder="Ex. LTA-2026-001"
+          label="N° expédition"
+          placeholder="Ex. LTA001/26-..."
           value={draft.ltaNumber}
           onChange={(e) => onChange({ ltaNumber: e.target.value })}
           className={filterInputClass}
@@ -344,7 +345,7 @@ function FreightTable({ shipments }: { shipments: FreightShipment[] }) {
           <TableRow className="hover:bg-transparent">
             <TableHead className={cn(headClass, 'w-[12%]')}>Expéditeur</TableHead>
             <TableHead className={cn(headClass, 'w-[12%]')}>Destinataire</TableHead>
-            <TableHead className={cn(headClass, 'w-[9%]')}>LTA</TableHead>
+            <TableHead className={cn(headClass, 'w-[9%]')}>N°</TableHead>
             <TableHead className={cn(headClass, 'w-[6%] text-right')}>Colis</TableHead>
             <TableHead className={cn(headClass, 'w-[9%] text-right')}>Poids total</TableHead>
             <TableHead className={cn(headClass, 'w-[11%] text-right')}>Montant total</TableHead>
@@ -544,6 +545,12 @@ export function FreightListPage() {
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <Button asChild size="sm" variant="outline" className="rounded-full px-3 shadow-sm">
+            <Link to="/freight/expedition">
+              <Send className="h-4 w-4" />
+              <span className="hidden sm:inline">Expédition</span>
+            </Link>
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -568,7 +575,7 @@ export function FreightListPage() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
             <Input
-              placeholder="Rechercher un N° LTA..."
+              placeholder="Rechercher une expédition..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               className="pl-9 h-11 rounded-xl bg-muted/40 border-transparent focus-visible:bg-background focus-visible:border-input"
@@ -664,7 +671,7 @@ export function FreightListPage() {
         <div className="flex flex-wrap gap-2">
           {filters.ltaNumber && (
             <FilterChip
-              label={`LTA ${filters.ltaNumber}`}
+              label={`N° ${filters.ltaNumber}`}
               onRemove={() => patchFilters({ ltaNumber: '' })}
             />
           )}

@@ -120,7 +120,7 @@ export const TICKET_CATEGORY_OPTIONS: { value: TicketCategory; label: string }[]
 export const TICKET_CATEGORY_BASE_PRICE_USD: Record<TicketCategory, string> = {
   INF: '100.00',
   CD: '200.00',
-  AD: '250.00',
+  AD: '320.00',
 }
 
 /** Plages d'âge indicatives par catégorie */

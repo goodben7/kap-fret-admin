@@ -66,3 +66,61 @@ export const cashTransactionTransferSchema = z
   })
 
 export type CashTransactionTransferFormData = z.infer<typeof cashTransactionTransferSchema>
+
+/** Modification d'un mouvement manuel (ENTRY/EXIT) non validé. */
+export const cashTransactionPatchSchema = z
+  .object({
+    cashRegister: z.string().min(1, 'Caisse requise'),
+    type: z.enum([CASH_TRANSACTION_TYPE.ENTRY, CASH_TRANSACTION_TYPE.EXIT], {
+      message: 'Type requis',
+    }),
+    amount: z.string().min(1, 'Montant requis'),
+    currency: z.string().min(1, 'Devise requise'),
+    description: z.string().min(1, 'Description requise'),
+    transactionDate: z.string().min(1, 'Date requise'),
+    transactionTime: z.string().min(1, 'Heure requise'),
+  })
+  .superRefine((data, ctx) => {
+    const amount = parseFloat(data.amount.replace(',', '.'))
+    if (!Number.isFinite(amount) || amount <= 0) {
+      ctx.addIssue({ code: 'custom', path: ['amount'], message: 'Montant invalide' })
+    }
+  })
+
+export type CashTransactionPatchFormData = z.infer<typeof cashTransactionPatchSchema>
+
+export const cashTransactionConversionSchema = z
+  .object({
+    cashRegister: z.string().min(1, 'Caisse requise'),
+    fromCurrency: z.string().min(1, 'Devise source requise'),
+    toCurrency: z.string().min(1, 'Devise cible requise'),
+    amount: z.string().min(1, 'Montant requis'),
+    exchangeRate: z.string().min(1, 'Taux de change requis'),
+    description: z.string().optional(),
+    transactionDate: z.string().min(1, 'Date requise'),
+    transactionTime: z.string().min(1, 'Heure requise'),
+    validated: z.boolean(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.fromCurrency && data.toCurrency && data.fromCurrency === data.toCurrency) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['toCurrency'],
+        message: 'La devise cible doit être différente de la source',
+      })
+    }
+    const amount = parseFloat(data.amount.replace(',', '.'))
+    if (!Number.isFinite(amount) || amount <= 0) {
+      ctx.addIssue({ code: 'custom', path: ['amount'], message: 'Montant invalide' })
+    }
+    const rate = parseFloat(data.exchangeRate.replace(',', '.'))
+    if (!Number.isFinite(rate) || rate <= 0) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['exchangeRate'],
+        message: 'Taux invalide (1 USD = N CDF)',
+      })
+    }
+  })
+
+export type CashTransactionConversionFormData = z.infer<typeof cashTransactionConversionSchema>

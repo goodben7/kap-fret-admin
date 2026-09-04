@@ -26,6 +26,7 @@ const checkInFieldsSchema = z.object({
   mixedPayment: z.boolean().optional(),
   paidAmountUsd: z.string().optional(),
   paidAmountCdf: z.string().optional(),
+  exchangeRate: z.string().optional(),
   netToPay: z.string().min(1, 'Net à payer requis'),
   handBaggageWeight: z.string().optional(),
   observations: z.string().optional(),
@@ -72,6 +73,14 @@ export const checkInCreateSchema = checkInFieldsSchema
           code: 'custom',
           path: ['paidAmountCdf'],
           message: 'Montant CDF requis (> 0) pour un paiement mixte',
+        })
+      }
+      const rate = parseFloat(String(data.exchangeRate ?? '').replace(',', '.'))
+      if (!Number.isFinite(rate) || rate <= 0) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['exchangeRate'],
+          message: 'Taux de change requis (1 USD = N CDF)',
         })
       }
       const due = parseFloat(String(data.netToPay ?? '').replace(',', '.')) || 0

@@ -183,6 +183,12 @@ function DetailTabs({
 const STATUS_CONFIRM: Partial<
   Record<TicketStatus, { title: string; description: string; confirmLabel: string; variant: ConfirmDialogVariant }>
 > = {
+  [TICKET_STATUS.ISSUED]: {
+    title: 'Émettre ce billet ?',
+    description: 'Le billet est soldé. Il passera au statut Émis et pourra être utilisé au check-in.',
+    confirmLabel: 'Oui, émettre',
+    variant: 'success',
+  },
   [TICKET_STATUS.USED]: {
     title: 'Marquer comme utilisé ?',
     description: 'Le passager a embarqué. Ce billet sera définitivement marqué comme utilisé et ne pourra plus être modifié.',
@@ -191,8 +197,8 @@ const STATUS_CONFIRM: Partial<
   },
   [TICKET_STATUS.CANCELLED]: {
     title: 'Annuler ce billet ?',
-    description: 'Le billet sera annulé. Cette action est irréversible et le passager ne pourra plus voyager avec ce billet.',
-    confirmLabel: 'Oui, annuler le billet',
+    description: 'Le billet sera annulé. Cette action est irréversible.',
+    confirmLabel: 'Oui, annuler',
     variant: 'destructive',
   },
   [TICKET_STATUS.REFUNDED]: {
@@ -416,13 +422,35 @@ export function TicketDetailPage() {
             </Button>
             <Button
               type="button"
-              className="h-11 shrink-0 rounded-xl bg-brand-orange hover:bg-brand-orange/90"
-              onClick={() => setPaymentModalOpen(true)}
+              variant="destructive"
+              className="h-11 shrink-0 rounded-xl"
+              onClick={() => setPendingAction(TICKET_STATUS.CANCELLED)}
               disabled={actionPending}
             >
-              <Banknote className="h-4 w-4" />
-              Encaisser le billet
+              <Ban className="h-4 w-4" />
+              Annuler
             </Button>
+            {remaining <= 0 ? (
+              <Button
+                type="button"
+                className="h-11 shrink-0 rounded-xl bg-emerald-600 hover:bg-emerald-700"
+                onClick={() => setPendingAction(TICKET_STATUS.ISSUED)}
+                disabled={actionPending}
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                Émettre le billet
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                className="h-11 shrink-0 rounded-xl bg-brand-orange hover:bg-brand-orange/90"
+                onClick={() => setPaymentModalOpen(true)}
+                disabled={actionPending}
+              >
+                <Banknote className="h-4 w-4" />
+                Valider la réservation
+              </Button>
+            )}
             </div>
           </CardContent>
         </Card>
@@ -541,11 +569,15 @@ export function TicketDetailPage() {
       {isReserved && activeTab === 'details' && (
         <div className="fixed inset-x-0 bottom-[4.25rem] z-30 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85 lg:hidden">
           <div className="mx-auto flex max-w-3xl gap-2 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-            <Button variant="outline" asChild className="h-11 flex-1 rounded-xl">
-              <Link to={`/tickets/${ticket.id}/edit`}>
-                <Pencil className="h-4 w-4" />
-                Modifier
-              </Link>
+            <Button
+              type="button"
+              variant="destructive"
+              className="h-11 shrink-0 rounded-xl px-3"
+              onClick={() => setPendingAction(TICKET_STATUS.CANCELLED)}
+              disabled={actionPending}
+              aria-label="Annuler la réservation"
+            >
+              <Ban className="h-4 w-4" />
             </Button>
             <Button
               type="button"
@@ -557,15 +589,27 @@ export function TicketDetailPage() {
               <CalendarClock className="h-4 w-4" />
               Date
             </Button>
-            <Button
-              type="button"
-              className="h-11 flex-[1.4] rounded-xl bg-brand-orange font-semibold hover:bg-brand-orange/90"
-              onClick={() => setPaymentModalOpen(true)}
-              disabled={actionPending}
-            >
-              <Banknote className="h-4 w-4" />
-              Encaisser
-            </Button>
+            {remaining <= 0 ? (
+              <Button
+                type="button"
+                className="h-11 flex-[1.4] rounded-xl bg-emerald-600 font-semibold hover:bg-emerald-700"
+                onClick={() => setPendingAction(TICKET_STATUS.ISSUED)}
+                disabled={actionPending}
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                Émettre
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                className="h-11 flex-[1.4] rounded-xl bg-brand-orange font-semibold hover:bg-brand-orange/90"
+                onClick={() => setPaymentModalOpen(true)}
+                disabled={actionPending}
+              >
+                <Banknote className="h-4 w-4" />
+                Valider
+              </Button>
+            )}
           </div>
         </div>
       )}

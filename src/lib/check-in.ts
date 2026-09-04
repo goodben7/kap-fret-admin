@@ -9,6 +9,7 @@ import {
 } from '@/constants/check-in-baggage'
 import { CURRENCY, normalizeCurrency, type Currency } from '@/constants/ticket'
 import { convertAmountBetweenCurrencyCodes } from '@/lib/exchange-rate'
+import { formatExchangeRateForPayload } from '@/lib/mixed-payment'
 import { extractResourceId } from '@/lib/hydra'
 import type { ExchangeRateResource } from '@/types/exchange-rate'
 import type { CheckIn, CheckInBaggage, CheckInCreatePayload, CheckInPatchPayload } from '@/types/check-in'
@@ -433,6 +434,8 @@ export function toCheckInCreatePayload(data: CheckInCreateFormData): CheckInCrea
   if (data.mixedPayment && excess > 0) {
     payload.paidAmountUsd = formatDecimal(data.paidAmountUsd || '0')
     payload.paidAmountCdf = formatDecimal(data.paidAmountCdf || '0')
+    const exchangeRate = formatExchangeRateForPayload(data.exchangeRate)
+    if (exchangeRate) payload.exchangeRate = exchangeRate
   }
 
   return payload
@@ -471,6 +474,8 @@ export function toCheckInBatchPayload(
   if (data.mixedPayment && excess > 0) {
     payload.paidAmountUsd = formatDecimal(data.paidAmountUsd || '0')
     payload.paidAmountCdf = formatDecimal(data.paidAmountCdf || '0')
+    const exchangeRate = formatExchangeRateForPayload(data.exchangeRate)
+    if (exchangeRate) payload.exchangeRate = exchangeRate
   }
 
   return payload

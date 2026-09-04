@@ -5,7 +5,9 @@ import { sortCashTransactionsByNewestFirst } from '@/lib/cash-transaction'
 import type { HydraCollection } from '@/types/hydra'
 import type {
   CashTransaction,
+  CashTransactionConversionPayload,
   CashTransactionCreatePayload,
+  CashTransactionPatchPayload,
   CashTransactionTransferPayload,
   PreviewConversionOutput,
   PreviewConversionPayload,
@@ -94,8 +96,26 @@ export const cashTransactionService = {
     return data
   },
 
+  async update(id: string, payload: CashTransactionPatchPayload) {
+    const { data } = await api.patch<CashTransaction>(`/api/cash_transactions/${id}`, payload, {
+      headers: { ...JSON_HEADERS, 'Content-Type': 'application/merge-patch+json' },
+    })
+    return data
+  },
+
+  async remove(id: string) {
+    await api.delete(`/api/cash_transactions/${id}`)
+  },
+
   async transfer(payload: CashTransactionTransferPayload) {
     const { data } = await api.post<CashTransaction>('/api/cash_transactions/transfer', payload, {
+      headers: JSON_HEADERS,
+    })
+    return data
+  },
+
+  async convert(payload: CashTransactionConversionPayload) {
+    const { data } = await api.post<CashTransaction>('/api/cash_transactions/convert', payload, {
       headers: JSON_HEADERS,
     })
     return data

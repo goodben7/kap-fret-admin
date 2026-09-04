@@ -37,6 +37,7 @@ import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CheckpointAsyncSelect } from '@/components/ui/checkpoint-async-select'
+import { MixedExchangeRateField } from '@/components/payments/MixedExchangeRateField'
 import { ConversionPreviewCard } from '@/components/tickets/ConversionPreviewCard'
 import { formatMoney } from '@/lib/utils'
 import {
@@ -51,6 +52,7 @@ import {
   isMixedPaymentWithinTolerance,
   suggestMixedPaymentCdf,
 } from '@/lib/mixed-payment'
+import { getActiveUsdToCdfRate } from '@/lib/exchange-rate'
 import { useTicketCategoryPrices } from '@/hooks/useTicketCategoryPrices'
 import { useFormDraft } from '@/hooks/useFormDraft'
 import { STORAGE_KEYS } from '@/constants/storage'
@@ -222,10 +224,12 @@ function TicketCreateForm({
       travelDate: getDefaultWednesdayTravelDateInput(),
       travelTime: '06:30',
       cashRegister: '',
+      paidAmount: '',
       reserveForLater: false,
       mixedPayment: false,
       paidAmountUsd: '',
       paidAmountCdf: '',
+      exchangeRate: '',
       departure: createDefaults?.departure ?? '',
       ...createDefaults,
       passengers: createDefaults?.passengers?.length
@@ -248,11 +252,15 @@ function TicketCreateForm({
   const destination = watch('destination')
   const paymentCurrency = watch('paymentCurrency')
   const cashRegister = watch('cashRegister')
+  const paidAmount = watch('paidAmount')
   const reserveForLater = watch('reserveForLater')
   const mixedPayment = watch('mixedPayment')
   const paidAmountUsd = watch('paidAmountUsd')
   const paidAmountCdf = watch('paidAmountCdf')
+  const exchangeRate = watch('exchangeRate')
   const passengers = watch('passengers')
+  const isAccPayment = paymentMode === PAYMENT_MODE.ACC
+  const needsCashRegister = paymentMode === PAYMENT_MODE.CASH || isAccPayment
 
   useEffect(() => {
     if (departurePrefillDone.current) return
@@ -260,6 +268,15 @@ function TicketCreateForm({
     setValue('departure', userCheckpointIri, { shouldValidate: true })
     departurePrefillDone.current = true
   }, [userCheckpointIri, setValue])
+
+  const adminUsdToCdfRate = useMemo(() => getActiveUsdToCdfRate(exchangeRates), [exchangeRates])
+
+  useEffect(() => {
+    if (!mixedPayment) return
+    if ((exchangeRate ?? '').trim()) return
+    if (adminUsdToCdfRate == null) return
+    setValue('exchangeRate', adminUsdToCdfRate.toFixed(2), { shouldValidate: true })
+  }, [mixedPayment, exchangeRate, adminUsdToCdfRate, setValue])
 
   const cashRegisterOptions = useMemo(
     () =>
@@ -306,12 +323,18 @@ function TicketCreateForm({
   }, [categoryPricesByCode, setValue, watch])
 
   useEffect(() => {
-    if (paymentMode !== PAYMENT_MODE.CASH) {
+    if (paymentMode !== PAYMENT_MODE.CASH && paymentMode !== PAYMENT_MODE.ACC) {
       setValue('cashRegister', '', { shouldValidate: true })
-      setValue('reserveForLater', false, { shouldValidate: true })
       setValue('mixedPayment', false, { shouldValidate: true })
       setValue('paidAmountUsd', '', { shouldValidate: true })
       setValue('paidAmountCdf', '', { shouldValidate: true })
+      setValue('exchangeRate', '', { shouldValidate: true })
+    }
+    if (paymentMode !== PAYMENT_MODE.ACC) {
+      setValue('paidAmount', '', { shouldValidate: true })
+    }
+    if (paymentMode !== PAYMENT_MODE.CASH) {
+      setValue('reserveForLater', false, { shouldValidate: true })
     }
   }, [paymentMode, setValue])
 
@@ -320,19 +343,37 @@ function TicketCreateForm({
       setValue('cashRegister', '', { shouldValidate: true })
       setValue('paymentMode', PAYMENT_MODE.CASH, { shouldValidate: true })
       setValue('mixedPayment', false, { shouldValidate: true })
+      setValue('paidAmount', '', { shouldValidate: true })
       setValue('paidAmountUsd', '', { shouldValidate: true })
       setValue('paidAmountCdf', '', { shouldValidate: true })
+      setValue('exchangeRate', '', { shouldValidate: true })
     }
   }, [reserveForLater, setValue])
 
   const totalPreview = getTicketFormGroupTotal({ passengers: passengers ?? [] })
+  const mixedDueAmount = isAccPayment
+    ? (parseFloat(String(paidAmount ?? '').replace(',', '.')) || 0)
+    : totalPreview
   const mixedUsdEquivalent = useMemo(() => {
     if (!mixedPayment) return null
-    return computeMixedPaymentUsdEquivalent(paidAmountUsd ?? '', paidAmountCdf ?? '', exchangeRates)
-  }, [mixedPayment, paidAmountUsd, paidAmountCdf, exchangeRates])
+    return computeMixedPaymentUsdEquivalent(
+      paidAmountUsd ?? '',
+      paidAmountCdf ?? '',
+      exchangeRates,
+      exchangeRate,
+    )
+  }, [mixedPayment, paidAmountUsd, paidAmountCdf, exchangeRates, exchangeRate])
   const mixedPaymentOk =
     !!mixedPayment
-    && isMixedPaymentWithinTolerance(totalPreview, paidAmountUsd ?? '', paidAmountCdf ?? '', exchangeRates)
+    && isMixedPaymentWithinTolerance(
+      mixedDueAmount,
+      paidAmountUsd ?? '',
+      paidAmountCdf ?? '',
+      exchangeRates,
+      0.05,
+      CURRENCY.USD,
+      exchangeRate,
+    )
 
   const usdCurrencyIri = resolveCurrencyIriByCode(currencies, CURRENCY.USD)
   const paymentCurrencyIri = resolveCurrencyIriByCode(currencies, paymentCurrency ?? CURRENCY.USD)
@@ -361,13 +402,18 @@ function TicketCreateForm({
     enabled: previewEnabled,
   })
 
-  const canSubmit = !locked && !isLoading && (!mixedPayment || mixedPaymentOk || reserveForLater || paymentMode !== PAYMENT_MODE.CASH)
+  const canSubmit =
+    !locked
+    && !isLoading
+    && (!mixedPayment || mixedPaymentOk || reserveForLater || !needsCashRegister)
   const officeLabel = issuingOfficeName
   const resolvedSubmitLabel = reserveForLater
     ? 'Réserver le billet'
-    : (passengers?.length ?? 0) > 1
-      ? 'Créer les billets'
-      : submitLabel
+    : isAccPayment
+      ? 'Réserver avec acompte'
+      : (passengers?.length ?? 0) > 1
+        ? 'Créer les billets'
+        : submitLabel
 
   return (
     <>
@@ -621,7 +667,7 @@ function TicketCreateForm({
             ) : (
               <div className="space-y-4 rounded-xl border border-border/60 bg-muted/20 p-4">
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Encaissement immédiat
+                  {isAccPayment ? 'Acompte ACC' : 'Encaissement immédiat'}
                 </p>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <Select
@@ -637,7 +683,7 @@ function TicketCreateForm({
                       })
                     }
                   />
-                  {paymentMode === PAYMENT_MODE.CASH && (
+                  {needsCashRegister && (
                     <Select
                       label="Caisse"
                       placeholder={
@@ -656,7 +702,52 @@ function TicketCreateForm({
                     />
                   )}
                 </div>
-                {paymentMode === PAYMENT_MODE.CASH && (
+                {isAccPayment && (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <Input
+                      label="Montant acompte (USD)"
+                      type="number"
+                      inputMode="decimal"
+                      step="0.01"
+                      min="0"
+                      placeholder="0,00"
+                      className={fieldClass}
+                      error={errors.paidAmount?.message}
+                      disabled={locked}
+                      value={paidAmount ?? ''}
+                      onChange={(e) => {
+                        setValue('paidAmount', e.target.value, { shouldValidate: true })
+                      }}
+                      onBlur={() => {
+                        const raw = parseFloat(String(paidAmount ?? '').replace(',', '.'))
+                        if (!Number.isFinite(raw) || raw <= 0) return
+                        const clamped = Math.min(raw, totalPreview)
+                        const next = clamped.toFixed(2)
+                        if (next !== paidAmount) {
+                          setValue('paidAmount', next, { shouldValidate: true })
+                        }
+                      }}
+                    />
+                    <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 text-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground">Reste après acompte</span>
+                        <span className="font-semibold tabular-nums">
+                          {formatMoney(
+                            Math.max(
+                              0,
+                              totalPreview - (parseFloat(String(paidAmount ?? '').replace(',', '.')) || 0),
+                            ),
+                            CURRENCY.USD,
+                          )}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Le billet reste réservé. L&apos;écriture caisse devra être validée dans les mouvements.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {needsCashRegister && (
                   <label
                     className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${
                       mixedPayment
@@ -675,6 +766,7 @@ function TicketCreateForm({
                         if (!checked) {
                           setValue('paidAmountUsd', '', { shouldValidate: true })
                           setValue('paidAmountCdf', '', { shouldValidate: true })
+                          setValue('exchangeRate', '', { shouldValidate: true })
                         } else {
                           setValue('paymentCurrency', CURRENCY.USD, { shouldValidate: true })
                         }
@@ -683,12 +775,14 @@ function TicketCreateForm({
                     <span className="space-y-0.5">
                       <span className="block text-sm font-medium">Paiement mixte (USD + CDF)</span>
                       <span className="block text-xs text-muted-foreground">
-                        Encaisser une partie en dollars et le reste en francs congolais sur la même caisse.
+                        {isAccPayment
+                          ? 'Répartir l’acompte en dollars et francs congolais sur la même caisse.'
+                          : 'Encaisser une partie en dollars et le reste en francs congolais sur la même caisse.'}
                       </span>
                     </span>
                   </label>
                 )}
-                {paymentMode === PAYMENT_MODE.CASH && mixedPayment ? (
+                {needsCashRegister && mixedPayment ? (
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <Input
                       label="Montant encaissé (USD)"
@@ -704,7 +798,13 @@ function TicketCreateForm({
                       onChange={(e) => {
                         const nextUsd = e.target.value
                         setValue('paidAmountUsd', nextUsd, { shouldValidate: true })
-                        const suggested = suggestMixedPaymentCdf(totalPreview, nextUsd, exchangeRates)
+                        const suggested = suggestMixedPaymentCdf(
+                          mixedDueAmount,
+                          nextUsd,
+                          exchangeRates,
+                          CURRENCY.USD,
+                          exchangeRate,
+                        )
                         if (suggested != null) {
                           setValue('paidAmountCdf', suggested, { shouldValidate: true })
                         }
@@ -722,6 +822,28 @@ function TicketCreateForm({
                       disabled={locked}
                       {...register('paidAmountCdf')}
                     />
+                    <MixedExchangeRateField
+                      className="sm:col-span-2"
+                      value={exchangeRate ?? ''}
+                      error={errors.exchangeRate?.message}
+                      hintRate={adminUsdToCdfRate}
+                      disabled={locked}
+                      onChange={(nextRate) => {
+                        setValue('exchangeRate', nextRate, { shouldValidate: true })
+                        if ((paidAmountUsd ?? '').trim()) {
+                          const suggested = suggestMixedPaymentCdf(
+                            mixedDueAmount,
+                            paidAmountUsd ?? '',
+                            exchangeRates,
+                            CURRENCY.USD,
+                            nextRate,
+                          )
+                          if (suggested != null) {
+                            setValue('paidAmountCdf', suggested, { shouldValidate: true })
+                          }
+                        }
+                      }}
+                    />
                     <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 text-sm sm:col-span-2">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-muted-foreground">Équivalent total</span>
@@ -732,19 +854,21 @@ function TicketCreateForm({
                         </span>
                       </div>
                       <div className="mt-1 flex items-center justify-between gap-2">
-                        <span className="text-muted-foreground">Total billet</span>
+                        <span className="text-muted-foreground">
+                          {isAccPayment ? 'Acompte dû' : 'Total billet'}
+                        </span>
                         <span className="font-semibold tabular-nums">
-                          {formatMoney(totalPreview, CURRENCY.USD)}
+                          {formatMoney(mixedDueAmount, CURRENCY.USD)}
                         </span>
                       </div>
                       {paidAmountUsd && paidAmountCdf && mixedUsdEquivalent != null && !mixedPaymentOk && (
                         <p className="mt-2 text-xs text-destructive">
-                          L&apos;équivalent mixte doit correspondre au total (± 0,05 USD). Vérifiez le taux de change.
+                          L&apos;équivalent mixte doit correspondre au montant dû (± 0,05 USD). Vérifiez le taux de change.
                         </p>
                       )}
                     </div>
                   </div>
-                ) : (
+                ) : needsCashRegister ? (
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <Select
                       label="Devise de paiement"
@@ -760,12 +884,10 @@ function TicketCreateForm({
                       }
                     />
                   </div>
-                )}
-                {(paymentMode === PAYMENT_MODE.ACC || paymentMode === PAYMENT_MODE.PTA) && (
+                ) : null}
+                {paymentMode === PAYMENT_MODE.PTA && (
                   <p className="text-xs text-muted-foreground">
-                    {paymentMode === PAYMENT_MODE.PTA
-                      ? 'PTA : paiement à destination — pas d’encaissement immédiat en caisse.'
-                      : 'ACC : acompte / solde à suivre — pas d’encaissement immédiat en caisse.'}
+                    PTA : paiement à destination — pas d’encaissement immédiat en caisse.
                   </p>
                 )}
                 {paymentMode === PAYMENT_MODE.CASH && previewEnabled && (

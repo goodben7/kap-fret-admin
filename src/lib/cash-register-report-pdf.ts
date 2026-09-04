@@ -26,6 +26,13 @@ export interface CashRegisterReportParams {
   reportDate: string
   dateRange: CashRegisterReportDateRange
   locationLabel?: string
+  /** Formulaire de dépenses vol (titre + en-tête DATE DU VOL / N° / TRAJET). */
+  variant?: 'default' | 'flight-expenses'
+  flight?: {
+    flightDate: string
+    flightNumber?: string
+    routeLabel: string
+  }
 }
 
 const NAVY = { r: 11, g: 33, b: 61 }
@@ -271,6 +278,7 @@ function drawHeader(doc: jsPDF, params: CashRegisterReportParams, logoDataUrl: s
   const centerX = pageWidth / 2
   const rightX = pageWidth - MARGIN_X
   const topY = 10
+  const isFlightExpenses = params.variant === 'flight-expenses'
 
   if (logoDataUrl) {
     try {
@@ -283,28 +291,57 @@ function drawHeader(doc: jsPDF, params: CashRegisterReportParams, logoDataUrl: s
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
   doc.setTextColor(0, 0, 0)
-  doc.text(`DATE DU RAPPORT : ${formatReportDate(params.reportDate)}`, rightX, topY + 3, {
-    align: 'right',
-  })
-  doc.text(`REGISTRE : ${params.register.code}`, rightX, topY + 9, { align: 'right' })
-  doc.text(
-    `PÉRIODE : ${formatReportDate(params.dateRange.startDate)} – ${formatReportDate(params.dateRange.endDate)}`,
-    rightX,
-    topY + 15,
-    { align: 'right' },
-  )
+
+  if (isFlightExpenses && params.flight) {
+    doc.text(`DATE DU VOL : ${formatReportDate(params.flight.flightDate)}`, rightX, topY + 3, {
+      align: 'right',
+    })
+    doc.text(
+      `N° DU VOL : ${params.flight.flightNumber?.trim() || '..........'}`,
+      rightX,
+      topY + 9,
+      { align: 'right' },
+    )
+    doc.text(`TRAJET : ${params.flight.routeLabel}`, rightX, topY + 15, { align: 'right' })
+  } else {
+    doc.text(`DATE DU RAPPORT : ${formatReportDate(params.reportDate)}`, rightX, topY + 3, {
+      align: 'right',
+    })
+    doc.text(`REGISTRE : ${params.register.code}`, rightX, topY + 9, { align: 'right' })
+    doc.text(
+      `PÉRIODE : ${formatReportDate(params.dateRange.startDate)} – ${formatReportDate(params.dateRange.endDate)}`,
+      rightX,
+      topY + 15,
+      { align: 'right' },
+    )
+  }
 
   drawBrandTitle(doc, centerX, topY + 10)
 
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(9)
   doc.setTextColor(NAVY.r, NAVY.g, NAVY.b)
-  doc.text('RAPPORT DE MOUVEMENTS FINANCIERS', centerX, topY + 18, { align: 'center' })
+  const location = (params.locationLabel ?? 'KINSHASA').toUpperCase()
+  doc.text(
+    isFlightExpenses
+      ? `FORMULAIRE DE DÉPENSES ${location}`
+      : 'RAPPORT DE MOUVEMENTS FINANCIERS',
+    centerX,
+    topY + 18,
+    { align: 'center' },
+  )
 
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(9.5)
   doc.setTextColor(0, 0, 0)
-  doc.text(params.register.name.toUpperCase(), centerX, topY + 25, { align: 'center' })
+  doc.text(
+    isFlightExpenses
+      ? `${params.register.name.toUpperCase()} · ${params.register.code}`
+      : params.register.name.toUpperCase(),
+    centerX,
+    topY + 25,
+    { align: 'center' },
+  )
 
   return topY + 32
 }

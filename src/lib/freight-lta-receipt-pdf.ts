@@ -105,7 +105,7 @@ export function downloadFreightLtaReceiptPdf(shipment: FreightShipment): void {
     ['Fret ordinaire', money(shipment.ordinaryFreight, currency)],
     ['Fret volume', money(shipment.volumeFreight, currency)],
     ['RVA', money(shipment.rva, currency)],
-    ['Frais LTA', money(shipment.ltaFees, currency)],
+    ['Frais documentaires', money(shipment.ltaFees, currency)],
     ['Mode de paiement', FREIGHT_PAYMENT_MODE_LABELS[shipment.paymentMode] ?? shipment.paymentMode],
     ['Payé', money(shipment.paidAmount, currency)],
     ['Reste', money(shipment.remainingAmount, currency)],

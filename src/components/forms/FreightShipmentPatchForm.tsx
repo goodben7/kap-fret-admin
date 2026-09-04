@@ -188,7 +188,6 @@ export function FreightShipmentPatchForm({
   return (
     <form id={FORM_ID} onSubmit={handleSubmit(onSubmit)} className="space-y-4 pb-44 lg:pb-6">
       <FormSection title="Expédition" icon={Plane}>
-        <Input label="Numéro LTA" className={fieldClass} error={errors.ltaNumber?.message} {...register('ltaNumber')} />
         <Input label="Date" type="date" className={fieldClass} error={errors.shipmentDate?.message} {...register('shipmentDate')} />
         <Input label="Heure" type="time" className={fieldClass} error={errors.shipmentTime?.message} {...register('shipmentTime')} />
         <Input label="Compagnie aérienne" className={fieldClass} error={errors.airline?.message} {...register('airline')} />
@@ -285,7 +284,7 @@ export function FreightShipmentPatchForm({
             ordinaryFreight: 'Fret ordinaire',
             volumeFreight: 'Fret volume',
             rva: 'RVA',
-            ltaFees: 'Frais LTA',
+            ltaFees: 'Frais documentaires',
           } as const
           return (
             <Input

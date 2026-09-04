@@ -2,7 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getCashTransactionStatusLabel } from '@/lib/cash-transaction'
 import { cashTransactionService, type CashTransactionFilters } from '@/services/cash-transaction.service'
 import { CASH_TRANSACTION_STATUS, type CashTransactionStatus } from '@/constants/cash-transaction'
-import type { CashTransactionCreatePayload, CashTransactionTransferPayload } from '@/types/cash-transaction'
+import type {
+  CashTransactionConversionPayload,
+  CashTransactionCreatePayload,
+  CashTransactionPatchPayload,
+  CashTransactionTransferPayload,
+} from '@/types/cash-transaction'
 import { toast } from 'sonner'
 
 export const cashTransactionKeys = {
@@ -43,6 +48,31 @@ export function useCreateCashTransaction() {
   })
 }
 
+export function useUpdateCashTransaction() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: CashTransactionPatchPayload }) =>
+      cashTransactionService.update(id, payload),
+    onSuccess: (_data, { id }) => {
+      void queryClient.invalidateQueries({ queryKey: cashTransactionKeys.lists() })
+      void queryClient.invalidateQueries({ queryKey: cashTransactionKeys.detail(id) })
+      toast.success('Transaction mise à jour')
+    },
+  })
+}
+
+export function useDeleteCashTransaction() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => cashTransactionService.remove(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: cashTransactionKeys.lists() })
+      void queryClient.invalidateQueries({ queryKey: ['cashRegisters'] })
+      toast.success('Transaction supprimée')
+    },
+  })
+}
+
 export function useTransferCashTransaction() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -51,6 +81,18 @@ export function useTransferCashTransaction() {
       void queryClient.invalidateQueries({ queryKey: cashTransactionKeys.lists() })
       void queryClient.invalidateQueries({ queryKey: ['cashRegisters'] })
       toast.success('Transfert effectué')
+    },
+  })
+}
+
+export function useConvertCashTransaction() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: CashTransactionConversionPayload) => cashTransactionService.convert(payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: cashTransactionKeys.lists() })
+      void queryClient.invalidateQueries({ queryKey: ['cashRegisters'] })
+      toast.success('Conversion effectuée')
     },
   })
 }

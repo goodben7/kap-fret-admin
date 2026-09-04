@@ -9,7 +9,7 @@ export type CashRegisterModule = (typeof CASH_REGISTER_MODULE)[keyof typeof CASH
 export const CASH_REGISTER_MODULE_LABELS: Record<CashRegisterModule, string> = {
   TICKETING: 'Billetterie',
   FREIGHT: 'Fret',
-  GENERAL: 'Général',
+  GENERAL: 'Journalier',
 }
 
 export const CASH_REGISTER_MODULE_OPTIONS = (

@@ -39,6 +39,7 @@ import { usePreviewConversion } from '@/hooks/usePreviewConversion'
 import { useTicketGroup } from '@/hooks/useTickets'
 import { formatCashRegisterSelectLabel } from '@/lib/cash-register'
 import { resolveCurrencyIriByCode } from '@/lib/currency-resource'
+import { getActiveUsdToCdfRate } from '@/lib/exchange-rate'
 import { toIri, extractIri } from '@/lib/hydra'
 import { resolveUserIssuingOfficeIri } from '@/lib/issuing-office'
 import { getCheckpointDisplayName } from '@/lib/checkpoint'
@@ -63,6 +64,7 @@ import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { HydraAutocomplete } from '@/components/ui/hydra-autocomplete'
+import { MixedExchangeRateField } from '@/components/payments/MixedExchangeRateField'
 import { ConversionPreviewCard } from '@/components/tickets/ConversionPreviewCard'
 import { formatDate, formatMoney, cn } from '@/lib/utils'
 import { useFormDraft } from '@/hooks/useFormDraft'
@@ -326,6 +328,7 @@ export function CheckInForm(props: CheckInFormProps) {
       mixedPayment: false,
       paidAmountUsd: '',
       paidAmountCdf: '',
+      exchangeRate: '',
       netToPay: '0',
       handBaggageWeight: '0.00',
       observations: '',
@@ -430,6 +433,7 @@ export function CheckInForm(props: CheckInFormProps) {
   const mixedPayment = watch('mixedPayment')
   const paidAmountUsd = watch('paidAmountUsd')
   const paidAmountCdf = watch('paidAmountCdf')
+  const exchangeRate = watch('exchangeRate')
   const netToPay = watch('netToPay')
   const cashRegister = watch('cashRegister')
   const hasWeightReduction = watch('hasWeightReduction')
@@ -438,14 +442,36 @@ export function CheckInForm(props: CheckInFormProps) {
   const tarificationInactive = !isEdit && !hasExcessPayment
   const netToPayNumber = parseFloat(netToPay) || 0
 
+  const adminUsdToCdfRate = useMemo(() => getActiveUsdToCdfRate(exchangeRates), [exchangeRates])
+
+  useEffect(() => {
+    if (!mixedPayment) return
+    if ((exchangeRate ?? '').trim()) return
+    if (adminUsdToCdfRate == null) return
+    setValue('exchangeRate', adminUsdToCdfRate.toFixed(2), { shouldValidate: true })
+  }, [mixedPayment, exchangeRate, adminUsdToCdfRate, setValue])
+
   const mixedUsdEquivalent = useMemo(() => {
     if (!mixedPayment) return null
-    return computeMixedPaymentUsdEquivalent(paidAmountUsd ?? '', paidAmountCdf ?? '', exchangeRates)
-  }, [mixedPayment, paidAmountUsd, paidAmountCdf, exchangeRates])
+    return computeMixedPaymentUsdEquivalent(
+      paidAmountUsd ?? '',
+      paidAmountCdf ?? '',
+      exchangeRates,
+      exchangeRate,
+    )
+  }, [mixedPayment, paidAmountUsd, paidAmountCdf, exchangeRates, exchangeRate])
 
   const mixedPaymentOk =
     !!mixedPayment
-    && isMixedPaymentWithinTolerance(netToPayNumber, paidAmountUsd ?? '', paidAmountCdf ?? '', exchangeRates)
+    && isMixedPaymentWithinTolerance(
+      netToPayNumber,
+      paidAmountUsd ?? '',
+      paidAmountCdf ?? '',
+      exchangeRates,
+      0.05,
+      CURRENCY.USD,
+      exchangeRate,
+    )
 
   const cashRegisterOptions = useMemo(
     () =>
@@ -1092,6 +1118,7 @@ export function CheckInForm(props: CheckInFormProps) {
                 if (!checked) {
                   setValue('paidAmountUsd', '', { shouldValidate: true })
                   setValue('paidAmountCdf', '', { shouldValidate: true })
+                  setValue('exchangeRate', '', { shouldValidate: true })
                 } else {
                   setValue('paymentCurrency', CURRENCY.USD, { shouldValidate: true })
                 }
@@ -1135,7 +1162,13 @@ export function CheckInForm(props: CheckInFormProps) {
               onChange={(e) => {
                 const nextUsd = e.target.value
                 setValue('paidAmountUsd', nextUsd, { shouldValidate: true })
-                const suggested = suggestMixedPaymentCdf(netToPayNumber, nextUsd, exchangeRates)
+                const suggested = suggestMixedPaymentCdf(
+                  netToPayNumber,
+                  nextUsd,
+                  exchangeRates,
+                  CURRENCY.USD,
+                  exchangeRate,
+                )
                 if (suggested != null) {
                   setValue('paidAmountCdf', suggested, { shouldValidate: true })
                 }
@@ -1151,6 +1184,27 @@ export function CheckInForm(props: CheckInFormProps) {
               className={fieldClass}
               error={errors.paidAmountCdf?.message}
               {...register('paidAmountCdf')}
+            />
+            <MixedExchangeRateField
+              className="sm:col-span-2"
+              value={exchangeRate ?? ''}
+              error={errors.exchangeRate?.message}
+              hintRate={adminUsdToCdfRate}
+              onChange={(nextRate) => {
+                setValue('exchangeRate', nextRate, { shouldValidate: true })
+                if ((paidAmountUsd ?? '').trim()) {
+                  const suggested = suggestMixedPaymentCdf(
+                    netToPayNumber,
+                    paidAmountUsd ?? '',
+                    exchangeRates,
+                    CURRENCY.USD,
+                    nextRate,
+                  )
+                  if (suggested != null) {
+                    setValue('paidAmountCdf', suggested, { shouldValidate: true })
+                  }
+                }
+              }}
             />
             <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 text-sm sm:col-span-2">
               <div className="flex items-center justify-between gap-2">

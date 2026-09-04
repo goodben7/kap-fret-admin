@@ -37,6 +37,7 @@ import { useIssuingOffice } from '@/hooks/useIssuingOffices'
 import { usePreviewConversion } from '@/hooks/usePreviewConversion'
 import { formatCashRegisterSelectLabel } from '@/lib/cash-register'
 import { resolveCurrencyIriByCode } from '@/lib/currency-resource'
+import { getActiveUsdToCdfRate } from '@/lib/exchange-rate'
 import { extractIri, extractResourceId } from '@/lib/hydra'
 import { resolveUserIssuingOfficeIri } from '@/lib/issuing-office'
 import { getCheckpointIri } from '@/services/issuing-office.service'
@@ -58,6 +59,7 @@ import { formatMoney, cn } from '@/lib/utils'
 import { useFormDraft } from '@/hooks/useFormDraft'
 import { STORAGE_KEYS } from '@/constants/storage'
 import type { ReactNode } from 'react'
+import { MixedExchangeRateField } from '@/components/payments/MixedExchangeRateField'
 
 const FORM_ID = 'freight-shipment-form'
 
@@ -224,6 +226,7 @@ export function FreightShipmentForm({
       mixedPayment: false,
       paidAmountUsd: '',
       paidAmountCdf: '',
+      exchangeRate: '',
       volumeFreight: '0.00',
       rva: '0.00',
       ltaFees: '0.00',
@@ -261,6 +264,7 @@ export function FreightShipmentForm({
   const mixedPayment = watch('mixedPayment')
   const paidAmountUsd = watch('paidAmountUsd')
   const paidAmountCdf = watch('paidAmountCdf')
+  const exchangeRate = watch('exchangeRate')
   const paymentMode = watch('paymentMode')
   const cashRegister = watch('cashRegister')
 
@@ -269,6 +273,15 @@ export function FreightShipmentForm({
     setValue('loadingPlace', userCheckpointIri, { shouldValidate: true })
     loadingPlacePrefillDone.current = true
   }, [userCheckpointIri, setValue])
+
+  const adminUsdToCdfRate = useMemo(() => getActiveUsdToCdfRate(exchangeRates), [exchangeRates])
+
+  useEffect(() => {
+    if (!mixedPayment) return
+    if ((exchangeRate ?? '').trim()) return
+    if (adminUsdToCdfRate == null) return
+    setValue('exchangeRate', adminUsdToCdfRate.toFixed(2), { shouldValidate: true })
+  }, [mixedPayment, exchangeRate, adminUsdToCdfRate, setValue])
 
   const cashRegisterOptions = useMemo(
     () =>
@@ -297,8 +310,9 @@ export function FreightShipmentForm({
       paidAmountCdf ?? '',
       dueCurrency,
       exchangeRates,
+      exchangeRate,
     )
-  }, [mixedPayment, needsCashRegister, paidAmountUsd, paidAmountCdf, dueCurrency, exchangeRates])
+  }, [mixedPayment, needsCashRegister, paidAmountUsd, paidAmountCdf, dueCurrency, exchangeRates, exchangeRate])
 
   const mixedPaymentOk =
     !!mixedPayment
@@ -311,6 +325,7 @@ export function FreightShipmentForm({
       exchangeRates,
       0.05,
       dueCurrency,
+      exchangeRate,
     )
 
   const freightCurrencyIri = resolveCurrencyIriByCode(currencies, currency ?? CURRENCY.USD)
@@ -468,6 +483,7 @@ export function FreightShipmentForm({
       setValue('mixedPayment', false, { shouldValidate: true })
       setValue('paidAmountUsd', '', { shouldValidate: true })
       setValue('paidAmountCdf', '', { shouldValidate: true })
+      setValue('exchangeRate', '', { shouldValidate: true })
     }
     const total = computeFreightTotalAmount(
       getValues('ordinaryFreight'),
@@ -706,7 +722,7 @@ export function FreightShipmentForm({
             ordinaryFreight: 'Fret ordinaire',
             volumeFreight: 'Fret volume',
             rva: 'RVA',
-            ltaFees: 'Frais LTA',
+            ltaFees: 'Frais documentaires',
           } as const
           return (
             <div key={name} className={name === 'ordinaryFreight' ? 'sm:col-span-2' : undefined}>
@@ -788,6 +804,7 @@ export function FreightShipmentForm({
                 if (!checked) {
                   setValue('paidAmountUsd', '', { shouldValidate: true })
                   setValue('paidAmountCdf', '', { shouldValidate: true })
+                  setValue('exchangeRate', '', { shouldValidate: true })
                 } else {
                   setValue('paymentCurrency', CURRENCY.USD, { shouldValidate: true })
                 }
@@ -835,6 +852,7 @@ export function FreightShipmentForm({
                   nextUsd,
                   exchangeRates,
                   dueCurrency,
+                  exchangeRate,
                 )
                 if (suggested != null) {
                   setValue('paidAmountCdf', suggested, { shouldValidate: true })
@@ -851,6 +869,27 @@ export function FreightShipmentForm({
               className={fieldClass}
               error={errors.paidAmountCdf?.message}
               {...register('paidAmountCdf')}
+            />
+            <MixedExchangeRateField
+              className="sm:col-span-2"
+              value={exchangeRate ?? ''}
+              error={errors.exchangeRate?.message}
+              hintRate={adminUsdToCdfRate}
+              onChange={(nextRate) => {
+                setValue('exchangeRate', nextRate, { shouldValidate: true })
+                if ((paidAmountUsd ?? '').trim()) {
+                  const suggested = suggestMixedPaymentCdf(
+                    paidDueNumber,
+                    paidAmountUsd ?? '',
+                    exchangeRates,
+                    dueCurrency,
+                    nextRate,
+                  )
+                  if (suggested != null) {
+                    setValue('paidAmountCdf', suggested, { shouldValidate: true })
+                  }
+                }
+              }}
             />
             <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 text-sm sm:col-span-2">
               <div className="flex items-center justify-between gap-2">

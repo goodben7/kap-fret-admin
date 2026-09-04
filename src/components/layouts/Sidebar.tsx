@@ -11,6 +11,7 @@ import {
   Book,
   Bookmark,
   Scale,
+  Plane,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
@@ -34,6 +35,7 @@ const iconMap = {
   Book,
   Bookmark,
   Scale,
+  Plane,
 }
 
 function CollapsedNavTooltip({ label }: { label: string }) {

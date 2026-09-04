@@ -8,6 +8,8 @@ export const ticketPaymentSchema = z.object({
   mixedPayment: z.boolean().optional(),
   paidAmountUsd: z.string().optional(),
   paidAmountCdf: z.string().optional(),
+  /** Taux manuel 1 USD = N CDF */
+  exchangeRate: z.string().optional(),
   description: z.string().min(1, 'Description requise'),
 }).superRefine((data, ctx) => {
   if (data.mixedPayment) {
@@ -25,6 +27,14 @@ export const ticketPaymentSchema = z.object({
         code: 'custom',
         path: ['paidAmountCdf'],
         message: 'Montant CDF requis (> 0) pour un paiement mixte',
+      })
+    }
+    const rate = parseFloat(String(data.exchangeRate ?? '').replace(',', '.'))
+    if (!Number.isFinite(rate) || rate <= 0) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['exchangeRate'],
+        message: 'Taux de change requis (1 USD = N CDF)',
       })
     }
     return

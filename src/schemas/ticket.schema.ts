@@ -55,8 +55,11 @@ export const ticketSchema = z
     mixedPayment: z.boolean().optional(),
     paidAmountUsd: z.string().optional(),
     paidAmountCdf: z.string().optional(),
+    exchangeRate: z.string().optional(),
     sponsor: z.string().optional(),
     cashRegister: z.string().optional(),
+    /** Acompte ACC (USD). */
+    paidAmount: z.string().optional(),
     reserveForLater: z.boolean().optional(),
     departure: z.string().min(1, 'Checkpoint de départ requis'),
     destination: z.string().min(1, 'Checkpoint de destination requis'),
@@ -82,15 +85,43 @@ export const ticketSchema = z
       }
     })
 
+    const groupTotal = data.passengers.reduce((sum, passenger) => {
+      const base = parseFloat(String(passenger.basePrice ?? '').replace(',', '.')) || 0
+      const tva = parseFloat(String(passenger.tva ?? '').replace(',', '.')) || 0
+      const fpt = parseFloat(String(passenger.fpt ?? '').replace(',', '.')) || 0
+      const rva = parseFloat(String(passenger.rva ?? '').replace(',', '.')) || 0
+      return sum + base + tva + fpt + rva
+    }, 0)
+
     if (data.paymentMode === PAYMENT_MODE.CASH && !data.reserveForLater && !data.cashRegister?.trim()) {
       ctx.addIssue({ code: 'custom', path: ['cashRegister'], message: 'Caisse requise pour un paiement Cash' })
     }
 
-    if (
-      data.paymentMode === PAYMENT_MODE.CASH
-      && !data.reserveForLater
-      && data.mixedPayment
-    ) {
+    if (data.paymentMode === PAYMENT_MODE.ACC) {
+      if (!data.cashRegister?.trim()) {
+        ctx.addIssue({ code: 'custom', path: ['cashRegister'], message: 'Caisse requise pour un acompte ACC' })
+      }
+      const deposit = parsePositiveAmount(String(data.paidAmount ?? ''))
+      if (deposit === null) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['paidAmount'],
+          message: 'Montant d\'acompte requis (> 0)',
+        })
+      } else if (deposit > groupTotal + 0.001) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['paidAmount'],
+          message: 'L\'acompte ne peut pas dépasser le total',
+        })
+      }
+    }
+
+    const needsMixed =
+      (data.paymentMode === PAYMENT_MODE.CASH && !data.reserveForLater && data.mixedPayment)
+      || (data.paymentMode === PAYMENT_MODE.ACC && data.mixedPayment)
+
+    if (needsMixed) {
       const usd = parseFloat(String(data.paidAmountUsd ?? '').replace(',', '.'))
       const cdf = parseFloat(String(data.paidAmountCdf ?? '').replace(',', '.'))
       if (!Number.isFinite(usd) || usd <= 0) {
@@ -105,6 +136,14 @@ export const ticketSchema = z
           code: 'custom',
           path: ['paidAmountCdf'],
           message: 'Montant CDF requis (> 0) pour un paiement mixte',
+        })
+      }
+      const rate = parseFloat(String(data.exchangeRate ?? '').replace(',', '.'))
+      if (!Number.isFinite(rate) || rate <= 0) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['exchangeRate'],
+          message: 'Taux de change requis (1 USD = N CDF)',
         })
       }
     }

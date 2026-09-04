@@ -79,6 +79,13 @@ export function convertAmountBetweenCurrencyCodes(
   return null
 }
 
+/** Taux actif 1 USD = N CDF (null si introuvable). */
+export function getActiveUsdToCdfRate(rates: ExchangeRateResource[]): number | null {
+  const oneUsdInCdf = convertAmountBetweenCurrencyCodes(1, 'USD', 'CDF', rates)
+  if (oneUsdInCdf == null || !Number.isFinite(oneUsdInCdf) || oneUsdInCdf <= 0) return null
+  return oneUsdInCdf
+}
+
 export function toExchangeRateCreatePayload(data: ExchangeRateFormData): ExchangeRateCreatePayload {
   return {
     baseCurrency: normalizeIri(data.baseCurrency),

@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { LoaderIcon } from '@/components/ui/loading-spinner'
+import { MixedExchangeRateField } from '@/components/payments/MixedExchangeRateField'
 import { ConversionPreviewCard } from '@/components/tickets/ConversionPreviewCard'
 import {
   freightDeliveryPaymentSchema,
@@ -21,6 +22,7 @@ import { useExchangeRates } from '@/hooks/useExchangeRates'
 import { usePreviewConversion } from '@/hooks/usePreviewConversion'
 import { formatCashRegisterSelectLabel } from '@/lib/cash-register'
 import { resolveCurrencyIriByCode } from '@/lib/currency-resource'
+import { getActiveUsdToCdfRate } from '@/lib/exchange-rate'
 import { extractIri } from '@/lib/hydra'
 import { resolveUserIssuingOfficeIri } from '@/lib/issuing-office'
 import {
@@ -98,6 +100,7 @@ export function FreightDeliveryPaymentModal({
       mixedPayment: false,
       paidAmountUsd: '',
       paidAmountCdf: '',
+      exchangeRate: '',
     },
   })
 
@@ -105,6 +108,7 @@ export function FreightDeliveryPaymentModal({
   const mixedPayment = watch('mixedPayment')
   const paidAmountUsd = watch('paidAmountUsd')
   const paidAmountCdf = watch('paidAmountCdf')
+  const exchangeRate = watch('exchangeRate')
 
   useEffect(() => {
     if (!open) return
@@ -115,6 +119,7 @@ export function FreightDeliveryPaymentModal({
       mixedPayment: false,
       paidAmountUsd: '',
       paidAmountCdf: '',
+      exchangeRate: '',
     })
   }, [open, amount, defaultDescription, reset])
 
@@ -127,6 +132,15 @@ export function FreightDeliveryPaymentModal({
     [cashRegisters],
   )
 
+  const adminUsdToCdfRate = useMemo(() => getActiveUsdToCdfRate(exchangeRates), [exchangeRates])
+
+  useEffect(() => {
+    if (!mixedPayment) return
+    if ((exchangeRate ?? '').trim()) return
+    if (adminUsdToCdfRate == null) return
+    setValue('exchangeRate', adminUsdToCdfRate.toFixed(2), { shouldValidate: true })
+  }, [mixedPayment, exchangeRate, adminUsdToCdfRate, setValue])
+
   const mixedEquivalent = useMemo(() => {
     if (!mixedPayment) return null
     return computeMixedPaymentEquivalentInCurrency(
@@ -134,8 +148,9 @@ export function FreightDeliveryPaymentModal({
       paidAmountCdf ?? '',
       currency,
       exchangeRates,
+      exchangeRate,
     )
-  }, [mixedPayment, paidAmountUsd, paidAmountCdf, currency, exchangeRates])
+  }, [mixedPayment, paidAmountUsd, paidAmountCdf, currency, exchangeRates, exchangeRate])
 
   const mixedPaymentOk =
     !!mixedPayment
@@ -147,6 +162,7 @@ export function FreightDeliveryPaymentModal({
       exchangeRates,
       0.05,
       currency,
+      exchangeRate,
     )
 
   const previewEnabled = !mixedPayment && !!cashRegister && !!currencyIri && amountNumber > 0
@@ -180,6 +196,7 @@ export function FreightDeliveryPaymentModal({
         data.paidAmountCdf ?? '',
         currency,
         exchangeRates,
+        data.exchangeRate,
       )
       if (!split) return
 
@@ -298,6 +315,7 @@ export function FreightDeliveryPaymentModal({
               if (!checked) {
                 setValue('paidAmountUsd', '', { shouldValidate: true })
                 setValue('paidAmountCdf', '', { shouldValidate: true })
+                setValue('exchangeRate', '', { shouldValidate: true })
               }
             }}
           />
@@ -345,6 +363,7 @@ export function FreightDeliveryPaymentModal({
                   nextUsd,
                   exchangeRates,
                   currency,
+                  exchangeRate,
                 )
                 if (suggested != null) {
                   setValue('paidAmountCdf', suggested, { shouldValidate: true })
@@ -358,6 +377,27 @@ export function FreightDeliveryPaymentModal({
               error={errors.paidAmountCdf?.message}
               disabled={isLoading}
               {...register('paidAmountCdf')}
+            />
+            <MixedExchangeRateField
+              value={exchangeRate ?? ''}
+              error={errors.exchangeRate?.message}
+              hintRate={adminUsdToCdfRate}
+              disabled={isLoading}
+              onChange={(nextRate) => {
+                setValue('exchangeRate', nextRate, { shouldValidate: true })
+                if ((paidAmountUsd ?? '').trim()) {
+                  const suggested = suggestMixedPaymentCdf(
+                    amountNumber,
+                    paidAmountUsd ?? '',
+                    exchangeRates,
+                    currency,
+                    nextRate,
+                  )
+                  if (suggested != null) {
+                    setValue('paidAmountCdf', suggested, { shouldValidate: true })
+                  }
+                }
+              }}
             />
             <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 text-sm">
               <div className="flex items-center justify-between gap-2">

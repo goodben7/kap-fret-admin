@@ -12,10 +12,12 @@ import {
 } from '@/constants/cash-transaction'
 import { CURRENCY } from '@/constants/ticket'
 import { extractIri } from '@/lib/hydra'
-import type { CashTransactionCreateFormData, CashTransactionTransferFormData } from '@/schemas/cash-transaction.schema'
+import type { CashTransactionCreateFormData, CashTransactionConversionFormData, CashTransactionPatchFormData, CashTransactionTransferFormData } from '@/schemas/cash-transaction.schema'
 import type {
   CashTransaction,
+  CashTransactionConversionPayload,
   CashTransactionCreatePayload,
+  CashTransactionPatchPayload,
   CashTransactionTransferPayload,
 } from '@/types/cash-transaction'
 
@@ -105,6 +107,54 @@ export function toCashTransactionTransferPayload(
   }
 }
 
+export function toCashTransactionConversionPayload(
+  data: CashTransactionConversionFormData,
+): CashTransactionConversionPayload {
+  const description = data.description?.trim()
+  return {
+    cashRegister: data.cashRegister,
+    fromCurrency: data.fromCurrency,
+    toCurrency: data.toCurrency,
+    amount: data.amount.replace(',', '.'),
+    exchangeRate: data.exchangeRate.replace(',', '.'),
+    ...(description ? { description } : {}),
+    transactionDate: toTransactionDateIso(data.transactionDate, data.transactionTime),
+    validated: data.validated,
+  }
+}
+
+export function toCashTransactionPatchPayload(
+  data: CashTransactionPatchFormData,
+): CashTransactionPatchPayload {
+  return {
+    cashRegister: data.cashRegister,
+    type: data.type,
+    amount: data.amount.replace(',', '.'),
+    currency: data.currency,
+    description: data.description.trim(),
+    transactionDate: toTransactionDateIso(data.transactionDate, data.transactionTime),
+    paymentCurrency: data.currency,
+  }
+}
+
+export function cashTransactionToPatchFormDefaults(
+  transaction: CashTransaction,
+): CashTransactionPatchFormData {
+  const currencyIri = extractIri(transaction.currency) ?? ''
+  return {
+    cashRegister: getCashTransactionCashRegisterIri(transaction.cashRegister),
+    type:
+      transaction.type === CASH_TRANSACTION_TYPE.EXIT
+        ? CASH_TRANSACTION_TYPE.EXIT
+        : CASH_TRANSACTION_TYPE.ENTRY,
+    amount: transaction.amount,
+    currency: currencyIri,
+    description: transaction.description ?? '',
+    transactionDate: parseTransactionDate(transaction.transactionDate),
+    transactionTime: parseTransactionTime(transaction.transactionDate),
+  }
+}
+
 export function getCashTransactionTypeLabel(type: CashTransactionType): string {
   return CASH_TRANSACTION_TYPE_LABELS[type] ?? type
 }
@@ -181,6 +231,25 @@ export function canChangeCashTransactionStatus(
 ): boolean {
   const status = getCashTransactionStatus(transaction)
   return getAvailableCashTransactionStatusActions(status).length > 0
+}
+
+/** Édition / suppression : MANUAL + ENTRY/EXIT + non validé + statut ouvert. */
+export function canEditOrDeleteCashTransaction(
+  transaction: Pick<CashTransaction, 'type' | 'referenceType' | 'validated' | 'status'>,
+): boolean {
+  if (transaction.validated !== false) return false
+  if (transaction.referenceType !== CASH_TRANSACTION_REFERENCE_TYPE.MANUAL) return false
+  if (
+    transaction.type !== CASH_TRANSACTION_TYPE.ENTRY
+    && transaction.type !== CASH_TRANSACTION_TYPE.EXIT
+  ) {
+    return false
+  }
+  const status = getCashTransactionStatus(transaction)
+  return (
+    status === CASH_TRANSACTION_STATUS.PENDING
+    || status === CASH_TRANSACTION_STATUS.IN_REVIEW
+  )
 }
 
 export function cashTransactionReferencePath(

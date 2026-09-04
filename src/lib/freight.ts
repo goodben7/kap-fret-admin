@@ -2,6 +2,7 @@ import { extractIri, extractResourceId } from '@/lib/hydra'
 import { normalizeCurrency, CURRENCY, type Currency } from '@/constants/ticket'
 import { FREIGHT_PAYMENT_MODE, FREIGHT_STATUS, FREIGHT_ORDINARY_PRICE_PER_KG_USD } from '@/constants/freight'
 import { convertAmountBetweenCurrencyCodes } from '@/lib/exchange-rate'
+import { formatExchangeRateForPayload } from '@/lib/mixed-payment'
 import { getCheckpointDisplayName, getCheckpointLabelFromRef } from '@/lib/checkpoint'
 import { getTodayTravelDateInput } from '@/lib/ticket'
 import type {
@@ -205,6 +206,8 @@ export function toFreightCreatePayload(data: FreightShipmentFormData): FreightSh
     payload.paidAmountUsd = formatDecimal(data.paidAmountUsd || '0')
     payload.paidAmountCdf = formatDecimal(data.paidAmountCdf || '0')
     payload.paymentCurrency = CURRENCY.USD
+    const exchangeRate = formatExchangeRateForPayload(data.exchangeRate)
+    if (exchangeRate) payload.exchangeRate = exchangeRate
   } else if (
     data.paymentCurrency
     && (data.paymentMode === FREIGHT_PAYMENT_MODE.CASH || data.paymentMode === FREIGHT_PAYMENT_MODE.ACC)
@@ -217,7 +220,6 @@ export function toFreightCreatePayload(data: FreightShipmentFormData): FreightSh
 
 export function toFreightPatchPayload(data: FreightShipmentPatchFormData): FreightShipmentPatchPayload {
   return {
-    ltaNumber: data.ltaNumber,
     shipmentDate: toShipmentDateIso(data.shipmentDate, data.shipmentTime),
     airline: optionalText(data.airline),
     aircraft: optionalText(data.aircraft),
@@ -300,7 +302,6 @@ export function shipmentToFormDefaults(shipment: FreightShipment): Partial<Freig
 export function shipmentToPatchFormDefaults(shipment: FreightShipment): Partial<FreightShipmentPatchFormData> {
   const { date, time } = parseShipmentDate(shipment.shipmentDate)
   return {
-    ltaNumber: shipment.ltaNumber,
     shipmentDate: date,
     shipmentTime: time,
     airline: shipment.airline ?? '',

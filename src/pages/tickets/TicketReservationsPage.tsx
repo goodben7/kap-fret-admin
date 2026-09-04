@@ -2,14 +2,16 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowLeft,
+  Ban,
   Banknote,
   Calendar,
   CalendarClock,
+  CheckCircle2,
   ChevronRight,
   Phone,
   Ticket as TicketIcon,
 } from 'lucide-react'
-import { useTickets, usePayTicket, useReportTicketTravelDate } from '@/hooks/useTickets'
+import { useTickets, usePayTicket, useReportTicketTravelDate, useUpdateTicketStatus } from '@/hooks/useTickets'
 import { TICKET_STATUS, TICKET_STATUS_LABELS, CURRENCY } from '@/constants/ticket'
 import {
   getTicketPaidAmount,
@@ -24,6 +26,7 @@ import { TicketContactActions } from '@/components/tickets/TicketContactActions'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { formatDate, formatMoney, cn } from '@/lib/utils'
@@ -37,11 +40,17 @@ import { extractApiErrorMessage } from '@/services/api'
 function ReservationCard({
   ticket,
   onPay,
+  onIssue,
+  onCancel,
   onReportTravelDate,
+  actionPending,
 }: {
   ticket: Ticket
   onPay: (ticket: Ticket) => void
+  onIssue: (ticket: Ticket) => void
+  onCancel: (ticket: Ticket) => void
   onReportTravelDate: (ticket: Ticket) => void
+  actionPending: boolean
 }) {
   const total = getTicketTotalAmount(ticket)
   const paid = getTicketPaidAmount(ticket)
@@ -101,14 +110,37 @@ function ReservationCard({
               size="sm"
               className="rounded-lg"
               onClick={() => onReportTravelDate(ticket)}
+              disabled={actionPending}
             >
               <CalendarClock className="h-3.5 w-3.5" />
               Date
             </Button>
-            {remaining > 0 && (
-              <Button type="button" size="sm" className="rounded-lg" onClick={() => onPay(ticket)}>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              className="rounded-lg"
+              onClick={() => onCancel(ticket)}
+              disabled={actionPending}
+            >
+              <Ban className="h-3.5 w-3.5" />
+              Annuler
+            </Button>
+            {remaining > 0 ? (
+              <Button type="button" size="sm" className="rounded-lg" onClick={() => onPay(ticket)} disabled={actionPending}>
                 <Banknote className="h-3.5 w-3.5" />
-                Acompte
+                Valider
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                className="rounded-lg bg-emerald-600 hover:bg-emerald-700"
+                onClick={() => onIssue(ticket)}
+                disabled={actionPending}
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Émettre
               </Button>
             )}
             <Button asChild variant="ghost" size="icon" className="h-8 w-8 rounded-lg">
@@ -131,13 +163,16 @@ export function TicketReservationsPage() {
   })
   const payTicket = usePayTicket()
   const reportTravelDate = useReportTicketTravelDate()
+  const updateStatus = useUpdateTicketStatus()
   const [paymentTicket, setPaymentTicket] = useState<Ticket | null>(null)
   const [reportDateTicket, setReportDateTicket] = useState<Ticket | null>(null)
+  const [cancelTicket, setCancelTicket] = useState<Ticket | null>(null)
+  const [issueTicket, setIssueTicket] = useState<Ticket | null>(null)
 
   const tickets = useMemo(() => data?.items ?? [], [data?.items])
-  const withBalance = tickets.filter((t) => getTicketRemainingAmount(t) > 0)
   const fullyUnpaid = tickets.filter((t) => getTicketPaidAmount(t) <= 0)
   const partial = tickets.filter((t) => getTicketPaidAmount(t) > 0 && getTicketRemainingAmount(t) > 0)
+  const actionPending = payTicket.isPending || reportTravelDate.isPending || updateStatus.isPending
 
   const handlePay = async (formData: TicketPaymentFormData) => {
     if (!paymentTicket) return
@@ -173,6 +208,34 @@ export function TicketReservationsPage() {
     }
   }
 
+  const handleConfirmCancel = async () => {
+    if (!cancelTicket) return
+    try {
+      await updateStatus.mutateAsync({ id: cancelTicket.id, status: TICKET_STATUS.CANCELLED })
+      setCancelTicket(null)
+    } catch (error) {
+      if (isAxiosError(error)) {
+        toast.error(extractApiErrorMessage(error.response?.data, error.response?.status))
+      } else {
+        toast.error('Annulation impossible')
+      }
+    }
+  }
+
+  const handleConfirmIssue = async () => {
+    if (!issueTicket) return
+    try {
+      await updateStatus.mutateAsync({ id: issueTicket.id, status: TICKET_STATUS.ISSUED })
+      setIssueTicket(null)
+    } catch (error) {
+      if (isAxiosError(error)) {
+        toast.error(extractApiErrorMessage(error.response?.data, error.response?.status))
+      } else {
+        toast.error('Émission impossible')
+      }
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
@@ -184,7 +247,7 @@ export function TicketReservationsPage() {
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold tracking-tight">Réservations</h1>
           <p className="text-sm text-muted-foreground">
-            Billets réservés — acomptes et soldes à encaisser
+            Billets réservés — valider, encaisser le solde ou annuler
           </p>
         </div>
         <Button asChild className="rounded-xl">
@@ -237,12 +300,15 @@ export function TicketReservationsPage() {
         />
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {withBalance.map((ticket) => (
+          {tickets.map((ticket) => (
             <ReservationCard
               key={ticket.id}
               ticket={ticket}
               onPay={setPaymentTicket}
+              onIssue={setIssueTicket}
+              onCancel={setCancelTicket}
               onReportTravelDate={setReportDateTicket}
+              actionPending={actionPending}
             />
           ))}
         </div>
@@ -271,6 +337,34 @@ export function TicketReservationsPage() {
           isLoading={reportTravelDate.isPending}
         />
       )}
+
+      <ConfirmDialog
+        open={cancelTicket != null}
+        onOpenChange={(open) => {
+          if (!open && !updateStatus.isPending) setCancelTicket(null)
+        }}
+        variant="destructive"
+        title="Annuler cette réservation ?"
+        description="La réservation sera annulée. Cette action est irréversible."
+        confirmLabel="Oui, annuler"
+        cancelLabel="Non, revenir"
+        onConfirm={handleConfirmCancel}
+        loading={updateStatus.isPending}
+      />
+
+      <ConfirmDialog
+        open={issueTicket != null}
+        onOpenChange={(open) => {
+          if (!open && !updateStatus.isPending) setIssueTicket(null)
+        }}
+        variant="success"
+        title="Émettre ce billet ?"
+        description="Le billet est soldé. Il passera au statut Émis."
+        confirmLabel="Oui, émettre"
+        cancelLabel="Non, revenir"
+        onConfirm={handleConfirmIssue}
+        loading={updateStatus.isPending}
+      />
     </div>
   )
 }

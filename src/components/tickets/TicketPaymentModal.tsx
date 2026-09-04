@@ -7,9 +7,10 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { LoaderIcon } from '@/components/ui/loading-spinner'
+import { MixedExchangeRateField } from '@/components/payments/MixedExchangeRateField'
 import { ConversionPreviewCard } from '@/components/tickets/ConversionPreviewCard'
 import { ticketPaymentSchema, type TicketPaymentFormData } from '@/schemas/ticket-payment.schema'
-import { CURRENCY, CURRENCY_OPTIONS } from '@/constants/ticket'
+import { TICKET_STATUS, CURRENCY, CURRENCY_OPTIONS } from '@/constants/ticket'
 import { useAuth } from '@/hooks/useAuth'
 import { useCashRegistersForSelect } from '@/hooks/useCashRegisters'
 import { useCurrenciesForSelect } from '@/hooks/useCurrencies'
@@ -17,6 +18,7 @@ import { useExchangeRates } from '@/hooks/useExchangeRates'
 import { usePreviewConversion } from '@/hooks/usePreviewConversion'
 import { formatCashRegisterSelectLabel } from '@/lib/cash-register'
 import { resolveCurrencyIriByCode } from '@/lib/currency-resource'
+import { getActiveUsdToCdfRate } from '@/lib/exchange-rate'
 import { extractIri } from '@/lib/hydra'
 import { resolveUserIssuingOfficeIri } from '@/lib/issuing-office'
 import {
@@ -64,6 +66,7 @@ export function TicketPaymentModal({
   const remainingAmount = getTicketPaymentAmount(ticket)
   const totalAmount = getTicketTotalAmount(ticket)
   const paidAmount = getTicketPaidAmount(ticket)
+  const isReserved = ticket.status === TICKET_STATUS.RESERVED
   const defaultDescription = buildTicketPaymentDescription(ticket)
   const usdCurrencyIri = resolveCurrencyIriByCode(currencies, CURRENCY.USD) ?? ''
 
@@ -83,6 +86,7 @@ export function TicketPaymentModal({
       mixedPayment: false,
       paidAmountUsd: '',
       paidAmountCdf: '',
+      exchangeRate: '',
       description: defaultDescription,
     },
   })
@@ -92,15 +96,30 @@ export function TicketPaymentModal({
   const mixedPayment = watch('mixedPayment')
   const paidAmountUsd = watch('paidAmountUsd')
   const paidAmountCdf = watch('paidAmountCdf')
+  const exchangeRate = watch('exchangeRate')
   const amount = watch('amount')
   const amountNumber = parseFloat(String(amount ?? '').replace(',', '.')) || 0
   const remaining = getTicketRemainingAmount(ticket)
   const paymentCurrencyIri = resolveCurrencyIriByCode(currencies, paymentCurrency ?? CURRENCY.USD) ?? ''
 
+  const adminUsdToCdfRate = useMemo(() => getActiveUsdToCdfRate(exchangeRates), [exchangeRates])
+
+  useEffect(() => {
+    if (!mixedPayment) return
+    if ((exchangeRate ?? '').trim()) return
+    if (adminUsdToCdfRate == null) return
+    setValue('exchangeRate', adminUsdToCdfRate.toFixed(2), { shouldValidate: true })
+  }, [mixedPayment, exchangeRate, adminUsdToCdfRate, setValue])
+
   const mixedUsdEquivalent = useMemo(() => {
     if (!mixedPayment) return null
-    return computeMixedPaymentUsdEquivalent(paidAmountUsd ?? '', paidAmountCdf ?? '', exchangeRates)
-  }, [mixedPayment, paidAmountUsd, paidAmountCdf, exchangeRates])
+    return computeMixedPaymentUsdEquivalent(
+      paidAmountUsd ?? '',
+      paidAmountCdf ?? '',
+      exchangeRates,
+      exchangeRate,
+    )
+  }, [mixedPayment, paidAmountUsd, paidAmountCdf, exchangeRates, exchangeRate])
 
   const fallbackPaymentAmount = (() => {
     if (mixedPayment) return undefined
@@ -117,6 +136,7 @@ export function TicketPaymentModal({
       mixedPayment: false,
       paidAmountUsd: '',
       paidAmountCdf: '',
+      exchangeRate: '',
       description: defaultDescription,
     })
   }, [open, defaultDescription, reset, ticket])
@@ -158,6 +178,7 @@ export function TicketPaymentModal({
         data.paidAmountUsd ?? '',
         data.paidAmountCdf ?? '',
         exchangeRates,
+        data.exchangeRate,
       )
       if (credit == null || credit <= 0 || credit > remaining + 0.001) return
       await onConfirm(data)
@@ -185,8 +206,12 @@ export function TicketPaymentModal({
     <Modal
       open={open}
       onOpenChange={handleOpenChange}
-      title="Encaissement du billet"
-      description="Saisissez un acompte ou le solde restant, puis choisissez la caisse."
+      title={isReserved ? 'Valider la réservation' : 'Encaissement du billet'}
+      description={
+        isReserved
+          ? 'Encaisser un acompte ou le solde. Un paiement partiel nécessitera une validation caisse.'
+          : 'Saisissez un acompte ou le solde restant, puis choisissez la caisse.'
+      }
       className="rounded-2xl sm:max-w-lg"
     >
       <form onSubmit={(e) => void submit(e)} className="space-y-4">
@@ -231,6 +256,7 @@ export function TicketPaymentModal({
               } else {
                 setValue('paidAmountUsd', '', { shouldValidate: true })
                 setValue('paidAmountCdf', '', { shouldValidate: true })
+                setValue('exchangeRate', '', { shouldValidate: true })
               }
             }}
           />
@@ -265,7 +291,13 @@ export function TicketPaymentModal({
               onChange={(e) => {
                 const nextUsd = e.target.value
                 setValue('paidAmountUsd', nextUsd, { shouldValidate: true })
-                const suggested = suggestMixedPaymentCdf(remaining, nextUsd, exchangeRates)
+                const suggested = suggestMixedPaymentCdf(
+                  remaining,
+                  nextUsd,
+                  exchangeRates,
+                  CURRENCY.USD,
+                  exchangeRate,
+                )
                 if (suggested != null) {
                   setValue('paidAmountCdf', suggested, { shouldValidate: true })
                 }
@@ -278,6 +310,27 @@ export function TicketPaymentModal({
               error={errors.paidAmountCdf?.message}
               disabled={isLoading}
               {...register('paidAmountCdf')}
+            />
+            <MixedExchangeRateField
+              value={exchangeRate ?? ''}
+              error={errors.exchangeRate?.message}
+              hintRate={adminUsdToCdfRate}
+              disabled={isLoading}
+              onChange={(nextRate) => {
+                setValue('exchangeRate', nextRate, { shouldValidate: true })
+                if ((paidAmountUsd ?? '').trim()) {
+                  const suggested = suggestMixedPaymentCdf(
+                    remaining,
+                    paidAmountUsd ?? '',
+                    exchangeRates,
+                    CURRENCY.USD,
+                    nextRate,
+                  )
+                  if (suggested != null) {
+                    setValue('paidAmountCdf', suggested, { shouldValidate: true })
+                  }
+                }
+              }}
             />
             <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 text-sm">
               <div className="flex items-center justify-between gap-2">
@@ -380,7 +433,7 @@ export function TicketPaymentModal({
             ) : (
               <>
                 <Banknote className="h-4 w-4" />
-                Encaisser
+                {isReserved ? 'Valider' : 'Encaisser'}
               </>
             )}
           </Button>

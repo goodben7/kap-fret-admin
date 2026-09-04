@@ -21,10 +21,11 @@ export const freightPackageKeys = {
   detail: (id: string) => [...freightPackageKeys.all, id] as const,
 }
 
-export function useFreight(filters: FreightFilters = {}) {
+export function useFreight(filters: FreightFilters = {}, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: freightKeys.list(filters),
     queryFn: () => freightService.getAll(filters),
+    enabled: options?.enabled !== false,
   })
 }
 
@@ -70,6 +71,31 @@ export function useUpdateFreightStatus() {
       void queryClient.invalidateQueries({ queryKey: freightKeys.detail(id) })
       void queryClient.invalidateQueries({ queryKey: ['activities'] })
       toast.success('Statut mis à jour')
+    },
+  })
+}
+
+export function useMarkFreightShipmentsSent() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (ids: string[]) => freightService.markManyAsSent(ids),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: freightKeys.lists() })
+      void queryClient.invalidateQueries({ queryKey: freightKeys.details() })
+      void queryClient.invalidateQueries({ queryKey: ['activities'] })
+      const ok = result.succeeded.length
+      const ko = result.failed.length
+      if (ok > 0 && ko === 0) {
+        toast.success(
+          ok === 1
+            ? '1 LTA marquée comme expédiée'
+            : `${ok} LTA marquées comme expédiées`,
+        )
+      } else if (ok > 0 && ko > 0) {
+        toast.warning(`${ok} expédiée(s), ${ko} échec(s)`)
+      } else if (ko > 0) {
+        toast.error(result.failed[0]?.message ?? 'Aucune LTA n’a pu être expédiée')
+      }
     },
   })
 }

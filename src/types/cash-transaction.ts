@@ -76,6 +76,27 @@ export interface CashTransactionTransferPayload {
   validated: boolean
 }
 
+export interface CashTransactionConversionPayload {
+  cashRegister: string
+  fromCurrency: string
+  toCurrency: string
+  amount: string
+  exchangeRate?: string
+  description?: string
+  transactionDate: string
+  validated: boolean
+}
+
+export interface CashTransactionPatchPayload {
+  cashRegister?: string
+  type?: string
+  amount?: string
+  currency?: string
+  description?: string
+  transactionDate?: string
+  paymentCurrency?: string
+}
+
 export interface PreviewConversionPayload {
   cashRegister: string
   /** Montant de référence (ex. total billet USD). */

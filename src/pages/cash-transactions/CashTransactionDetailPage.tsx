@@ -1,17 +1,21 @@
-import { Link, useParams } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowDownLeft,
   ArrowLeft,
   ArrowLeftRight,
   ArrowUpRight,
+  Pencil,
   Receipt,
+  Trash2,
 } from 'lucide-react'
-import { useCashTransaction } from '@/hooks/useCashTransactions'
+import { useCashTransaction, useDeleteCashTransaction } from '@/hooks/useCashTransactions'
 import { CashTransactionStatusActions } from '@/components/cash-transactions/CashTransactionStatusActions'
 import { CashTransactionStatusBadge } from '@/components/cash-transactions/CashTransactionStatusBadge'
 import {
   cashTransactionReferencePath,
   canChangeCashTransactionStatus,
+  canEditOrDeleteCashTransaction,
   cashTransactionRequiresValidation,
   getCashTransactionCashRegisterIri,
   getCashTransactionCashRegisterLabel,
@@ -27,6 +31,8 @@ import { CASH_TRANSACTION_TYPE } from '@/constants/cash-transaction'
 import { getUserRefLabel } from '@/lib/user-ref'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { cn, formatDateTime, formatMoney } from '@/lib/utils'
@@ -71,8 +77,11 @@ function TransactionAmounts({ transaction }: { transaction: CashTransaction }) {
 export function CashTransactionDetailPage() {
   const { id } = useParams<{ id: string }>()
   const transactionId = id ?? ''
+  const navigate = useNavigate()
+  const [deleteOpen, setDeleteOpen] = useState(false)
 
   const { data: transaction, isLoading } = useCashTransaction(transactionId)
+  const deleteTransaction = useDeleteCashTransaction()
 
   if (isLoading) {
     return (
@@ -101,9 +110,17 @@ export function CashTransactionDetailPage() {
   const status = getCashTransactionStatus(transaction)
   const requiresValidation = cashTransactionRequiresValidation(transaction)
   const showStatusActions = canChangeCashTransactionStatus(transaction)
+  const canMutate = canEditOrDeleteCashTransaction(transaction)
+  const showBottomBar = showStatusActions || canMutate
+
+  const handleDelete = async () => {
+    await deleteTransaction.mutateAsync(transaction.id)
+    setDeleteOpen(false)
+    void navigate('/cash-transactions')
+  }
 
   return (
-    <div className={cn('mx-auto max-w-3xl space-y-4 lg:max-w-4xl lg:pb-6', showStatusActions ? 'pb-44' : 'pb-6')}>
+    <div className={cn('mx-auto max-w-3xl space-y-4 lg:max-w-4xl lg:pb-6', showBottomBar ? 'pb-44' : 'pb-6')}>
       <Link
         to="/cash-transactions"
         className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
@@ -143,6 +160,28 @@ export function CashTransactionDetailPage() {
           </div>
         </CardContent>
       </Card>
+
+      {canMutate && (
+        <Card className="hidden rounded-2xl border-border/80 shadow-sm lg:block">
+          <CardContent className="flex flex-wrap gap-2 p-4">
+            <Button type="button" variant="outline" className="h-11 rounded-xl" asChild>
+              <Link to={`/cash-transactions/${transaction.id}/edit`}>
+                <Pencil className="h-4 w-4" />
+                Modifier
+              </Link>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 rounded-xl text-destructive hover:text-destructive"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+              Supprimer
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="rounded-2xl border-border/80 shadow-sm">
         <CardHeader className="pb-3">
@@ -216,25 +255,60 @@ export function CashTransactionDetailPage() {
       </Card>
 
       {showStatusActions && (
-        <>
-          <Card className="hidden rounded-2xl border-border/80 shadow-sm lg:block">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">Actions de validation</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <CashTransactionStatusActions transaction={transaction} layout="buttons" />
-            </CardContent>
-          </Card>
-          <div className="fixed inset-x-0 bottom-[4.25rem] z-30 border-t bg-background/95 backdrop-blur lg:hidden">
-            <div className="mx-auto max-w-3xl space-y-2 p-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Actions de validation
-              </p>
-              <CashTransactionStatusActions transaction={transaction} layout="buttons" />
-            </div>
-          </div>
-        </>
+        <Card className="hidden rounded-2xl border-border/80 shadow-sm lg:block">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold">Actions de validation</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <CashTransactionStatusActions transaction={transaction} layout="buttons" />
+          </CardContent>
+        </Card>
       )}
+
+      {showBottomBar && (
+        <div className="fixed inset-x-0 bottom-[4.25rem] z-30 border-t bg-background/95 backdrop-blur lg:hidden">
+          <div className="mx-auto max-w-3xl space-y-2 p-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+            {canMutate && (
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" className="h-11 flex-1 rounded-xl" asChild>
+                  <Link to={`/cash-transactions/${transaction.id}/edit`}>
+                    <Pencil className="h-4 w-4" />
+                    Modifier
+                  </Link>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 flex-1 rounded-xl text-destructive hover:text-destructive"
+                  onClick={() => setDeleteOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Supprimer
+                </Button>
+              </div>
+            )}
+            {showStatusActions && (
+              <>
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Actions de validation
+                </p>
+                <CashTransactionStatusActions transaction={transaction} layout="buttons" />
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Supprimer ce mouvement ?"
+        description="Cette action est irréversible. Seuls les mouvements manuels non validés peuvent être supprimés."
+        confirmLabel="Oui, supprimer"
+        variant="destructive"
+        loading={deleteTransaction.isPending}
+        onConfirm={handleDelete}
+      />
     </div>
   )
 }

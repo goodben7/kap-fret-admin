@@ -32,13 +32,19 @@ export function formatCashRegisterBalancesSummary(register: CashRegisterResource
   return `${formatMoney(usd, CURRENCY.USD)} · ${formatMoney(cdf, CURRENCY.CDF)}`
 }
 
+export function formatCashRegisterDisplayName(name: string): string {
+  return name.replace(/\s+général\s*$/i, '').trim() || name
+}
+
 export function formatCashRegisterSelectLabel(register: CashRegisterResource): string {
-  const moduleLabel = register.module
-    ? CASH_REGISTER_MODULE_LABELS[register.module] ?? register.module
-    : null
-  return moduleLabel
-    ? `${register.code} — ${register.name} (${moduleLabel})`
-    : `${register.code} — ${register.name}`
+  const displayName = formatCashRegisterDisplayName(register.name)
+  const module = register.module ? normalizeCashRegisterModule(register.module) : null
+  // Module journalier : pas de suffixe — le nom suffit.
+  if (!module || module === CASH_REGISTER_MODULE.GENERAL) {
+    return `${register.code} — ${displayName}`
+  }
+  const moduleLabel = CASH_REGISTER_MODULE_LABELS[module] ?? module
+  return `${register.code} — ${displayName} (${moduleLabel})`
 }
 
 export function normalizeCashRegisterModule(module?: string | null): CashRegisterModule {

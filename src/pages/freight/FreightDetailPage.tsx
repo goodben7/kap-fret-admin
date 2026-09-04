@@ -371,9 +371,11 @@ export function FreightDetailPage() {
   const remainingAmount = parseFloat(shipment.remainingAmount) || 0
   const showObservations = hasFreightObservations(shipment.observations)
 
-  const statusOptions = FREIGHT_STATUS_TRANSITIONS.filter((value) => value !== shipment.status).map(
-    (value) => ({ value, label: FREIGHT_STATUS_LABELS[value] }),
-  )
+  const statusOptions = FREIGHT_STATUS_TRANSITIONS.filter((value) => {
+    if (value === shipment.status) return false
+    if (value === FREIGHT_STATUS.SENT && shipment.status !== FREIGHT_STATUS.PENDING) return false
+    return true
+  }).map((value) => ({ value, label: FREIGHT_STATUS_LABELS[value] }))
 
   const handleUpdateStatus = async () => {
     if (!newStatus) return
@@ -567,7 +569,7 @@ export function FreightDetailPage() {
           <DetailRow label="Fret ordinaire" value={money(shipment.ordinaryFreight)} />
           <DetailRow label="Fret volume" value={money(shipment.volumeFreight)} />
           <DetailRow label="RVA" value={money(shipment.rva)} />
-          <DetailRow label="Frais LTA" value={money(shipment.ltaFees)} />
+          <DetailRow label="Frais documentaires" value={money(shipment.ltaFees)} />
           <DetailRow label="Mode" value={FREIGHT_PAYMENT_MODE_LABELS[shipment.paymentMode]} />
           <DetailRow label="Payé" value={money(shipment.paidAmount)} />
           <DetailRow
@@ -727,7 +729,7 @@ export function FreightDetailPage() {
       >
         <div className="space-y-3 text-left">
           <div className="flex items-center justify-between gap-3 text-sm">
-            <span className="text-muted-foreground">LTA</span>
+            <span className="text-muted-foreground">N°</span>
             <span className="font-mono font-semibold">{shipment.ltaNumber}</span>
           </div>
           <div className="flex items-center justify-between gap-3 text-sm">

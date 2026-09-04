@@ -18,6 +18,10 @@ export const CheckInDetailPage = lazyPage(() => import('@/pages/checkins/CheckIn
 export const CheckInEditPage = lazyPage(() => import('@/pages/checkins/CheckInEditPage'), 'CheckInEditPage')
 
 export const FreightListPage = lazyPage(() => import('@/pages/freight/FreightListPage'), 'FreightListPage')
+export const FreightExpeditionPage = lazyPage(
+  () => import('@/pages/freight/FreightExpeditionPage'),
+  'FreightExpeditionPage',
+)
 export const FreightCreatePage = lazyPage(() => import('@/pages/freight/FreightCreatePage'), 'FreightCreatePage')
 export const FreightDetailPage = lazyPage(() => import('@/pages/freight/FreightDetailPage'), 'FreightDetailPage')
 export const FreightEditPage = lazyPage(() => import('@/pages/freight/FreightEditPage'), 'FreightEditPage')
@@ -25,6 +29,14 @@ export const FreightEditPage = lazyPage(() => import('@/pages/freight/FreightEdi
 export const DebtsReportPage = lazyPage(
   () => import('@/pages/finance/DebtsReportPage'),
   'DebtsReportPage',
+)
+export const FlightReportsHubPage = lazyPage(
+  () => import('@/pages/reports/FlightReportsHubPage'),
+  'FlightReportsHubPage',
+)
+export const FlightProfitabilityPage = lazyPage(
+  () => import('@/pages/reports/FlightProfitabilityPage'),
+  'FlightProfitabilityPage',
 )
 export const CashTransactionsListPage = lazyPage(
   () => import('@/pages/cash-transactions/CashTransactionsListPage'),
@@ -37,6 +49,14 @@ export const CashTransactionCreatePage = lazyPage(
 export const CashTransactionDetailPage = lazyPage(
   () => import('@/pages/cash-transactions/CashTransactionDetailPage'),
   'CashTransactionDetailPage',
+)
+export const CashTransactionEditPage = lazyPage(
+  () => import('@/pages/cash-transactions/CashTransactionEditPage'),
+  'CashTransactionEditPage',
+)
+export const CashConversionPage = lazyPage(
+  () => import('@/pages/cash-transactions/CashConversionPage'),
+  'CashConversionPage',
 )
 
 export const AdminPage = lazyPage(() => import('@/pages/admin/AdminPage'), 'AdminPage')

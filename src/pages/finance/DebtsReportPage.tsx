@@ -115,7 +115,7 @@ export function DebtsReportPage() {
             <p className="mt-1 text-2xl font-bold tabular-nums text-brand-orange">
               {formatMoney(freightTotal, CURRENCY.USD)}
             </p>
-            <p className="mt-0.5 text-xs text-muted-foreground">{freightDebts.length} LTA</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{freightDebts.length} expéditions</p>
           </CardContent>
         </Card>
         <Card className="rounded-2xl border-border/80 shadow-sm">

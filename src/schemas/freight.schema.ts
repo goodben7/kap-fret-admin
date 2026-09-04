@@ -61,13 +61,14 @@ export const freightShipmentSchema = z
   ordinaryFreight: z.string().min(1, 'Fret ordinaire requis'),
   volumeFreight: z.string().min(1, 'Fret volume requis'),
   rva: z.string().min(1, 'RVA requis'),
-  ltaFees: z.string().min(1, 'Frais LTA requis'),
+  ltaFees: z.string().min(1, 'Frais documentaires requis'),
   totalAmount: z.string().min(1, 'Montant total requis'),
   currency: z.enum([CURRENCY.CDF, CURRENCY.USD], { message: 'Devise requise' }),
   paymentCurrency: z.enum([CURRENCY.CDF, CURRENCY.USD]).optional(),
   mixedPayment: z.boolean().optional(),
   paidAmountUsd: z.string().optional(),
   paidAmountCdf: z.string().optional(),
+  exchangeRate: z.string().optional(),
   paidAmount: z.string().min(1, 'Montant payé requis'),
   remainingAmount: z.string().min(1, 'Reste à payer requis'),
   paymentMode: z.enum([
@@ -114,6 +115,14 @@ export const freightShipmentSchema = z
           message: 'Montant CDF requis (> 0) pour un paiement mixte',
         })
       }
+      const rate = parseFloat(String(data.exchangeRate ?? '').replace(',', '.'))
+      if (!Number.isFinite(rate) || rate <= 0) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['exchangeRate'],
+          message: 'Taux de change requis (1 USD = N CDF)',
+        })
+      }
     }
 
     if (data.paymentMode !== FREIGHT_PAYMENT_MODE.ACC) return
@@ -131,7 +140,6 @@ export const freightShipmentSchema = z
 
 export const freightShipmentPatchSchema = z
   .object({
-  ltaNumber: z.string().min(1, 'Numéro LTA requis'),
   shipmentDate: z.string().min(1, 'Date requise'),
   shipmentTime: z.string().min(1, 'Heure requise'),
   airline: z.string(),
@@ -152,7 +160,7 @@ export const freightShipmentPatchSchema = z
   ordinaryFreight: z.string().min(1, 'Fret ordinaire requis'),
   volumeFreight: z.string().min(1, 'Fret volume requis'),
   rva: z.string().min(1, 'RVA requis'),
-  ltaFees: z.string().min(1, 'Frais LTA requis'),
+  ltaFees: z.string().min(1, 'Frais documentaires requis'),
   totalAmount: z.string().min(1, 'Montant total requis'),
   currency: z.enum([CURRENCY.CDF, CURRENCY.USD], { message: 'Devise requise' }),
   paidAmount: z.string().min(1, 'Montant payé requis'),

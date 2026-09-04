@@ -1,4 +1,5 @@
-import { api } from './api'
+import { api, extractApiErrorMessage } from './api'
+import { isAxiosError } from 'axios'
 import { extractHydraMember, extractHydraTotalItems } from '@/lib/hydra'
 import { buildFreightFilterParams, type FreightFilters } from '@/lib/freight-filters'
 import { sortFreightShipmentsByNewestFirst } from '@/lib/freight'
@@ -90,6 +91,30 @@ export const freightService = {
       headers: JSON_HEADERS,
     })
     return data
+  },
+
+  /**
+   * Marque plusieurs LTA PENDING → SENT (boucle sur l’endpoint unitaire).
+   * Retourne le détail succès / échecs pour l’UI.
+   */
+  async markManyAsSent(ids: string[]) {
+    const uniqueIds = [...new Set(ids.map((id) => id.trim()).filter(Boolean))]
+    const succeeded: string[] = []
+    const failed: { id: string; message: string }[] = []
+
+    for (const id of uniqueIds) {
+      try {
+        await freightService.updateStatus(id, 'SENT')
+        succeeded.push(id)
+      } catch (error) {
+        const message = isAxiosError(error)
+          ? extractApiErrorMessage(error.response?.data, error.response?.status)
+          : 'Échec du changement de statut'
+        failed.push({ id, message })
+      }
+    }
+
+    return { succeeded, failed }
   },
 }
 

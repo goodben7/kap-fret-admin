@@ -32,6 +32,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Check-In', path: '/checkins', icon: 'UserCheck', roles: [ROLES.SPADM, ROLES.ADM, ROLES.CHK] },
   { label: 'Fret', path: '/freight', icon: 'Package', roles: [ROLES.SPADM, ROLES.ADM, ROLES.FRT] },
   { label: 'Dettes', path: '/finance/debts', icon: 'Scale', roles: [ROLES.SPADM, ROLES.ADM, ROLES.MGR] },
+  { label: 'Rapports vol', path: '/reports/flights', icon: 'Plane', roles: [ROLES.SPADM, ROLES.ADM, ROLES.MGR] },
   { label: 'Comptes Financiers', path: '/admin/cash-registers', icon: 'Book', roles: [ROLES.SPADM, ROLES.ADM, ROLES.MGR, ROLES.TKT, ROLES.CHK, ROLES.FRT] },
   { label: 'Mouvements Financiers', path: '/cash-transactions', icon: 'Wallet', roles: [ROLES.SPADM, ROLES.ADM, ROLES.MGR, ROLES.TKT, ROLES.CHK, ROLES.FRT] },
   { label: 'Administration', path: '/admin', icon: 'Settings', roles: [ROLES.SPADM, ROLES.ADM] },
