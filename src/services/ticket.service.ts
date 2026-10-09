@@ -111,4 +111,17 @@ export const ticketService = {
     })
     return data
   },
+
+  /** POST /api/tickets/{id}/board — embarquement (ISSUED → USED). */
+  async board(id: string) {
+    const { data } = await api.post<Ticket>(`/api/tickets/${id}/board`, {}, {
+      headers: JSON_HEADERS,
+    })
+    return data
+  },
+
+  /** DELETE /api/tickets/{id} — réservation non payée uniquement. */
+  async remove(id: string) {
+    await api.delete(`/api/tickets/${id}`)
+  },
 }

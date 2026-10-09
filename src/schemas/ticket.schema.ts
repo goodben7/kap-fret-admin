@@ -6,6 +6,7 @@ import {
   TICKET_CATEGORY,
   TICKET_CATEGORY_AGE_RANGE,
 } from '@/constants/ticket'
+import { ageFromBirthDate, toDateInputValue } from '@/lib/passenger-age'
 
 function parsePositiveAmount(value: string): number | null {
   const amount = parseFloat(value.replace(',', '.'))
@@ -19,10 +20,52 @@ function parseNonNegativeAmount(value: string): number | null {
   return amount
 }
 
-const optionalAgeSchema = z.union([
-  z.number().min(0, 'Âge invalide').max(120, 'Âge invalide'),
-  z.nan().transform(() => undefined),
-]).optional()
+const optionalBirthDateSchema = z
+  .string()
+  .optional()
+  .transform((value) => {
+    const trimmed = value?.trim() ?? ''
+    return trimmed === '' ? undefined : trimmed
+  })
+  .refine(
+    (value) => value === undefined || /^\d{4}-\d{2}-\d{2}$/.test(value),
+    { message: 'Date de naissance invalide' },
+  )
+  .refine(
+    (value) => {
+      if (value === undefined) return true
+      const parsed = new Date(`${value}T00:00:00`)
+      return !Number.isNaN(parsed.getTime()) && toDateInputValue(parsed) === value
+    },
+    { message: 'Date de naissance invalide' },
+  )
+  .refine(
+    (value) => {
+      if (value === undefined) return true
+      return value <= toDateInputValue(new Date())
+    },
+    { message: 'La date de naissance ne peut pas être dans le futur' },
+  )
+
+function validateBirthDateForCategory(
+  birthDate: string | undefined,
+  category: keyof typeof TICKET_CATEGORY_AGE_RANGE | undefined,
+  travelDate: string | undefined,
+  path: (string | number)[],
+  ctx: z.RefinementCtx,
+) {
+  if (!birthDate || !category) return
+  const age = ageFromBirthDate(birthDate, travelDate)
+  if (age === undefined) return
+  const range = TICKET_CATEGORY_AGE_RANGE[category]
+  if (age < range.min || age > range.max) {
+    ctx.addIssue({
+      code: 'custom',
+      path,
+      message: `Âge calculé (${age} ans) hors plage ${range.min}–${range.max} pour cette catégorie`,
+    })
+  }
+}
 
 export const ticketPassengerSchema = z.object({
   ticketNumber: z.string().optional(),
@@ -30,7 +73,7 @@ export const ticketPassengerSchema = z.object({
   category: z.enum([TICKET_CATEGORY.INF, TICKET_CATEGORY.CD, TICKET_CATEGORY.AD], {
     message: 'Catégorie requise',
   }),
-  age: optionalAgeSchema,
+  birthDate: optionalBirthDateSchema,
   gender: z.enum([GENDER.MALE, GENDER.FEMALE], { message: 'Sexe requis' }),
   basePrice: z.string().min(1, 'Prix de base requis'),
   tva: z.string().min(1, 'TVA requise'),
@@ -73,16 +116,13 @@ export const ticketSchema = z
           message: 'Le prix de base doit être supérieur à 0',
         })
       }
-      if (passenger.age !== undefined) {
-        const range = TICKET_CATEGORY_AGE_RANGE[passenger.category]
-        if (passenger.age < range.min || passenger.age > range.max) {
-          ctx.addIssue({
-            code: 'custom',
-            path: ['passengers', index, 'age'],
-            message: `L'âge doit être entre ${range.min} et ${range.max} ans pour cette catégorie`,
-          })
-        }
-      }
+      validateBirthDateForCategory(
+        passenger.birthDate,
+        passenger.category,
+        data.travelDate,
+        ['passengers', index, 'birthDate'],
+        ctx,
+      )
     })
 
     const groupTotal = data.passengers.reduce((sum, passenger) => {
@@ -118,28 +158,26 @@ export const ticketSchema = z
     }
 
     const needsMixed =
-      (data.paymentMode === PAYMENT_MODE.CASH && !data.reserveForLater && data.mixedPayment)
-      || (data.paymentMode === PAYMENT_MODE.ACC && data.mixedPayment)
+      (data.paymentMode === PAYMENT_MODE.CASH || data.paymentMode === PAYMENT_MODE.ACC)
+      && !data.reserveForLater
+      && data.mixedPayment
 
     if (needsMixed) {
-      const usd = parseFloat(String(data.paidAmountUsd ?? '').replace(',', '.'))
-      const cdf = parseFloat(String(data.paidAmountCdf ?? '').replace(',', '.'))
-      if (!Number.isFinite(usd) || usd <= 0) {
+      if (parsePositiveAmount(String(data.paidAmountUsd ?? '')) === null) {
         ctx.addIssue({
           code: 'custom',
           path: ['paidAmountUsd'],
           message: 'Montant USD requis (> 0) pour un paiement mixte',
         })
       }
-      if (!Number.isFinite(cdf) || cdf <= 0) {
+      if (parsePositiveAmount(String(data.paidAmountCdf ?? '')) === null) {
         ctx.addIssue({
           code: 'custom',
           path: ['paidAmountCdf'],
           message: 'Montant CDF requis (> 0) pour un paiement mixte',
         })
       }
-      const rate = parseFloat(String(data.exchangeRate ?? '').replace(',', '.'))
-      if (!Number.isFinite(rate) || rate <= 0) {
+      if (parsePositiveAmount(String(data.exchangeRate ?? '')) === null) {
         ctx.addIssue({
           code: 'custom',
           path: ['exchangeRate'],
@@ -157,7 +195,7 @@ export const ticketPatchSchema = z
     category: z.enum([TICKET_CATEGORY.INF, TICKET_CATEGORY.CD, TICKET_CATEGORY.AD], {
       message: 'Catégorie requise',
     }).optional(),
-    age: optionalAgeSchema,
+    birthDate: optionalBirthDateSchema,
     gender: z.enum([GENDER.MALE, GENDER.FEMALE], { message: 'Sexe requis' }),
     phone: z.string().trim().min(1, 'Téléphone requis'),
     travelDate: z.string().min(1, 'Date de voyage requise'),
@@ -193,16 +231,13 @@ export const ticketPatchSchema = z
         })
       }
     }
-    if (data.age !== undefined && data.category) {
-      const range = TICKET_CATEGORY_AGE_RANGE[data.category]
-      if (data.age < range.min || data.age > range.max) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['age'],
-          message: `L'âge doit être entre ${range.min} et ${range.max} ans pour cette catégorie`,
-        })
-      }
-    }
+    validateBirthDateForCategory(
+      data.birthDate,
+      data.category,
+      data.travelDate,
+      ['birthDate'],
+      ctx,
+    )
   })
 
 export type TicketPassengerFormData = z.infer<typeof ticketPassengerSchema>
@@ -216,7 +251,7 @@ export function createEmptyTicketPassenger(
     ticketNumber: '',
     passengerName: '',
     category: TICKET_CATEGORY.AD,
-    age: undefined,
+    birthDate: undefined,
     gender: GENDER.MALE,
     basePrice: '',
     tva: '0.00',

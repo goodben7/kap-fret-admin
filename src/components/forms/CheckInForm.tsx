@@ -30,7 +30,7 @@ import {
   getWeightForBaggageType,
   type BaggageType,
 } from '@/constants/check-in-baggage'
-import { CURRENCY, CURRENCY_OPTIONS, TICKET_STATUS } from '@/constants/ticket'
+import { CURRENCY, CURRENCY_OPTIONS, TICKET_STATUS, TICKET_STATUS_LABELS } from '@/constants/ticket'
 import { useAuth } from '@/hooks/useAuth'
 import { useCashRegistersForSelect } from '@/hooks/useCashRegisters'
 import { useCurrenciesForSelect } from '@/hooks/useCurrencies'
@@ -283,13 +283,22 @@ export function CheckInForm(props: CheckInFormProps) {
     !isEdit ? selectedTicket?.purchaseGroupId : undefined,
   )
 
-  const groupIssuedTickets = useMemo(() => {
+  const groupTickets = useMemo(() => {
     if (!selectedTicket?.purchaseGroupId) return []
     const items = groupData?.items ?? []
     const byId = new Map(items.map((t) => [t.id, t]))
     if (!byId.has(selectedTicket.id)) byId.set(selectedTicket.id, selectedTicket)
-    return Array.from(byId.values()).filter((t) => t.status === TICKET_STATUS.ISSUED)
+    return Array.from(byId.values()).sort((a, b) =>
+      a.passengerName.localeCompare(b.passengerName, 'fr'),
+    )
   }, [groupData?.items, selectedTicket])
+
+  const groupIssuedTickets = useMemo(
+    () => groupTickets.filter((t) => t.status === TICKET_STATUS.ISSUED),
+    [groupTickets],
+  )
+
+  const showGroupCheckInPanel = !isEdit && groupTickets.length > 1
 
   const selectedGroupTickets = useMemo(
     () => groupIssuedTickets.filter((t) => selectedGroupTicketIds.includes(t.id)),
@@ -750,43 +759,63 @@ export function CheckInForm(props: CheckInFormProps) {
               </p>
             )}
             {selectedTicket && !isLoadingTicket && <SelectedTicketCard ticket={selectedTicket} />}
-            {!isEdit && groupIssuedTickets.length > 1 && (
+            {showGroupCheckInPanel && (
               <div className="space-y-3 rounded-xl border border-brand-orange/30 bg-brand-orange/5 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="text-sm font-semibold">Check-in groupé</p>
+                    <p className="text-sm font-semibold">Check-in groupé disponible</p>
                     <p className="text-xs text-muted-foreground">
-                      Achat groupé détecté — franchise cumulée des passagers sélectionnés
+                      Achat groupé détecté ({groupTickets.length} passagers) — cochez les billets
+                      émis pour cumuler la franchise bagage
                     </p>
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="rounded-lg"
-                    onClick={selectAllGroupTickets}
-                  >
-                    Tout sélectionner
-                  </Button>
+                  {groupIssuedTickets.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-lg"
+                      onClick={selectAllGroupTickets}
+                    >
+                      Tout sélectionner ({groupIssuedTickets.length})
+                    </Button>
+                  )}
                 </div>
                 <ul className="space-y-2">
-                  {groupIssuedTickets.map((ticket) => {
+                  {groupTickets.map((ticket) => {
+                    const isIssued = ticket.status === TICKET_STATUS.ISSUED
                     const checked = selectedGroupTicketIds.includes(ticket.id)
                     return (
                       <li key={ticket.id}>
-                        <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/60 bg-background/80 px-3 py-2.5">
+                        <label
+                          className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 ${
+                            isIssued
+                              ? 'cursor-pointer border-border/60 bg-background/80'
+                              : 'cursor-not-allowed border-border/40 bg-muted/30 opacity-70'
+                          }`}
+                        >
                           <input
                             type="checkbox"
                             className="mt-1 h-4 w-4 rounded border-input"
                             checked={checked}
-                            onChange={() => toggleGroupTicket(ticket.id)}
+                            disabled={!isIssued}
+                            onChange={() => {
+                              if (isIssued) toggleGroupTicket(ticket.id)
+                            }}
                           />
                           <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-medium">
-                              {ticket.passengerName}
+                            <span className="flex flex-wrap items-center gap-2">
+                              <span className="block truncate text-sm font-medium">
+                                {ticket.passengerName}
+                              </span>
+                              <span className="rounded-md border border-border/60 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                {TICKET_STATUS_LABELS[ticket.status] ?? ticket.status}
+                              </span>
                             </span>
                             <span className="block font-mono text-xs text-muted-foreground">
-                              {ticket.ticketNumber} · franchise {formatCheckInWeight(ticket.baggageAllowanceKg)}
+                              {ticket.ticketNumber} · franchise{' '}
+                              {formatCheckInWeight(ticket.baggageAllowanceKg)}
+                              {!isIssued ? ' · non sélectionnable' : ''}
                             </span>
                           </span>
                         </label>
@@ -794,6 +823,12 @@ export function CheckInForm(props: CheckInFormProps) {
                     )
                   })}
                 </ul>
+                {groupIssuedTickets.length < 2 && (
+                  <p className="text-xs text-muted-foreground">
+                    Au moins 2 billets au statut « Émis » sont requis pour un check-in groupé.
+                    Validez d&apos;abord les réservations du groupe.
+                  </p>
+                )}
                 {isGroupCheckIn && (
                   <p className="text-sm font-medium text-brand-orange">
                     Franchise groupe : {formatCheckInWeight(groupAllowanceKg.toFixed(2))} (

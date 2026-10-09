@@ -21,6 +21,7 @@ import {
   CheckpointDetailPage,
   CheckpointFormPage,
   CheckpointsPage,
+  BoardingPage,
   CheckInCreatePage,
   CheckInDetailPage,
   CheckInEditPage,
@@ -105,6 +106,7 @@ export const router = createBrowserRouter([
             element: <ProtectedRoute roles={[ROLES.SPADM, ROLES.ADM, ROLES.CHK]} />,
             children: [
               { path: '/checkins', element: <CheckInsListPage /> },
+              { path: '/checkins/boarding', element: <BoardingPage /> },
               { path: '/checkins/new', element: <CheckInCreatePage /> },
               { path: '/checkins/:id', element: <CheckInDetailPage /> },
               { path: '/checkins/:id/edit', element: <CheckInEditPage /> },

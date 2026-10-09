@@ -41,6 +41,7 @@ import { MixedExchangeRateField } from '@/components/payments/MixedExchangeRateF
 import { ConversionPreviewCard } from '@/components/tickets/ConversionPreviewCard'
 import { formatMoney } from '@/lib/utils'
 import {
+  ageFromBirthDate,
   getTicketTotal,
   getTicketFormGroupTotal,
   getDefaultWednesdayTravelDateInput,
@@ -259,6 +260,7 @@ function TicketCreateForm({
   const paidAmountCdf = watch('paidAmountCdf')
   const exchangeRate = watch('exchangeRate')
   const passengers = watch('passengers')
+  const travelDate = watch('travelDate')
   const isAccPayment = paymentMode === PAYMENT_MODE.ACC
   const needsCashRegister = paymentMode === PAYMENT_MODE.CASH || isAccPayment
 
@@ -468,14 +470,6 @@ function TicketCreateForm({
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <Input
-                    label="N° billet"
-                    placeholder="Auto si vide — ou saisie manuelle"
-                    error={passengerErrors?.ticketNumber?.message}
-                    disabled={locked}
-                    className={fieldClass}
-                    {...register(`passengers.${index}.ticketNumber`)}
-                  />
-                  <Input
                     label="Nom complet"
                     placeholder="Nom et prénom du passager"
                     error={passengerErrors?.passengerName?.message}
@@ -498,18 +492,31 @@ function TicketCreateForm({
                       )
                     }
                   />
-                  <Input
-                    label="Âge"
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    max={120}
-                    placeholder="Optionnel"
-                    error={passengerErrors?.age?.message}
-                    disabled={locked}
-                    className={fieldClass}
-                    {...register(`passengers.${index}.age`, { valueAsNumber: true })}
-                  />
+                  <div className="space-y-1.5">
+                    <Input
+                      label="Date de naissance"
+                      type="date"
+                      error={passengerErrors?.birthDate?.message}
+                      disabled={locked}
+                      className={fieldClass}
+                      {...register(`passengers.${index}.birthDate`)}
+                    />
+                    {(() => {
+                      const age = ageFromBirthDate(passengers?.[index]?.birthDate, travelDate)
+                      if (age === undefined) {
+                        return (
+                          <p className="text-xs text-muted-foreground">
+                            Optionnel — âge calculé à la date de voyage
+                          </p>
+                        )
+                      }
+                      return (
+                        <p className="text-xs text-muted-foreground">
+                          Âge à la date de voyage : {age} ans
+                        </p>
+                      )
+                    })()}
+                  </div>
                   <Select
                     label="Sexe"
                     placeholder="Sélectionner..."
@@ -520,6 +527,19 @@ function TicketCreateForm({
                     className={fieldClass}
                     {...register(`passengers.${index}.gender`)}
                   />
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Input
+                      label="N° billet (optionnel)"
+                      placeholder="Laisser vide pour génération automatique"
+                      error={passengerErrors?.ticketNumber?.message}
+                      disabled={locked}
+                      className={fieldClass}
+                      {...register(`passengers.${index}.ticketNumber`)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Vide = numéro attribué automatiquement à l&apos;enregistrement
+                    </p>
+                  </div>
                   <Input
                     label="Prix de base (USD)"
                     inputMode="decimal"
@@ -958,7 +978,7 @@ function TicketEditForm({
       ticketNumber: patchDefaults?.ticketNumber ?? ticketNumber ?? '',
       passengerName: patchDefaults?.passengerName ?? '',
       category: patchDefaults?.category,
-      age: patchDefaults?.age,
+      birthDate: patchDefaults?.birthDate,
       gender: patchDefaults?.gender,
       phone: patchDefaults?.phone ?? '',
       departure: patchDefaults?.departure ?? '',
@@ -979,10 +999,13 @@ function TicketEditForm({
   const destination = watch('destination')
   const category = watch('category')
   const paymentMode = watch('paymentMode')
+  const birthDate = watch('birthDate')
+  const travelDate = watch('travelDate')
   const basePrice = watch('basePrice')
   const tva = watch('tva')
   const fpt = watch('fpt')
   const rva = watch('rva')
+  const computedAge = ageFromBirthDate(birthDate, travelDate)
 
   const totalPreview = getTicketTotal({
     basePrice: basePrice ?? '0',
@@ -1021,13 +1044,18 @@ function TicketEditForm({
         </Card>
 
         <FormSection title="Passager" icon={User}>
-          <Input
-            label="N° billet"
-            error={errors.ticketNumber?.message}
-            disabled={locked}
-            className={fieldClass}
-            {...register('ticketNumber')}
-          />
+          <div className="space-y-1.5">
+            <Input
+              label="N° billet attribué"
+              error={errors.ticketNumber?.message}
+              disabled={locked}
+              className={fieldClass}
+              {...register('ticketNumber')}
+            />
+            <p className="text-xs text-muted-foreground">
+              Numéro déjà généré — modifiable uniquement si correction nécessaire
+            </p>
+          </div>
           <Input
             label="Nom complet"
             placeholder="Nom et prénom du passager"
@@ -1048,18 +1076,25 @@ function TicketEditForm({
               setValue('category', e.target.value as TicketPatchFormData['category'], { shouldValidate: true })
             }
           />
-          <Input
-            label="Âge"
-            type="number"
-            inputMode="numeric"
-            min={0}
-            max={120}
-            placeholder="Optionnel"
-            error={errors.age?.message}
-            disabled={locked}
-            className={fieldClass}
-            {...register('age', { valueAsNumber: true })}
-          />
+          <div className="space-y-1.5">
+            <Input
+              label="Date de naissance"
+              type="date"
+              error={errors.birthDate?.message}
+              disabled={locked}
+              className={fieldClass}
+              {...register('birthDate')}
+            />
+            {computedAge !== undefined ? (
+              <p className="text-xs text-muted-foreground">
+                Âge à la date de voyage : {computedAge} ans
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Optionnel — âge calculé à la date de voyage
+              </p>
+            )}
+          </div>
           <Select
             label="Sexe"
             placeholder="Sélectionner..."

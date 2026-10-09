@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
   Ban,
@@ -16,9 +16,24 @@ import {
   Receipt,
   RotateCcw,
   Ticket,
+  Trash2,
   User,
 } from 'lucide-react'
-import { useTicket, useTicketGroup, useReportTicketTravelDate, useUpdateTicketStatus, usePayTicket } from '@/hooks/useTickets'
+import {
+  useTicket,
+  useTicketGroup,
+  useReportTicketTravelDate,
+  useUpdateTicketStatus,
+  usePayTicket,
+  useDeleteTicket,
+} from '@/hooks/useTickets'
+import { useAuth } from '@/hooks/useAuth'
+import {
+  canEditTicketContent,
+  canHardDeleteTicket,
+  formatTicketEditWindowLabel,
+  isTicketWithinEditWindow,
+} from '@/lib/ticket-edit'
 import { useTicketActivities } from '@/hooks/useActivities'
 import { mergeTicketHistory } from '@/lib/ticket-history'
 import { EntityHistoryTimeline } from '@/components/history/EntityHistoryTimeline'
@@ -40,7 +55,14 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { formatMoney, formatDate, formatDateTime, cn } from '@/lib/utils'
 import { getCheckpointDisplayName } from '@/lib/checkpoint'
-import { getTicketPaidAmount, getTicketRemainingAmount, getTicketTotalAmount, toTicketPaymentPayload, toTicketReportTravelDatePayload } from '@/lib/ticket'
+import {
+  formatBirthDateDisplay,
+  getTicketPaidAmount,
+  getTicketRemainingAmount,
+  getTicketTotalAmount,
+  toTicketPaymentPayload,
+  toTicketReportTravelDatePayload,
+} from '@/lib/ticket'
 import { downloadTicketThermalReceiptPdf } from '@/lib/ticket-thermal-receipt-pdf'
 import { toast } from 'sonner'
 import type { TicketReportTravelDateFormData } from '@/schemas/ticket-report-travel-date.schema'
@@ -211,6 +233,8 @@ const STATUS_CONFIRM: Partial<
 
 export function TicketDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  const { user } = useAuth()
   const ticketId = id ?? ''
   const { data: ticket, isLoading } = useTicket(ticketId)
   const { data: groupData } = useTicketGroup(ticket?.purchaseGroupId)
@@ -218,15 +242,25 @@ export function TicketDetailPage() {
   const updateStatus = useUpdateTicketStatus()
   const reportTravelDate = useReportTicketTravelDate()
   const payTicket = usePayTicket()
+  const deleteTicket = useDeleteTicket()
   const [pendingAction, setPendingAction] = useState<PendingAction>(null)
   const [reportTravelDateOpen, setReportTravelDateOpen] = useState(false)
   const [paymentModalOpen, setPaymentModalOpen] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<TicketDetailTab>('details')
 
   const companions = useMemo(() => {
     if (!ticket?.purchaseGroupId) return []
     return (groupData?.items ?? []).filter((t) => t.id !== ticket.id)
   }, [ticket, groupData?.items])
+
+  const issuedCompanions = useMemo(
+    () => companions.filter((t) => t.status === TICKET_STATUS.ISSUED),
+    [companions],
+  )
+
+  const canGroupCheckIn =
+    ticket?.status === TICKET_STATUS.ISSUED && issuedCompanions.length > 0
 
   const historyEntries = useMemo(() => {
     if (!ticket) return []
@@ -253,7 +287,12 @@ export function TicketDetailPage() {
   }
 
   const canModify = ticket.status === TICKET_STATUS.ISSUED
+  const canEditFields = canEditTicketContent(ticket, user?.roles)
+  const editWindowExpired =
+    ticket.status === TICKET_STATUS.ISSUED && !isTicketWithinEditWindow(ticket)
+  const editDeadlineLabel = formatTicketEditWindowLabel(ticket)
   const isReserved = ticket.status === TICKET_STATUS.RESERVED
+  const canDeleteReserved = canHardDeleteTicket(ticket)
   const total = getTicketTotalAmount(ticket)
   const paid = getTicketPaidAmount(ticket)
   const remaining = getTicketRemainingAmount(ticket)
@@ -267,7 +306,14 @@ export function TicketDetailPage() {
     setPendingAction(null)
   }
 
-  const actionPending = updateStatus.isPending || reportTravelDate.isPending || payTicket.isPending
+  const handleHardDelete = async () => {
+    await deleteTicket.mutateAsync(ticketId)
+    setDeleteConfirmOpen(false)
+    void navigate('/tickets/reservations')
+  }
+
+  const actionPending =
+    updateStatus.isPending || reportTravelDate.isPending || payTicket.isPending || deleteTicket.isPending
 
   const handleReportTravelDate = async (data: TicketReportTravelDateFormData) => {
     await reportTravelDate.mutateAsync({
@@ -343,10 +389,17 @@ export function TicketDetailPage() {
               Thermique 80 mm
             </Button>
             {ticket.status === TICKET_STATUS.ISSUED && (
-              <Button type="button" variant="outline" className="h-11 rounded-xl" asChild>
+              <Button
+                type="button"
+                variant={canGroupCheckIn ? 'default' : 'outline'}
+                className="h-11 rounded-xl"
+                asChild
+              >
                 <Link to={`/checkins/new?ticket=${encodeURIComponent(ticket.id)}`}>
                   <ClipboardCheck className="h-4 w-4" />
-                  {companions.length > 0 ? 'Check-in groupé' : 'Check-in'}
+                  {canGroupCheckIn
+                    ? `Check-in groupé (${issuedCompanions.length + 1})`
+                    : 'Check-in'}
                 </Link>
               </Button>
             )}
@@ -355,18 +408,23 @@ export function TicketDetailPage() {
       )}
 
       {activeTab === 'details' && companions.length > 0 && (
-        <Card className="rounded-2xl border-border/80 shadow-sm">
+        <Card className="rounded-2xl border border-brand-orange/30 bg-brand-orange/5 shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-base font-semibold">
-              Groupe d&apos;achat ({companions.length + 1} passagers)
+              Achat groupé — {companions.length + 1} passagers
             </CardTitle>
+            <p className="text-sm font-normal text-muted-foreground">
+              {canGroupCheckIn
+                ? `${issuedCompanions.length + 1} billet(s) émis prêts pour un check-in groupé (franchise cumulée).`
+                : 'Les passagers du même achat apparaissent ici. Le check-in groupé nécessite au moins 2 billets émis.'}
+            </p>
           </CardHeader>
           <CardContent className="space-y-2 pt-0">
             {companions.map((companion) => (
               <Link
                 key={companion.id}
                 to={`/tickets/${companion.id}`}
-                className="flex items-center justify-between gap-3 rounded-xl border border-border/60 px-4 py-3 transition-colors hover:border-brand-orange/40 hover:bg-muted/30"
+                className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/80 px-4 py-3 transition-colors hover:border-brand-orange/40 hover:bg-muted/30"
               >
                 <div className="min-w-0">
                   <p className="truncate font-medium">{companion.passengerName}</p>
@@ -377,8 +435,32 @@ export function TicketDetailPage() {
                 </Badge>
               </Link>
             ))}
+            {canGroupCheckIn && (
+              <Button type="button" className="mt-2 h-11 w-full rounded-xl" asChild>
+                <Link to={`/checkins/new?ticket=${encodeURIComponent(ticket.id)}`}>
+                  <ClipboardCheck className="h-4 w-4" />
+                  Lancer le check-in groupé
+                </Link>
+              </Button>
+            )}
           </CardContent>
         </Card>
+      )}
+
+      {canModify && activeTab === 'details' && editWindowExpired && !canEditFields && (
+        <Card className="rounded-2xl border-amber-500/30 bg-amber-500/5 shadow-sm">
+          <CardContent className="p-4 text-sm text-muted-foreground">
+            Fenêtre d&apos;édition de 24 h expirée
+            {editDeadlineLabel ? ` (depuis le ${editDeadlineLabel})` : ''}.
+            Seul un administrateur peut encore modifier ce billet. Annulation / embarquement restent possibles.
+          </CardContent>
+        </Card>
+      )}
+
+      {canModify && activeTab === 'details' && canEditFields && editDeadlineLabel && (
+        <p className="text-xs text-muted-foreground">
+          Modification possible jusqu&apos;au {editDeadlineLabel}
+        </p>
       )}
 
       {/* Actions desktop */}
@@ -388,6 +470,7 @@ export function TicketDetailPage() {
           onStatus={setPendingAction}
           onReportTravelDate={() => setReportTravelDateOpen(true)}
           pending={actionPending}
+          canEdit={canEditFields}
           className="hidden lg:grid"
         />
       )}
@@ -420,16 +503,29 @@ export function TicketDetailPage() {
               <CalendarClock className="h-4 w-4" />
               Modifier la date
             </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              className="h-11 shrink-0 rounded-xl"
-              onClick={() => setPendingAction(TICKET_STATUS.CANCELLED)}
-              disabled={actionPending}
-            >
-              <Ban className="h-4 w-4" />
-              Annuler
-            </Button>
+            {canDeleteReserved ? (
+              <Button
+                type="button"
+                variant="destructive"
+                className="h-11 shrink-0 rounded-xl"
+                onClick={() => setDeleteConfirmOpen(true)}
+                disabled={actionPending}
+              >
+                <Trash2 className="h-4 w-4" />
+                Supprimer
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="destructive"
+                className="h-11 shrink-0 rounded-xl"
+                onClick={() => setPendingAction(TICKET_STATUS.CANCELLED)}
+                disabled={actionPending}
+              >
+                <Ban className="h-4 w-4" />
+                Annuler
+              </Button>
+            )}
             {remaining <= 0 ? (
               <Button
                 type="button"
@@ -462,6 +558,9 @@ export function TicketDetailPage() {
           <DetailRow label="Nom" value={ticket.passengerName} />
           {ticket.category && (
             <DetailRow label="Catégorie" value={TICKET_CATEGORY_LABELS[ticket.category]} />
+          )}
+          {ticket.birthDate && (
+            <DetailRow label="Date de naissance" value={formatBirthDateDisplay(ticket.birthDate)} />
           )}
           {ticket.age != null && (
             <DetailRow label="Âge" value={`${ticket.age} ans`} />
@@ -560,6 +659,7 @@ export function TicketDetailPage() {
               onStatus={setPendingAction}
               onReportTravelDate={() => setReportTravelDateOpen(true)}
               pending={actionPending}
+              canEdit={canEditFields}
               layout="mobile"
             />
           </div>
@@ -573,11 +673,15 @@ export function TicketDetailPage() {
               type="button"
               variant="destructive"
               className="h-11 shrink-0 rounded-xl px-3"
-              onClick={() => setPendingAction(TICKET_STATUS.CANCELLED)}
+              onClick={() =>
+                canDeleteReserved
+                  ? setDeleteConfirmOpen(true)
+                  : setPendingAction(TICKET_STATUS.CANCELLED)
+              }
               disabled={actionPending}
-              aria-label="Annuler la réservation"
+              aria-label={canDeleteReserved ? 'Supprimer la réservation' : 'Annuler la réservation'}
             >
-              <Ban className="h-4 w-4" />
+              {canDeleteReserved ? <Trash2 className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
             </Button>
             <Button
               type="button"
@@ -641,6 +745,29 @@ export function TicketDetailPage() {
         </div>
       </ConfirmDialog>
 
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        onOpenChange={(open) => { if (!open && !deleteTicket.isPending) setDeleteConfirmOpen(false) }}
+        variant="destructive"
+        title="Supprimer définitivement ?"
+        description="Cette réservation non payée sera effacée. Irréversible — utilisez Annuler si un acompte a été versé."
+        confirmLabel="Oui, supprimer"
+        cancelLabel="Non, revenir"
+        onConfirm={handleHardDelete}
+        loading={deleteTicket.isPending}
+      >
+        <div className="space-y-2 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-muted-foreground">Billet</span>
+            <span className="font-mono font-semibold">{ticket.ticketNumber}</span>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-muted-foreground">Passager</span>
+            <span className="font-medium truncate">{ticket.passengerName}</span>
+          </div>
+        </div>
+      </ConfirmDialog>
+
       <TicketReportTravelDateModal
         open={reportTravelDateOpen}
         onOpenChange={setReportTravelDateOpen}
@@ -667,6 +794,7 @@ function TicketActions({
   onStatus,
   onReportTravelDate,
   pending,
+  canEdit = true,
   className,
   layout = 'desktop',
 }: {
@@ -674,6 +802,7 @@ function TicketActions({
   onStatus: (status: TicketStatus) => void
   onReportTravelDate: () => void
   pending: boolean
+  canEdit?: boolean
   className?: string
   layout?: 'desktop' | 'mobile'
 }) {
@@ -682,18 +811,20 @@ function TicketActions({
   if (layout === 'mobile') {
     return (
       <div className={cn('space-y-2', className)}>
-        <Button variant="outline" asChild className={cn(btnClass, 'w-full border-primary/30 text-primary hover:bg-primary/5')}>
-          <Link to={`/tickets/${ticketId}/edit`}>
-            <Pencil className="h-4 w-4" />
-            Modifier
-          </Link>
-        </Button>
+        {canEdit && (
+          <Button variant="outline" asChild className={cn(btnClass, 'w-full border-primary/30 text-primary hover:bg-primary/5')}>
+            <Link to={`/tickets/${ticketId}/edit`}>
+              <Pencil className="h-4 w-4" />
+              Modifier
+            </Link>
+          </Button>
+        )}
         <Button
           type="button"
           variant="outline"
           className={cn(btnClass, 'w-full')}
           onClick={onReportTravelDate}
-          disabled={pending}
+          disabled={pending || !canEdit}
         >
           <CalendarClock className="h-4 w-4" />
           Reporter la date
@@ -734,18 +865,20 @@ function TicketActions({
 
   return (
     <div className={cn('grid gap-2 sm:grid-cols-2', className)}>
-      <Button variant="outline" asChild className={cn(btnClass, 'border-primary/30 text-primary hover:bg-primary/5')}>
-        <Link to={`/tickets/${ticketId}/edit`}>
-          <Pencil className="h-4 w-4" />
-          Modifier
-        </Link>
-      </Button>
+      {canEdit && (
+        <Button variant="outline" asChild className={cn(btnClass, 'border-primary/30 text-primary hover:bg-primary/5')}>
+          <Link to={`/tickets/${ticketId}/edit`}>
+            <Pencil className="h-4 w-4" />
+            Modifier
+          </Link>
+        </Button>
+      )}
       <Button
         type="button"
         variant="outline"
         className={btnClass}
         onClick={onReportTravelDate}
-        disabled={pending}
+        disabled={pending || !canEdit}
       >
         <CalendarClock className="h-4 w-4" />
         Reporter la date

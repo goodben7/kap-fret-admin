@@ -1,6 +1,7 @@
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Pencil } from 'lucide-react'
 import { useTicket, useUpdateTicket } from '@/hooks/useTickets'
+import { useAuth } from '@/hooks/useAuth'
 import { TicketForm } from '@/components/forms/TicketForm'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -10,12 +11,19 @@ import {
   ticketToFormDefaults,
   toTicketPatchPayload,
 } from '@/lib/ticket'
-import { TICKET_STATUS, TICKET_STATUS_LABELS } from '@/constants/ticket'
+import {
+  canEditTicketContent,
+  formatTicketEditWindowLabel,
+  isTicketWithinEditWindow,
+} from '@/lib/ticket-edit'
+import { TICKET_STATUS_LABELS } from '@/constants/ticket'
 import type { TicketPatchFormData } from '@/schemas/ticket.schema'
+import { Card, CardContent } from '@/components/ui/card'
 
 export function TicketEditPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const ticketId = id ?? ''
   const { data: ticket, isLoading } = useTicket(ticketId)
   const updateTicket = useUpdateTicket()
@@ -38,8 +46,9 @@ export function TicketEditPage() {
     )
   }
 
-  const canEdit =
-    ticket.status === TICKET_STATUS.ISSUED || ticket.status === TICKET_STATUS.RESERVED
+  const canEdit = canEditTicketContent(ticket, user?.roles)
+  const editDeadlineLabel = formatTicketEditWindowLabel(ticket)
+  const windowExpired = !isTicketWithinEditWindow(ticket)
 
   const handleSubmit = async (data: TicketPatchFormData) => {
     await updateTicket.mutateAsync({ id: ticketId, payload: toTicketPatchPayload(data) })
@@ -66,6 +75,22 @@ export function TicketEditPage() {
           </h1>
         </div>
       </div>
+
+      {!canEdit && (
+        <Card className="rounded-2xl border-amber-500/30 bg-amber-500/5 shadow-sm">
+          <CardContent className="p-4 text-sm text-muted-foreground">
+            {windowExpired
+              ? 'La fenêtre de 24 h après émission est écoulée. Contactez un administrateur pour modifier ce billet.'
+              : 'Ce billet ne peut plus être modifié dans son statut actuel.'}
+          </CardContent>
+        </Card>
+      )}
+
+      {canEdit && editDeadlineLabel && (
+        <p className="text-xs text-muted-foreground">
+          Modification possible jusqu&apos;au {editDeadlineLabel}
+        </p>
+      )}
 
       <TicketForm
         isEdit

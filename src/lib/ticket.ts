@@ -2,6 +2,7 @@ import { resolveCheckpointIri } from '@/lib/checkpoint'
 import { extractIri, toIri } from '@/lib/hydra'
 import { convertAmountBetweenCurrencyCodes } from '@/lib/exchange-rate'
 import { formatExchangeRateForPayload } from '@/lib/mixed-payment'
+import { ageFromBirthDate, toDateInputValue } from '@/lib/passenger-age'
 import type { ExchangeRateResource } from '@/types/exchange-rate'
 import { GENDER, PAYMENT_MODE, CURRENCY, TICKET_CATEGORY_BASE_PRICE_USD, TICKET_STATUS } from '@/constants/ticket'
 import type { Currency, Gender, PaymentMode, TicketCategory } from '@/constants/ticket'
@@ -9,6 +10,8 @@ import type { Ticket, TicketBatchCreatePayload, TicketCreatePayload, TicketPatch
 import type { TicketFormData, TicketPatchFormData } from '@/schemas/ticket.schema'
 import type { TicketReportTravelDateFormData } from '@/schemas/ticket-report-travel-date.schema'
 import type { TicketPaymentFormData } from '@/schemas/ticket-payment.schema'
+
+export { ageFromBirthDate, formatBirthDateDisplay, toDateInputValue } from '@/lib/passenger-age'
 
 function formatDecimal(value: string | number): string {
   const num = typeof value === 'number' ? value : parseFloat(String(value).replace(',', '.'))
@@ -244,8 +247,11 @@ export function toTicketCreatePayload(data: TicketFormData): TicketCreatePayload
     payload.ticketNumber = ticketNumber
   }
 
-  if (primary.age !== undefined) {
-    payload.age = primary.age
+  const birthDate = primary.birthDate?.trim()
+  if (birthDate) {
+    payload.birthDate = birthDate
+    const age = ageFromBirthDate(birthDate, data.travelDate)
+    if (age !== undefined) payload.age = age
   }
 
   if (
@@ -300,7 +306,12 @@ export function toTicketBatchPayload(data: TicketFormData): TicketBatchCreatePay
       }
       const ticketNumber = passenger.ticketNumber?.trim()
       if (ticketNumber) row.ticketNumber = ticketNumber
-      if (passenger.age !== undefined) row.age = passenger.age
+      const birthDate = passenger.birthDate?.trim()
+      if (birthDate) {
+        row.birthDate = birthDate
+        const age = ageFromBirthDate(birthDate, data.travelDate)
+        if (age !== undefined) row.age = age
+      }
       return row
     }),
   }
@@ -398,8 +409,11 @@ export function toTicketPatchPayload(data: TicketPatchFormData): TicketPatchPayl
   if (data.category) {
     payload.category = data.category
   }
-  if (data.age !== undefined) {
-    payload.age = data.age
+  const birthDate = data.birthDate?.trim()
+  if (birthDate) {
+    payload.birthDate = birthDate
+    const age = ageFromBirthDate(birthDate, data.travelDate)
+    if (age !== undefined) payload.age = age
   }
   return payload
 }
@@ -432,7 +446,7 @@ export function ticketToFormDefaults(ticket: Ticket): Partial<TicketPatchFormDat
     ticketNumber: ticket.ticketNumber,
     passengerName: ticket.passengerName,
     category: ticket.category,
-    age: ticket.age,
+    birthDate: toDateInputValue(ticket.birthDate) || undefined,
     gender: normalizeGender(ticket.gender),
     phone: ticket.phone ?? '',
     departure: resolveCheckpointIri(

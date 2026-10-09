@@ -13,6 +13,7 @@ export const TicketDetailPage = lazyPage(() => import('@/pages/tickets/TicketDet
 export const TicketEditPage = lazyPage(() => import('@/pages/tickets/TicketEditPage'), 'TicketEditPage')
 
 export const CheckInsListPage = lazyPage(() => import('@/pages/checkins/CheckInsListPage'), 'CheckInsListPage')
+export const BoardingPage = lazyPage(() => import('@/pages/checkins/BoardingPage'), 'BoardingPage')
 export const CheckInCreatePage = lazyPage(() => import('@/pages/checkins/CheckInCreatePage'), 'CheckInCreatePage')
 export const CheckInDetailPage = lazyPage(() => import('@/pages/checkins/CheckInDetailPage'), 'CheckInDetailPage')
 export const CheckInEditPage = lazyPage(() => import('@/pages/checkins/CheckInEditPage'), 'CheckInEditPage')

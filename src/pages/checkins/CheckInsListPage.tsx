@@ -7,6 +7,7 @@ import {
   FileText,
   MapPin,
   LayoutGrid,
+  Plane,
   Plus,
   Scale,
   Search,
@@ -596,6 +597,12 @@ export function CheckInsListPage() {
           >
             <FileText className="h-4 w-4" />
             <span className="hidden sm:inline">Manifeste PDF</span>
+          </Button>
+          <Button asChild variant="outline" size="sm" className="rounded-full px-3 shadow-sm">
+            <Link to="/checkins/boarding">
+              <Plane className="h-4 w-4" />
+              <span className="hidden sm:inline">Embarquement</span>
+            </Link>
           </Button>
           <Button asChild size="sm" className="rounded-full px-4 shadow-sm">
             <Link to="/checkins/new">

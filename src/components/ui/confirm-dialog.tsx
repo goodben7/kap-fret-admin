@@ -47,6 +47,8 @@ interface ConfirmDialogProps {
   cancelLabel?: string
   onConfirm: () => void | Promise<void>
   loading?: boolean
+  /** Désactive le bouton de confirmation (ex. case à cocher requise). */
+  confirmDisabled?: boolean
   children?: ReactNode
 }
 
@@ -60,6 +62,7 @@ export function ConfirmDialog({
   cancelLabel = 'Annuler',
   onConfirm,
   loading = false,
+  confirmDisabled = false,
   children,
 }: ConfirmDialogProps) {
   const styles = VARIANT_STYLES[variant]
@@ -129,7 +132,7 @@ export function ConfirmDialog({
                 type="button"
                 className={cn('h-11 rounded-xl font-semibold', styles.confirmClass)}
                 onClick={() => void onConfirm()}
-                disabled={loading}
+                disabled={loading || confirmDisabled}
               >
                 {loading ? (
                   <>

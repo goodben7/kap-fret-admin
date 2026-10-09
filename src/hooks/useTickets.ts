@@ -117,6 +117,32 @@ export function useReportTicketTravelDate() {
   })
 }
 
+export function useBoardTicket() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => ticketService.board(id),
+    onSuccess: (_, id) => {
+      void queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
+      void queryClient.invalidateQueries({ queryKey: ticketKeys.detail(id) })
+      void queryClient.invalidateQueries({ queryKey: ['checkIns'] })
+      void queryClient.invalidateQueries({ queryKey: ['activities'] })
+      toast.success('Passager embarqué')
+    },
+  })
+}
+
+export function useDeleteTicket() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => ticketService.remove(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
+      void queryClient.invalidateQueries({ queryKey: ['activities'] })
+      toast.success('Réservation supprimée')
+    },
+  })
+}
+
 export function usePayTicket() {
   const queryClient = useQueryClient()
   return useMutation({

@@ -23,6 +23,8 @@ export interface Ticket extends HydraResource {
   ticketNumber: string
   passengerName: string
   age?: number
+  /** Date de naissance (YYYY-MM-DD). */
+  birthDate?: string | null
   category?: TicketCategory
   gender: Gender
   phone?: string
@@ -68,6 +70,7 @@ export interface TicketPassengerCreatePayload {
   ticketNumber?: string | null
   passengerName: string
   age?: number
+  birthDate?: string | null
   category: TicketCategory
   gender: Gender
   phone?: string
@@ -102,6 +105,7 @@ export interface TicketCreatePayload {
   ticketNumber?: string | null
   passengerName: string
   age?: number
+  birthDate?: string | null
   category: TicketCategory
   gender: Gender
   phone: string
@@ -140,6 +144,7 @@ export interface TicketPatchPayload {
   ticketNumber?: string
   passengerName: string
   age?: number | null
+  birthDate?: string | null
   category?: TicketCategory
   gender: Gender
   phone: string

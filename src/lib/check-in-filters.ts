@@ -33,6 +33,8 @@ export interface CheckInFilters {
   departure?: string
   /** SearchFilter exact → ticket.destination */
   destination?: string
+  /** SearchFilter exact → ticket.status */
+  ticketStatus?: string
   /** SearchFilter exact */
   currency?: string
   /** SearchFilter exact */
@@ -128,6 +130,9 @@ export function buildCheckInFilterParams(filters: CheckInFilters): Record<string
 
   const destination = filters.destination?.trim()
   if (destination) params['ticket.destination'] = normalizeIri(destination)
+
+  const ticketStatus = filters.ticketStatus?.trim()
+  if (ticketStatus) params['ticket.status'] = ticketStatus
 
   const currency = parseCurrencyFilter(filters.currency ?? '')
   if (currency) params.currency = currency

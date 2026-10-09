@@ -15,10 +15,11 @@ export const checkInKeys = {
   detail: (id: string) => [...checkInKeys.details(), id] as const,
 }
 
-export function useCheckIns(filters: CheckInFilters = {}) {
+export function useCheckIns(filters: CheckInFilters = {}, enabled = true) {
   return useQuery({
     queryKey: checkInKeys.list(filters),
     queryFn: () => checkInService.getAll(filters),
+    enabled,
   })
 }
 
