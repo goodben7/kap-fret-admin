@@ -6,7 +6,7 @@ import {
   TICKET_CATEGORY,
   TICKET_CATEGORY_AGE_RANGE,
 } from '@/constants/ticket'
-import { ageFromBirthDate, toDateInputValue } from '@/lib/passenger-age'
+import { ageFromBirthDate, isValidBirthDateInput, toDateInputValue } from '@/lib/passenger-age'
 
 function parsePositiveAmount(value: string): number | null {
   const amount = parseFloat(value.replace(',', '.'))
@@ -20,29 +20,23 @@ function parseNonNegativeAmount(value: string): number | null {
   return amount
 }
 
+/** Sans `.transform()` — évite le mismatch input/output Zod ↔ react-hook-form. */
 const optionalBirthDateSchema = z
   .string()
   .optional()
-  .transform((value) => {
-    const trimmed = value?.trim() ?? ''
-    return trimmed === '' ? undefined : trimmed
-  })
-  .refine(
-    (value) => value === undefined || /^\d{4}-\d{2}-\d{2}$/.test(value),
-    { message: 'Date de naissance invalide' },
-  )
   .refine(
     (value) => {
-      if (value === undefined) return true
-      const parsed = new Date(`${value}T00:00:00`)
-      return !Number.isNaN(parsed.getTime()) && toDateInputValue(parsed) === value
+      const trimmed = value?.trim() ?? ''
+      if (trimmed === '') return true
+      return isValidBirthDateInput(trimmed)
     },
     { message: 'Date de naissance invalide' },
   )
   .refine(
     (value) => {
-      if (value === undefined) return true
-      return value <= toDateInputValue(new Date())
+      const trimmed = value?.trim() ?? ''
+      if (trimmed === '') return true
+      return trimmed <= toDateInputValue(new Date())
     },
     { message: 'La date de naissance ne peut pas être dans le futur' },
   )
@@ -54,8 +48,9 @@ function validateBirthDateForCategory(
   path: (string | number)[],
   ctx: z.RefinementCtx,
 ) {
-  if (!birthDate || !category) return
-  const age = ageFromBirthDate(birthDate, travelDate)
+  const trimmed = birthDate?.trim()
+  if (!trimmed || !category) return
+  const age = ageFromBirthDate(trimmed, travelDate)
   if (age === undefined) return
   const range = TICKET_CATEGORY_AGE_RANGE[category]
   if (age < range.min || age > range.max) {

@@ -21,9 +21,25 @@ export function ageFromBirthDate(
   const ref = toDateInputValue(referenceDate) || toDateInputValue(new Date())
   if (!ref) return undefined
 
-  const [by, bm, bd] = birth.split('-').map(Number)
-  const [ry, rm, rd] = ref.split('-').map(Number)
-  if (![by, bm, bd, ry, rm, rd].every((n) => Number.isFinite(n))) return undefined
+  const birthParts = birth.split('-').map(Number)
+  const refParts = ref.split('-').map(Number)
+  const by = birthParts[0]
+  const bm = birthParts[1]
+  const bd = birthParts[2]
+  const ry = refParts[0]
+  const rm = refParts[1]
+  const rd = refParts[2]
+  if (
+    by === undefined
+    || bm === undefined
+    || bd === undefined
+    || ry === undefined
+    || rm === undefined
+    || rd === undefined
+    || ![by, bm, bd, ry, rm, rd].every((n) => Number.isFinite(n))
+  ) {
+    return undefined
+  }
 
   let age = ry - by
   if (rm < bm || (rm === bm && rd < bd)) age -= 1
@@ -35,4 +51,10 @@ export function formatBirthDateDisplay(birthDate: string | null | undefined): st
   if (!value) return '—'
   const [y, m, d] = value.split('-')
   return `${d}/${m}/${y}`
+}
+
+export function isValidBirthDateInput(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const parsed = new Date(`${value}T00:00:00`)
+  return !Number.isNaN(parsed.getTime()) && toDateInputValue(parsed) === value
 }
