@@ -35,6 +35,7 @@ export const FREIGHT_ACTIVITY_LABELS: Record<FreightActivityCode, string> = {
   'freight.arrived': 'Arrivée à destination',
   'freight.delivered': 'Livraison effectuée',
   'freight.cancelled': 'Annulation de l\'expédition',
+  'freight.archived': 'Archivage de l\'expédition',
 }
 
 const ACTIVITY_LABELS: Record<string, string> = {
@@ -68,5 +69,6 @@ export function activityFilterOptions() {
     { value: 'freight.arrived', label: FREIGHT_ACTIVITY_LABELS['freight.arrived'] },
     { value: 'freight.delivered', label: FREIGHT_ACTIVITY_LABELS['freight.delivered'] },
     { value: 'freight.cancelled', label: FREIGHT_ACTIVITY_LABELS['freight.cancelled'] },
+    { value: 'freight.archived', label: FREIGHT_ACTIVITY_LABELS['freight.archived'] },
   ]
 }

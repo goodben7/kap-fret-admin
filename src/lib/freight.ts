@@ -446,7 +446,11 @@ export function getFreightSenderNumber(shipment: FreightShipment): string {
 }
 
 export function filterFreightShipmentsForManifest(shipments: FreightShipment[]): FreightShipment[] {
-  return shipments.filter((shipment) => shipment.status !== FREIGHT_STATUS.CANCELLED)
+  return shipments.filter(
+    (shipment) =>
+      shipment.status !== FREIGHT_STATUS.CANCELLED
+      && shipment.status !== FREIGHT_STATUS.ARCHIVED,
+  )
 }
 
 /** Totaux paiement par devise (Cash / Acomptes / PD). */
@@ -484,7 +488,11 @@ export function summarizeFreightPaymentKpis(shipments: FreightShipment[]): Freig
   const depositsCollected: FreightMoneyByCurrency = {}
   const pdOutstanding: FreightMoneyByCurrency = {}
 
-  const active = shipments.filter((shipment) => shipment.status !== FREIGHT_STATUS.CANCELLED)
+  const active = shipments.filter(
+    (shipment) =>
+      shipment.status !== FREIGHT_STATUS.CANCELLED
+      && shipment.status !== FREIGHT_STATUS.ARCHIVED,
+  )
 
   for (const shipment of active) {
     const currency = getFreightCurrency(shipment)

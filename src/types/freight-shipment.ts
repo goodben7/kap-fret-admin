@@ -56,6 +56,8 @@ export interface FreightShipment extends HydraResource {
   deliveredBy?: string | FreightUserRef
   cancelledAt?: string
   cancelledBy?: string | FreightUserRef
+  archivedAt?: string
+  archivedBy?: string | FreightUserRef
   observations?: string
   agent?: string | FreightUserRef
   issuingOffice?: string | IssuingOffice

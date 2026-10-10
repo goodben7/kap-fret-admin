@@ -79,7 +79,12 @@ export function buildFreightFilterParams(filters: FreightFilters): Record<string
   if (airline) params.airline = airline
 
   const status = filters.status?.trim()
-  if (status) params.status = status
+  if (status) {
+    params.status = status
+  } else {
+    // Liste opérationnelle : masquer les LTA archivées sauf filtre explicite
+    params['exists[archivedAt]'] = 'false'
+  }
 
   const paymentMode = filters.paymentMode?.trim()
   if (paymentMode) params.paymentMode = paymentMode

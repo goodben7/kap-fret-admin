@@ -38,6 +38,7 @@ export function buildFreightHistoryFromShipment(shipment: FreightShipment): Frei
   pushEntry(entries, 'freight-arrived', shipment.arrivedAt, 'Arrivée à destination', 'freight', shipment.arrivedBy)
   pushEntry(entries, 'freight-delivered', shipment.deliveredAt, 'Livraison effectuée', 'freight', shipment.deliveredBy)
   pushEntry(entries, 'freight-cancelled', shipment.cancelledAt, 'Annulation de l\'expédition', 'freight', shipment.cancelledBy)
+  pushEntry(entries, 'freight-archived', shipment.archivedAt, 'Archivage de l\'expédition', 'freight', shipment.archivedBy)
 
   if (
     shipment.updatedAt &&

@@ -366,7 +366,9 @@ export function FreightDetailPage() {
 
   const canEdit = shipment.status === FREIGHT_STATUS.PENDING
   const canChangeStatus =
-    shipment.status !== FREIGHT_STATUS.DELIVERED && shipment.status !== FREIGHT_STATUS.CANCELLED
+    shipment.status !== FREIGHT_STATUS.DELIVERED
+    && shipment.status !== FREIGHT_STATUS.CANCELLED
+    && shipment.status !== FREIGHT_STATUS.ARCHIVED
   const packages = shipment.packages ?? []
   const money = (amount: string | number) => formatMoney(parseFloat(String(amount)) || 0)
   const totalAmount = parseFloat(shipment.totalAmount) || 0
@@ -640,7 +642,9 @@ export function FreightDetailPage() {
         <Card className="rounded-2xl border-border/60 bg-muted/30">
           <CardContent className="flex items-center gap-3 p-4 text-sm text-muted-foreground">
             <Ban className="h-5 w-5 shrink-0 text-muted-foreground/70" aria-hidden="true" />
-            Cette expédition est {FREIGHT_STATUS_LABELS[shipment.status].toLowerCase()} et ne peut plus être modifiée.
+            {shipment.status === FREIGHT_STATUS.ARCHIVED
+              ? 'Cette expédition est archivée (non réclamée / en souffrance). La traçabilité comptable est conservée.'
+              : `Cette expédition est ${FREIGHT_STATUS_LABELS[shipment.status].toLowerCase()} et ne peut plus être modifiée.`}
           </CardContent>
         </Card>
       )}

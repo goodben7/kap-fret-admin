@@ -4,6 +4,7 @@ export const FREIGHT_STATUS = {
   ARRIVED: 'ARRIVED',
   DELIVERED: 'DELIVERED',
   CANCELLED: 'CANCELLED',
+  ARCHIVED: 'ARCHIVED',
 } as const
 
 export type FreightStatus = (typeof FREIGHT_STATUS)[keyof typeof FREIGHT_STATUS]
@@ -14,12 +15,16 @@ export const FREIGHT_STATUS_LABELS: Record<FreightStatus, string> = {
   ARRIVED: 'Arrivé',
   DELIVERED: 'Livré',
   CANCELLED: 'Annulé',
+  ARCHIVED: 'Archivé',
 }
 
-export function freightStatusBadgeVariant(status: FreightStatus): 'default' | 'secondary' | 'success' | 'destructive' {
+export function freightStatusBadgeVariant(
+  status: FreightStatus,
+): 'default' | 'secondary' | 'success' | 'destructive' | 'outline' {
   if (status === FREIGHT_STATUS.DELIVERED) return 'success'
   if (status === FREIGHT_STATUS.ARRIVED) return 'secondary'
   if (status === FREIGHT_STATUS.CANCELLED) return 'destructive'
+  if (status === FREIGHT_STATUS.ARCHIVED) return 'outline'
   return 'default'
 }
 
@@ -35,6 +40,8 @@ export function freightStatusSelectClass(status: FreightStatus | string): string
       return 'border-emerald-300 bg-emerald-100 text-emerald-800 hover:bg-emerald-200/80'
     case FREIGHT_STATUS.CANCELLED:
       return 'border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/15'
+    case FREIGHT_STATUS.ARCHIVED:
+      return 'border-border bg-muted text-muted-foreground hover:bg-muted/80'
     default:
       return ''
   }

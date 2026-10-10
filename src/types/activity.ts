@@ -20,6 +20,7 @@ export type FreightActivityCode =
   | 'freight.arrived'
   | 'freight.delivered'
   | 'freight.cancelled'
+  | 'freight.archived'
 
 export type ActivityCode =
   | UserActivityCode
