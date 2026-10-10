@@ -33,6 +33,8 @@ export type CashTransactionFiltersState = {
   type: '' | CashTransactionType
   referenceType: '' | CashTransactionReferenceType
   referenceId: string
+  /** Succursale / bureau d'émission (IRI). */
+  issuingOffice: string
   cashRegister: string
   validated: '' | 'true' | 'false'
   status: '' | CashTransactionStatus
@@ -48,6 +50,7 @@ export const emptyCashTransactionFilters: CashTransactionFiltersState = {
   type: '',
   referenceType: '',
   referenceId: '',
+  issuingOffice: '',
   cashRegister: '',
   validated: '',
   status: '',
@@ -63,6 +66,7 @@ const FILTER_PARAM_KEYS = [
   'type',
   'referenceType',
   'referenceId',
+  'issuingOffice',
   'cashRegister',
   'validated',
   'status',
@@ -175,6 +179,7 @@ export function cashTransactionFiltersStateToApi(
     type: state.type || undefined,
     referenceType: state.referenceType || undefined,
     referenceId: state.referenceId.trim() || undefined,
+    issuingOffice: state.issuingOffice.trim() || undefined,
     cashRegister: state.cashRegister.trim() || undefined,
     validated: parseValidated(state.validated),
     status: parseStatus(state.status) || undefined,
@@ -207,6 +212,7 @@ export function parseCashTransactionFiltersFromSearchParams(
         ? referenceType
         : '',
     referenceId: get('referenceId'),
+    issuingOffice: get('issuingOffice'),
     cashRegister: get('cashRegister'),
     validated: validated === 'true' || validated === 'false' ? validated : '',
     status: status ?? '',

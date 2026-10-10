@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowDownLeft,
@@ -17,8 +17,10 @@ import {
 } from 'lucide-react'
 import { useCashTransactions } from '@/hooks/useCashTransactions'
 import { useCashRegistersForSelect } from '@/hooks/useCashRegisters'
+import { useIssuingOffices } from '@/hooks/useIssuingOffices'
 import { useAuth } from '@/hooks/useAuth'
 import { resolveUserIssuingOfficeIri } from '@/lib/issuing-office'
+import { formatCashRegisterSelectLabel } from '@/lib/cash-register'
 import {
   cashTransactionFiltersStateToApi,
   cashTransactionFiltersToSearchParams,
@@ -41,12 +43,15 @@ import {
   CASH_TRANSACTION_TYPE_LABELS,
   CASH_TRANSACTION_TYPE_OPTIONS,
 } from '@/constants/cash-transaction'
+import { CURRENCY_LABELS, CURRENCY_OPTIONS } from '@/constants/ticket'
+import { hasRole, ROLES } from '@/constants/roles'
 import type { CashTransaction } from '@/types/cash-transaction'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
+import { Modal } from '@/components/ui/modal'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Pagination } from '@/components/ui/pagination'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
@@ -74,18 +79,6 @@ const statusFilterOptions = () => [
   { value: '', label: 'Tous' },
   ...CASH_TRANSACTION_STATUS_OPTIONS,
 ]
-
-function FilterSection({ title, icon: Icon, children }: { title: string; icon: typeof Receipt; children: ReactNode }) {
-  return (
-    <section className="space-y-3">
-      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        <Icon className="h-3.5 w-3.5" />
-        {title}
-      </div>
-      <div className="space-y-3">{children}</div>
-    </section>
-  )
-}
 
 function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
@@ -150,128 +143,178 @@ function TransactionCard({ transaction }: { transaction: CashTransaction }) {
   )
 }
 
-function CashTransactionFiltersFields({
+function CashTransactionFilterModal({
+  open,
+  onOpenChange,
   draft,
   onChange,
+  officeOptions,
   cashRegisterOptions,
+  cashRegistersLoading,
+  canPickAnyOffice,
+  onSubmit,
+  onReset,
 }: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
   draft: CashTransactionFiltersState
   onChange: (patch: Partial<CashTransactionFiltersState>) => void
+  officeOptions: { value: string; label: string }[]
   cashRegisterOptions: { value: string; label: string }[]
+  cashRegistersLoading: boolean
+  canPickAnyOffice: boolean
+  onSubmit: () => void
+  onReset: () => void
 }) {
+  const officeSelected = Boolean(draft.issuingOffice.trim())
+
   return (
-    <div className="space-y-6">
-      <FilterSection title="Transaction" icon={Receipt}>
-        <Input
-          label="ID"
-          placeholder="Ex. CTAZOA0622110118"
-          value={draft.id}
-          onChange={(e) => onChange({ id: e.target.value })}
-          className={filterInputClass}
-        />
+    <Modal open={open} onOpenChange={onOpenChange} title="Filtre" className="max-w-xl">
+      <div className="space-y-4">
         <Select
-          label="Type"
-          options={[{ value: '', label: 'Tous' }, ...CASH_TRANSACTION_TYPE_OPTIONS]}
-          value={draft.type}
-          onChange={(e) => onChange({ type: e.target.value as CashTransactionFiltersState['type'] })}
-          variant="filter"
-        />
-        <Select
-          label="Nécessite validation"
-          options={validatedFilterOptions()}
-          value={draft.validated}
-          onChange={(e) => onChange({ validated: e.target.value as CashTransactionFiltersState['validated'] })}
-          variant="filter"
-        />
-        <Select
-          label="Statut"
-          options={statusFilterOptions()}
-          value={draft.status}
-          onChange={(e) => onChange({ status: e.target.value as CashTransactionFiltersState['status'] })}
-          variant="filter"
-        />
-        <Select
-          label="Caisse"
-          options={[{ value: '', label: 'Toutes' }, ...cashRegisterOptions]}
-          value={draft.cashRegister}
-          onChange={(e) => onChange({ cashRegister: e.target.value })}
-          variant="filter"
-        />
-      </FilterSection>
-      <FilterSection title="Référence" icon={Receipt}>
-        <Select
-          label="Type de référence"
-          options={[{ value: '', label: 'Tous' }, ...CASH_TRANSACTION_REFERENCE_TYPE_OPTIONS]}
-          value={draft.referenceType}
-          onChange={(e) => onChange({ referenceType: e.target.value as CashTransactionFiltersState['referenceType'] })}
-          variant="filter"
-        />
-        <Input
-          label="ID référence"
-          placeholder="Ex. TKNKPI0622110118"
-          value={draft.referenceId}
-          onChange={(e) => onChange({ referenceId: e.target.value })}
-          className={filterInputClass}
-        />
-      </FilterSection>
-      <FilterSection title="Dates" icon={Receipt}>
-        <Input
-          label="Du (transaction)"
-          type="date"
-          value={draft.transactionDateFrom}
-          onChange={(e) =>
-            onChange({
-              transactionDateFrom: e.target.value,
-              transactionDate: '',
-            })
-          }
-          className={filterInputClass}
-        />
-        <Input
-          label="Au (transaction)"
-          type="date"
-          value={draft.transactionDateTo}
-          onChange={(e) =>
-            onChange({
-              transactionDateTo: e.target.value,
-              transactionDate: '',
-            })
-          }
-          className={filterInputClass}
-        />
-        <Input
-          label="Jour unique (transaction)"
-          type="date"
-          value={draft.transactionDate}
-          onChange={(e) =>
-            onChange({
-              transactionDate: e.target.value,
-              transactionDateFrom: '',
-              transactionDateTo: '',
-            })
-          }
-          className={filterInputClass}
-        />
-        <Input
-          label="Date de création"
-          type="date"
-          value={draft.createdAt}
-          onChange={(e) => onChange({ createdAt: e.target.value })}
-          className={filterInputClass}
-        />
-        <Select
-          label="Devise d'encaissement"
+          label="Succursale"
           options={[
-            { value: '', label: 'Toutes' },
-            { value: 'USD', label: 'USD' },
-            { value: 'CDF', label: 'CDF' },
+            {
+              value: '',
+              label: canPickAnyOffice ? 'Toutes les succursales' : 'Sélectionnez une succursale',
+            },
+            ...officeOptions,
           ]}
-          value={draft.currency}
-          onChange={(e) => onChange({ currency: e.target.value as CashTransactionFiltersState['currency'] })}
+          value={draft.issuingOffice}
+          onChange={(e) =>
+            onChange({
+              issuingOffice: e.target.value,
+              cashRegister: '',
+            })
+          }
           variant="filter"
+          disabled={!canPickAnyOffice && officeOptions.length <= 1}
         />
-      </FilterSection>
-    </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Select
+            label="Compte financier"
+            options={[
+              {
+                value: '',
+                label: officeSelected
+                  ? 'Tous les comptes'
+                  : 'Sélectionnez une succursale d\'abord',
+              },
+              ...cashRegisterOptions,
+            ]}
+            value={draft.cashRegister}
+            onChange={(e) => onChange({ cashRegister: e.target.value })}
+            variant="filter"
+            disabled={!officeSelected || cashRegistersLoading}
+          />
+          <Select
+            label="Devise"
+            options={[
+              { value: '', label: 'Toutes les devises' },
+              ...CURRENCY_OPTIONS.map((opt) => ({
+                value: opt.value,
+                label: CURRENCY_LABELS[opt.value],
+              })),
+            ]}
+            value={draft.currency}
+            onChange={(e) => onChange({ currency: e.target.value as CashTransactionFiltersState['currency'] })}
+            variant="filter"
+          />
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Input
+            label="Date début"
+            type="date"
+            value={draft.transactionDateFrom}
+            onChange={(e) =>
+              onChange({
+                transactionDateFrom: e.target.value,
+                transactionDate: '',
+              })
+            }
+            className={filterInputClass}
+          />
+          <Input
+            label="Date fin"
+            type="date"
+            value={draft.transactionDateTo}
+            onChange={(e) =>
+              onChange({
+                transactionDateTo: e.target.value,
+                transactionDate: '',
+              })
+            }
+            className={filterInputClass}
+          />
+        </div>
+
+        <details className="rounded-xl border border-border/60 bg-muted/20 p-3">
+          <summary className="cursor-pointer text-sm font-medium text-muted-foreground">
+            Filtres avancés
+          </summary>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <Input
+              label="ID transaction"
+              placeholder="Ex. CTAZOA0622110118"
+              value={draft.id}
+              onChange={(e) => onChange({ id: e.target.value })}
+              className={filterInputClass}
+            />
+            <Select
+              label="Type"
+              options={[{ value: '', label: 'Tous' }, ...CASH_TRANSACTION_TYPE_OPTIONS]}
+              value={draft.type}
+              onChange={(e) => onChange({ type: e.target.value as CashTransactionFiltersState['type'] })}
+              variant="filter"
+            />
+            <Select
+              label="Statut"
+              options={statusFilterOptions()}
+              value={draft.status}
+              onChange={(e) => onChange({ status: e.target.value as CashTransactionFiltersState['status'] })}
+              variant="filter"
+            />
+            <Select
+              label="Nécessite validation"
+              options={validatedFilterOptions()}
+              value={draft.validated}
+              onChange={(e) => onChange({ validated: e.target.value as CashTransactionFiltersState['validated'] })}
+              variant="filter"
+            />
+            <Select
+              label="Type de référence"
+              options={[{ value: '', label: 'Tous' }, ...CASH_TRANSACTION_REFERENCE_TYPE_OPTIONS]}
+              value={draft.referenceType}
+              onChange={(e) =>
+                onChange({ referenceType: e.target.value as CashTransactionFiltersState['referenceType'] })
+              }
+              variant="filter"
+            />
+            <Input
+              label="ID référence"
+              placeholder="Ex. TKNKPI0622110118"
+              value={draft.referenceId}
+              onChange={(e) => onChange({ referenceId: e.target.value })}
+              className={filterInputClass}
+            />
+          </div>
+        </details>
+
+        <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
+          <Button type="button" variant="outline" className="rounded-xl px-5" onClick={onReset}>
+            Réinitialiser
+          </Button>
+          <Button type="button" variant="secondary" className="rounded-xl px-5" onClick={() => onOpenChange(false)}>
+            Annuler
+          </Button>
+          <Button type="button" className="rounded-xl px-5" onClick={onSubmit}>
+            Soumettre
+          </Button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -279,50 +322,104 @@ export function CashTransactionsListPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { user } = useAuth()
-  const issuingOfficeIri = resolveUserIssuingOfficeIri(user)
-  const { data: cashRegisters = [] } = useCashRegistersForSelect(issuingOfficeIri)
+  const userOfficeIri = resolveUserIssuingOfficeIri(user)
+  const canPickAnyOffice = hasRole(user?.roles ?? [], [ROLES.SPADM, ROLES.ADM, ROLES.MGR])
 
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [panelDraft, setPanelDraft] = useState<CashTransactionFiltersState>(emptyCashTransactionFilters)
   const [viewMode, setViewMode] = useState<ViewMode>('cards')
 
-  const cashRegisterOptions = useMemo(
-    () =>
-      cashRegisters.map((register) => ({
-        value: extractIri(register) ?? register['@id'],
-        label: `${register.code} — ${register.name}`,
-      })),
-    [cashRegisters],
-  )
-
   const page = Math.max(1, Number(searchParams.get('page')) || 1)
   const filters = useMemo(() => parseCashTransactionFiltersFromSearchParams(searchParams), [searchParams])
   const activeCount = countActiveCashTransactionFilters(filters)
 
-  const apiFilters = useMemo(
-    () => ({
-      ...cashTransactionFiltersStateToApi(filters),
-      ...(issuingOfficeIri ? { issuingOffice: issuingOfficeIri } : {}),
+  const { data: officesData } = useIssuingOffices({ itemsPerPage: 100, page: 1 })
+  const officeOptions = useMemo(() => {
+    const items = officesData?.items ?? []
+    const all = items.map((office) => ({
+      value: extractIri(office) ?? office['@id'],
+      label: office.name?.trim() || office.code || office.id,
+    }))
+    if (canPickAnyOffice) return all
+    if (!userOfficeIri) return all
+    const own = all.filter((opt) => opt.value === userOfficeIri)
+    if (own.length > 0) return own
+    return [{ value: userOfficeIri, label: 'Mon bureau' }]
+  }, [officesData?.items, canPickAnyOffice, userOfficeIri])
+
+  const selectedOfficeIri =
+    (filtersOpen ? panelDraft.issuingOffice : filters.issuingOffice).trim()
+    || (!canPickAnyOffice ? userOfficeIri : undefined)
+  const {
+    data: cashRegisters = [],
+    isLoading: cashRegistersLoading,
+    isFetching: cashRegistersFetching,
+  } = useCashRegistersForSelect(selectedOfficeIri)
+
+  const cashRegisterOptions = useMemo(
+    () =>
+      cashRegisters.map((register) => ({
+        value: extractIri(register) ?? register['@id'],
+        label: formatCashRegisterSelectLabel(register),
+      })),
+    [cashRegisters],
+  )
+
+  const officeLabelByIri = useMemo(
+    () => new Map(officeOptions.map((opt) => [opt.value, opt.label])),
+    [officeOptions],
+  )
+  const registerLabelByIri = useMemo(
+    () => new Map(cashRegisterOptions.map((opt) => [opt.value, opt.label])),
+    [cashRegisterOptions],
+  )
+
+  /** Agents : toujours scoper au bureau ; admins : filtre succursale optionnel (tous les comptes possibles). */
+  const apiFilters = useMemo(() => {
+    const fromState = cashTransactionFiltersStateToApi(filters)
+    const office =
+      fromState.issuingOffice
+      || (!canPickAnyOffice && userOfficeIri ? userOfficeIri : undefined)
+    return {
+      ...fromState,
+      ...(office ? { issuingOffice: office } : {}),
       page,
       itemsPerPage: ITEMS_PER_PAGE,
-    }),
-    [filters, issuingOfficeIri, page],
-  )
+    }
+  }, [filters, canPickAnyOffice, userOfficeIri, page])
 
   const { data, isLoading, isFetching } = useCashTransactions(apiFilters)
 
+  useEffect(() => {
+    if (!filtersOpen) return
+    setPanelDraft((prev) => {
+      if (prev.issuingOffice || canPickAnyOffice || !userOfficeIri) return prev
+      return { ...prev, issuingOffice: userOfficeIri }
+    })
+  }, [filtersOpen, canPickAnyOffice, userOfficeIri])
+
   const openFilters = () => {
-    setPanelDraft({ ...filters })
+    const next = { ...filters }
+    if (!next.issuingOffice && !canPickAnyOffice && userOfficeIri) {
+      next.issuingOffice = userOfficeIri
+    }
+    setPanelDraft(next)
     setFiltersOpen(true)
   }
-  const closeFilters = () => setFiltersOpen(false)
   const applyPanelFilters = () => {
-    setSearchParams(cashTransactionFiltersToSearchParams(panelDraft), { replace: true })
+    const next = { ...panelDraft }
+    // Agents : le bureau est imposé côté API, pas besoin de le garder dans l’URL
+    if (!canPickAnyOffice) next.issuingOffice = ''
+    setSearchParams(cashTransactionFiltersToSearchParams(next), { replace: true })
     setFiltersOpen(false)
   }
   const resetAllFilters = () => {
     setSearchParams(new URLSearchParams(), { replace: true })
-    setPanelDraft(emptyCashTransactionFilters)
+    setPanelDraft(
+      !canPickAnyOffice && userOfficeIri
+        ? { ...emptyCashTransactionFilters, issuingOffice: userOfficeIri }
+        : emptyCashTransactionFilters,
+    )
     setFiltersOpen(false)
   }
   const patchFilters = (patch: Partial<CashTransactionFiltersState>) => {
@@ -376,7 +473,7 @@ export function CashTransactionsListPage() {
             </p>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
           <div className="hidden lg:flex items-center rounded-xl border border-border/80 bg-muted/40 p-1">
             <Button
               type="button"
@@ -397,6 +494,21 @@ export function CashTransactionsListPage() {
               <Table2 className="h-4 w-4" />
             </Button>
           </div>
+          <Button
+            type="button"
+            size="sm"
+            variant={filtersOpen || activeCount > 0 ? 'default' : 'outline'}
+            className="relative rounded-full px-4 shadow-sm"
+            onClick={openFilters}
+          >
+            <SlidersHorizontal className="h-4 w-4 sm:mr-1.5" />
+            <span className="hidden sm:inline">Filtre</span>
+            {activeCount > 0 && (
+              <span className="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary-foreground/20 px-1 text-[10px] font-bold">
+                {activeCount}
+              </span>
+            )}
+          </Button>
           <Button
             type="button"
             size="sm"
@@ -429,49 +541,45 @@ export function CashTransactionsListPage() {
         </div>
       </div>
 
-      <div className="sticky top-0 z-20 -mx-4 px-4 py-2 bg-background/95 backdrop-blur lg:static lg:mx-0 lg:px-0 lg:bg-transparent">
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant={filtersOpen ? 'default' : 'outline'}
-            className="h-11 flex-1 rounded-xl relative sm:flex-none sm:px-6"
-            onClick={() => (filtersOpen ? closeFilters() : openFilters())}
-          >
-            <SlidersHorizontal className="h-4 w-4 sm:mr-2" />
-            <span>Filtres</span>
-            {activeCount > 0 && (
-              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground ring-2 ring-background sm:static sm:ml-2 sm:h-5 sm:w-5 sm:text-xs sm:ring-0">
-                {activeCount}
-              </span>
-            )}
-          </Button>
-        </div>
-      </div>
-
-      {filtersOpen && (
-        <Card className="rounded-2xl border-border/60 bg-muted/20 shadow-sm">
-          <CardContent className="space-y-5 p-5">
-            <CashTransactionFiltersFields
-              draft={panelDraft}
-              onChange={(p) => setPanelDraft((prev) => ({ ...prev, ...p }))}
-              cashRegisterOptions={cashRegisterOptions}
-            />
-            <div className="flex gap-2 border-t pt-4">
-              <Button type="button" onClick={applyPanelFilters} className="flex-1 h-11 rounded-xl font-semibold">
-                Appliquer
-              </Button>
-              {countActiveCashTransactionFilters(panelDraft) > 0 && (
-                <Button type="button" variant="outline" onClick={resetAllFilters} className="h-11 rounded-xl px-4">
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <CashTransactionFilterModal
+        open={filtersOpen}
+        onOpenChange={setFiltersOpen}
+        draft={panelDraft}
+        onChange={(p) => setPanelDraft((prev) => ({ ...prev, ...p }))}
+        officeOptions={officeOptions}
+        cashRegisterOptions={cashRegisterOptions}
+        cashRegistersLoading={cashRegistersLoading || cashRegistersFetching}
+        canPickAnyOffice={canPickAnyOffice}
+        onSubmit={applyPanelFilters}
+        onReset={resetAllFilters}
+      />
 
       {activeCount > 0 && (
         <div className="flex flex-wrap gap-2">
+          {canPickAnyOffice && filters.issuingOffice && (
+            <FilterChip
+              label={officeLabelByIri.get(filters.issuingOffice) ?? 'Succursale'}
+              onRemove={() => patchFilters({ issuingOffice: '', cashRegister: '' })}
+            />
+          )}
+          {filters.cashRegister && (
+            <FilterChip
+              label={registerLabelByIri.get(filters.cashRegister) ?? 'Compte'}
+              onRemove={() => patchFilters({ cashRegister: '' })}
+            />
+          )}
+          {filters.currency && (
+            <FilterChip
+              label={CURRENCY_LABELS[filters.currency] ?? filters.currency}
+              onRemove={() => patchFilters({ currency: '' })}
+            />
+          )}
+          {(filters.transactionDateFrom || filters.transactionDateTo) && (
+            <FilterChip
+              label={`Du ${filters.transactionDateFrom || '…'} au ${filters.transactionDateTo || '…'}`}
+              onRemove={() => patchFilters({ transactionDateFrom: '', transactionDateTo: '' })}
+            />
+          )}
           {filters.id && <FilterChip label={`ID ${filters.id}`} onRemove={() => patchFilters({ id: '' })} />}
           {filters.type && (
             <FilterChip
@@ -491,9 +599,6 @@ export function CashTransactionsListPage() {
               onRemove={() => patchFilters({ status: '' })}
             />
           )}
-          {filters.cashRegister && (
-            <FilterChip label="Caisse" onRemove={() => patchFilters({ cashRegister: '' })} />
-          )}
           {filters.referenceType && (
             <FilterChip
               label={CASH_TRANSACTION_REFERENCE_TYPE_LABELS[filters.referenceType] ?? filters.referenceType}
@@ -507,18 +612,6 @@ export function CashTransactionsListPage() {
             <FilterChip
               label={`Transaction ${formatDate(filters.transactionDate)}`}
               onRemove={() => patchFilters({ transactionDate: '' })}
-            />
-          )}
-          {(filters.transactionDateFrom || filters.transactionDateTo) && (
-            <FilterChip
-              label={`Du ${filters.transactionDateFrom || '…'} au ${filters.transactionDateTo || '…'}`}
-              onRemove={() => patchFilters({ transactionDateFrom: '', transactionDateTo: '' })}
-            />
-          )}
-          {filters.currency && (
-            <FilterChip
-              label={`Devise ${filters.currency}`}
-              onRemove={() => patchFilters({ currency: '' })}
             />
           )}
           {filters.createdAt && (
