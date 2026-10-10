@@ -311,11 +311,27 @@ export function sortCashTransactionsByNewestFirst<
   })
 }
 
-/** Transactions les plus anciennes en premier (rapport de caisse chronologique) */
+/**
+ * Transactions les plus anciennes en premier (journal / rapport de caisse).
+ * Priorité : date de transaction → date de création → id
+ * (évite que des dépenses saisies le même jour « sautent » à cause du reverse sur createdAt).
+ */
 export function sortCashTransactionsByOldestFirst<
   T extends { createdAt?: string; transactionDate?: string; id?: string | number },
 >(transactions: T[]): T[] {
-  return sortCashTransactionsByNewestFirst(transactions).reverse()
+  return [...transactions].sort((a, b) => {
+    const dateA = parseSortTimestamp(a.transactionDate) || parseSortTimestamp(a.createdAt)
+    const dateB = parseSortTimestamp(b.transactionDate) || parseSortTimestamp(b.createdAt)
+    if (dateA !== dateB) return dateA - dateB
+
+    const createdA = parseSortTimestamp(a.createdAt)
+    const createdB = parseSortTimestamp(b.createdAt)
+    if (createdA !== createdB) return createdA - createdB
+
+    const idA = String(a.id ?? '')
+    const idB = String(b.id ?? '')
+    return idA.localeCompare(idB, undefined, { numeric: true })
+  })
 }
 
 export interface CashReportCurrencySplit {

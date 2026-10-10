@@ -1,11 +1,13 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { BRAND } from '@/constants/brand'
-import { FREIGHT_PAYMENT_MODE } from '@/constants/freight'
 import { buildFreightManifestFilters } from '@/lib/freight-filters'
 import {
   filterFreightShipmentsForManifest,
+  getFreightAcompteAmount,
+  getFreightCashAmount,
   getFreightCurrency,
+  getFreightPdAmount,
   sortFreightShipmentsForManifest,
 } from '@/lib/freight'
 import { freightService } from '@/services/freight.service'
@@ -55,13 +57,13 @@ const COLUMN_WIDTHS_MM = {
   netUsd: 12,
   netCdf: 14,
   cash: 10,
-  partial: 9,
-  arrival: 9,
-  soldeUsd: 12,
-  soldeCdf: 14,
-  resteMnt: 12,
-  resteSolde: 12,
-  obs: 25,
+  partial: 11,
+  arrival: 10,
+  soldeUsd: 11,
+  soldeCdf: 13,
+  resteMnt: 11,
+  resteSolde: 11,
+  obs: 26,
 } as const
 
 const TABLE_WIDTH_MM = USABLE_TABLE_WIDTH_MM
@@ -191,7 +193,14 @@ function buildFreightManifestRows(shipments: FreightShipment[]): ManifestTableBu
   let totalAmountCdf = 0
   let totalPaidUsd = 0
   let totalPaidCdf = 0
-  let totalReste = 0
+  let totalCashUsd = 0
+  let totalCashCdf = 0
+  let totalAcompteUsd = 0
+  let totalAcompteCdf = 0
+  let totalPdUsd = 0
+  let totalPdCdf = 0
+  let totalResteUsd = 0
+  let totalResteCdf = 0
 
   for (const shipment of shipments) {
     const currency = getFreightCurrency(shipment)
@@ -203,22 +212,33 @@ function buildFreightManifestRows(shipments: FreightShipment[]): ManifestTableBu
 
     totalPackages += packageCount
     totalKg += totalWeight
-    totalReste += remainingAmount
 
     if (currency === CURRENCY.USD) {
       totalAmountUsd += totalAmount
       totalPaidUsd += paidAmount
+      totalResteUsd += remainingAmount
       runningNetUsd += paidAmount
     } else {
       totalAmountCdf += totalAmount
       totalPaidCdf += paidAmount
+      totalResteCdf += remainingAmount
       runningNetCdf += paidAmount
     }
     runningReste += remainingAmount
 
-    const isCash = shipment.paymentMode === FREIGHT_PAYMENT_MODE.CASH
-    const isAcc = shipment.paymentMode === FREIGHT_PAYMENT_MODE.ACC
-    const isPta = shipment.paymentMode === FREIGHT_PAYMENT_MODE.PTA
+    const cashAmount = getFreightCashAmount(shipment)
+    const acompteAmount = getFreightAcompteAmount(shipment)
+    const pdAmount = getFreightPdAmount(shipment)
+
+    if (currency === CURRENCY.USD) {
+      totalCashUsd += cashAmount
+      totalAcompteUsd += acompteAmount
+      totalPdUsd += pdAmount
+    } else {
+      totalCashCdf += cashAmount
+      totalAcompteCdf += acompteAmount
+      totalPdCdf += pdAmount
+    }
 
     const netUsd = currency === CURRENCY.USD ? formatAmountOrDash(paidAmount, CURRENCY.USD) : DASH
     const netCdf = currency === CURRENCY.CDF ? formatAmountOrDash(paidAmount, CURRENCY.CDF) : DASH
@@ -237,9 +257,9 @@ function buildFreightManifestRows(shipments: FreightShipment[]): ManifestTableBu
       totalDisplay,
       netUsd,
       netCdf,
-      isCash ? 'CASH' : '',
-      isAcc ? 'ACC' : '',
-      isPta ? 'PTA' : '',
+      formatAmountOrDash(cashAmount, currency),
+      formatAmountOrDash(acompteAmount, currency),
+      formatAmountOrDash(pdAmount, currency),
       formatAmountOrDash(runningNetUsd, CURRENCY.USD),
       formatAmountOrDash(runningNetCdf, CURRENCY.CDF),
       formatAmountOrDash(remainingAmount, currency),
@@ -254,6 +274,26 @@ function buildFreightManifestRows(shipments: FreightShipment[]): ManifestTableBu
     totalAmountCdf > 0 ? formatAmountOrDash(totalAmountCdf, CURRENCY.CDF, true) : null,
   ].filter(Boolean).join(' / ') || DASH
 
+  const cashSummary = [
+    totalCashUsd > 0 ? formatAmountOrDash(totalCashUsd, CURRENCY.USD, true) : null,
+    totalCashCdf > 0 ? formatAmountOrDash(totalCashCdf, CURRENCY.CDF, true) : null,
+  ].filter(Boolean).join(' / ') || DASH
+
+  const acompteSummary = [
+    totalAcompteUsd > 0 ? formatAmountOrDash(totalAcompteUsd, CURRENCY.USD, true) : null,
+    totalAcompteCdf > 0 ? formatAmountOrDash(totalAcompteCdf, CURRENCY.CDF, true) : null,
+  ].filter(Boolean).join(' / ') || DASH
+
+  const pdSummary = [
+    totalPdUsd > 0 ? formatAmountOrDash(totalPdUsd, CURRENCY.USD, true) : null,
+    totalPdCdf > 0 ? formatAmountOrDash(totalPdCdf, CURRENCY.CDF, true) : null,
+  ].filter(Boolean).join(' / ') || DASH
+
+  const resteSummary = [
+    totalResteUsd > 0 ? formatAmountOrDash(totalResteUsd, CURRENCY.USD, true) : null,
+    totalResteCdf > 0 ? formatAmountOrDash(totalResteCdf, CURRENCY.CDF, true) : null,
+  ].filter(Boolean).join(' / ') || DASH
+
   rows.push([
     ltaCount,
     '',
@@ -265,13 +305,13 @@ function buildFreightManifestRows(shipments: FreightShipment[]): ManifestTableBu
     totalAmountLabel,
     formatAmountOrDash(totalPaidUsd, CURRENCY.USD),
     formatAmountOrDash(totalPaidCdf, CURRENCY.CDF),
-    '',
-    '',
-    '',
+    cashSummary,
+    acompteSummary,
+    pdSummary,
     formatAmountOrDash(totalPaidUsd, CURRENCY.USD),
     formatAmountOrDash(totalPaidCdf, CURRENCY.CDF),
-    formatAmountOrDash(totalReste, CURRENCY.USD),
-    formatAmountOrDash(totalReste, CURRENCY.USD),
+    resteSummary,
+    resteSummary,
     '',
   ])
 
@@ -395,7 +435,7 @@ export async function generateFreightManifestPdf(params: FreightManifestParams):
         { content: 'P. U', rowSpan: 2, styles: { valign: 'middle' } },
         { content: 'TOTAL\nEN $', rowSpan: 2, styles: { valign: 'middle' } },
         { content: 'NET PAYER', colSpan: 2, styles: { halign: 'center' } },
-        { content: 'ETATS', colSpan: 3, styles: { halign: 'center' } },
+        { content: 'PAIEMENT', colSpan: 3, styles: { halign: 'center' } },
         { content: 'SOLDE', colSpan: 2, styles: { halign: 'center' } },
         { content: 'RESTE', colSpan: 2, styles: { halign: 'center' } },
         { content: 'OBS.', rowSpan: 2, styles: { valign: 'middle' } },
@@ -404,8 +444,8 @@ export async function generateFreightManifestPdf(params: FreightManifestParams):
         'USD',
         'CDF',
         'CASH',
-        'ACC',
-        'PTA',
+        'ACOMPTE',
+        'PD',
         'USD',
         'CDF',
         'MNT',
@@ -463,7 +503,7 @@ export async function generateFreightManifestPdf(params: FreightManifestParams):
         if (data.column.index === 7) {
           data.cell.styles.textColor = TOTAL_RED
         }
-        if ([8, 9, 13, 14, 15, 16].includes(data.column.index)) {
+        if ([8, 9, 10, 11, 12, 13, 14, 15, 16].includes(data.column.index)) {
           data.cell.styles.textColor = NET_BLUE
         }
         return

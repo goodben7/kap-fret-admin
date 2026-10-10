@@ -42,6 +42,10 @@ export interface FreightShipment extends HydraResource {
   currency?: string
   paidAmount: string
   remainingAmount: string
+  /** Acompte encaissé au départ (mode ACC). Présent après migration API. */
+  acompteAmount?: string
+  /** Montant à recouvrer à destination (PD). Présent après migration API. */
+  pdAmount?: string
   paymentMode: FreightPaymentMode
   status: FreightStatus
   sentAt?: string

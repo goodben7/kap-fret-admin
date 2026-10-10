@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
+  Banknote,
   Calendar,
   ChevronRight,
   LayoutGrid,
@@ -13,6 +14,7 @@ import {
   SlidersHorizontal,
   Table2,
   User,
+  Wallet,
   X,
   FileText,
   Send,
@@ -36,7 +38,12 @@ import {
   parseFreightFiltersFromSearchParams,
   type FreightFiltersState,
 } from '@/lib/freight-filters'
-import { formatFreightWeight } from '@/lib/freight'
+import {
+  formatFreightMoneyByCurrency,
+  formatFreightWeight,
+  summarizeFreightPaymentKpis,
+  type FreightPaymentKpis,
+} from '@/lib/freight'
 import { normalizeCurrency, CURRENCY_LABELS, currencyFilterOptions, type Currency } from '@/constants/ticket'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -53,9 +60,85 @@ import { STORAGE_KEYS } from '@/constants/storage'
 import type { FreightShipment } from '@/types/freight-shipment'
 
 const ITEMS_PER_PAGE = 15
+/** Plafond pour agréger les KPI sur la vue filtrée (aligné sur le tri client freight). */
+const KPI_FETCH_CAP = 500
 
 const filterInputClass =
   'h-11 rounded-xl border-transparent bg-muted/40 focus-visible:bg-background focus-visible:border-input'
+
+function FreightPaymentKpiStrip({
+  kpis,
+  isLoading,
+  truncated,
+}: {
+  kpis: FreightPaymentKpis | null
+  isLoading?: boolean
+  truncated?: boolean
+}) {
+  const cards = [
+    {
+      key: 'cash',
+      label: 'Total Cash',
+      hint: 'Encaissé au départ (intégral)',
+      value: kpis ? formatFreightMoneyByCurrency(kpis.cashCollected) : '—',
+      icon: Banknote,
+      accent: 'bg-emerald-500/10 text-emerald-700',
+    },
+    {
+      key: 'acc',
+      label: 'Total Acomptes',
+      hint: 'Versés au départ (ACC)',
+      value: kpis ? formatFreightMoneyByCurrency(kpis.depositsCollected) : '—',
+      icon: Wallet,
+      accent: 'bg-brand-orange/10 text-brand-orange',
+    },
+    {
+      key: 'pd',
+      label: 'Total PD',
+      hint: 'À recouvrer à destination',
+      value: kpis ? formatFreightMoneyByCurrency(kpis.pdOutstanding) : '—',
+      icon: Scale,
+      accent: 'bg-primary/10 text-primary',
+    },
+  ] as const
+
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        {cards.map((card) => (
+          <Card key={card.key} className="rounded-2xl border-border/80 shadow-sm">
+            <CardContent className="flex items-start gap-3 p-4">
+              <span
+                className={cn(
+                  'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl',
+                  card.accent,
+                )}
+              >
+                <card.icon className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-muted-foreground">{card.label}</p>
+                {isLoading ? (
+                  <div className="mt-2 h-6 w-24 animate-pulse rounded bg-muted" />
+                ) : (
+                  <p className="mt-0.5 truncate text-base font-bold tabular-nums tracking-tight">
+                    {card.value}
+                  </p>
+                )}
+                <p className="mt-0.5 text-[11px] text-muted-foreground">{card.hint}</p>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      {truncated && (
+        <p className="text-[11px] text-muted-foreground">
+          Totaux calculés sur les {KPI_FETCH_CAP} premières expéditions de la vue filtrée.
+        </p>
+      )}
+    </div>
+  )
+}
 
 type FreightViewMode = 'cards' | 'table'
 
@@ -462,6 +545,19 @@ export function FreightListPage() {
     itemsPerPage: ITEMS_PER_PAGE,
   })
 
+  /** Même filtres que la liste, volume élargi pour les sous-totaux Cash / Acomptes / PD. */
+  const { data: kpiData, isLoading: kpiLoading, isFetching: kpiFetching } = useFreight({
+    ...filters,
+    page: 1,
+    itemsPerPage: KPI_FETCH_CAP,
+  })
+
+  const paymentKpis = useMemo(
+    () => summarizeFreightPaymentKpis(kpiData?.items ?? []),
+    [kpiData?.items],
+  )
+  const kpiTruncated = (kpiData?.totalItems ?? 0) > KPI_FETCH_CAP
+
   const activeCount = countActiveFreightFilters(filters)
   const panelDraftCount = countActiveFreightFilters(panelDraft)
 
@@ -569,6 +665,12 @@ export function FreightListPage() {
           </Button>
         </div>
       </div>
+
+      <FreightPaymentKpiStrip
+        kpis={paymentKpis}
+        isLoading={kpiLoading || kpiFetching}
+        truncated={kpiTruncated}
+      />
 
       <div className="sticky top-0 z-20 -mx-4 px-4 py-2 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:static lg:mx-0 lg:px-0 lg:py-0 lg:bg-transparent lg:z-auto">
         <div className="flex gap-2">

@@ -63,7 +63,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { formatMoney, formatDateTime, cn } from '@/lib/utils'
 import {
   formatFreightWeight,
+  getFreightAcompteAmount,
   getFreightIssuingOfficeLabel,
+  getFreightPdAmount,
   hasFreightObservations,
   packageToFormDefaults,
   shouldCollectFreightRemainingOnDelivery,
@@ -369,6 +371,8 @@ export function FreightDetailPage() {
   const money = (amount: string | number) => formatMoney(parseFloat(String(amount)) || 0)
   const totalAmount = parseFloat(shipment.totalAmount) || 0
   const remainingAmount = parseFloat(shipment.remainingAmount) || 0
+  const acompteAmount = getFreightAcompteAmount(shipment)
+  const pdAmount = getFreightPdAmount(shipment)
   const showObservations = hasFreightObservations(shipment.observations)
 
   const statusOptions = FREIGHT_STATUS_TRANSITIONS.filter((value) => {
@@ -572,6 +576,12 @@ export function FreightDetailPage() {
           <DetailRow label="Frais documentaires" value={money(shipment.ltaFees)} />
           <DetailRow label="Mode" value={FREIGHT_PAYMENT_MODE_LABELS[shipment.paymentMode]} />
           <DetailRow label="Payé" value={money(shipment.paidAmount)} />
+          <DetailRow label="Acompte" value={money(String(acompteAmount))} />
+          <DetailRow
+            label="PD"
+            value={money(String(pdAmount))}
+            highlight={pdAmount > 0}
+          />
           <DetailRow
             label="Reste"
             value={money(shipment.remainingAmount)}

@@ -5,6 +5,7 @@ import { convertAmountBetweenCurrencyCodes } from '@/lib/exchange-rate'
 import { formatExchangeRateForPayload } from '@/lib/mixed-payment'
 import { getCheckpointDisplayName, getCheckpointLabelFromRef } from '@/lib/checkpoint'
 import { getTodayTravelDateInput } from '@/lib/ticket'
+import { formatMoney } from '@/lib/utils'
 import type {
   FreightPackage,
   FreightShipment,
@@ -386,6 +387,37 @@ export function getFreightCurrency(shipment: FreightShipment): Currency {
   return normalizeCurrency(shipment.currency)
 }
 
+/** Cash encaissé au départ (mode CASH). Fallback si champ API absent. */
+export function getFreightCashAmount(shipment: FreightShipment): number {
+  if (shipment.paymentMode !== FREIGHT_PAYMENT_MODE.CASH) return 0
+  const paid = parseFloat(shipment.paidAmount) || 0
+  if (paid > 0) return paid
+  return parseFloat(shipment.totalAmount) || 0
+}
+
+/** Acompte au départ (mode ACC). Préfère `acompteAmount` API, sinon dérive de `paidAmount`. */
+export function getFreightAcompteAmount(shipment: FreightShipment): number {
+  if (shipment.acompteAmount != null && shipment.acompteAmount !== '') {
+    return parseFloat(shipment.acompteAmount) || 0
+  }
+  if (shipment.paymentMode !== FREIGHT_PAYMENT_MODE.ACC) return 0
+  return parseFloat(shipment.paidAmount) || 0
+}
+
+/** PD (payer à destination). Préfère `pdAmount` API, sinon dérive de `remainingAmount`. */
+export function getFreightPdAmount(shipment: FreightShipment): number {
+  if (shipment.pdAmount != null && shipment.pdAmount !== '') {
+    return parseFloat(shipment.pdAmount) || 0
+  }
+  if (
+    shipment.paymentMode !== FREIGHT_PAYMENT_MODE.ACC
+    && shipment.paymentMode !== FREIGHT_PAYMENT_MODE.PTA
+  ) {
+    return 0
+  }
+  return parseFloat(shipment.remainingAmount) || 0
+}
+
 /** Encaissement du solde requis avant passage au statut Livré (acompte ou à l'arrivée). */
 export function shouldCollectFreightRemainingOnDelivery(shipment: FreightShipment): boolean {
   const remaining = parseFloat(shipment.remainingAmount) || 0
@@ -415,6 +447,68 @@ export function getFreightSenderNumber(shipment: FreightShipment): string {
 
 export function filterFreightShipmentsForManifest(shipments: FreightShipment[]): FreightShipment[] {
   return shipments.filter((shipment) => shipment.status !== FREIGHT_STATUS.CANCELLED)
+}
+
+/** Totaux paiement par devise (Cash / Acomptes / PD). */
+export type FreightMoneyByCurrency = Partial<Record<Currency, number>>
+
+export interface FreightPaymentKpis {
+  /** Encaissé au départ en mode Cash (intégralité). */
+  cashCollected: FreightMoneyByCurrency
+  /** Acomptes encaissés au départ (mode ACC). */
+  depositsCollected: FreightMoneyByCurrency
+  /** Reste à recouvrer à destination (PD). */
+  pdOutstanding: FreightMoneyByCurrency
+  /** Expéditions prises en compte (hors annulées). */
+  shipmentCount: number
+}
+
+function addMoneyByCurrency(
+  bag: FreightMoneyByCurrency,
+  currency: Currency,
+  amount: number,
+): void {
+  if (!Number.isFinite(amount) || amount <= 0) return
+  bag[currency] = (bag[currency] ?? 0) + amount
+}
+
+/**
+ * KPI paiement fret pour une liste filtrée.
+ * - Cash = encaissement départ mode CASH
+ * - Acomptes = `acompteAmount` (ou paidAmount ACC en fallback)
+ * - PD = `pdAmount` (ou remainingAmount ACC/PTA en fallback)
+ * Les LTA annulées sont exclues.
+ */
+export function summarizeFreightPaymentKpis(shipments: FreightShipment[]): FreightPaymentKpis {
+  const cashCollected: FreightMoneyByCurrency = {}
+  const depositsCollected: FreightMoneyByCurrency = {}
+  const pdOutstanding: FreightMoneyByCurrency = {}
+
+  const active = shipments.filter((shipment) => shipment.status !== FREIGHT_STATUS.CANCELLED)
+
+  for (const shipment of active) {
+    const currency = getFreightCurrency(shipment)
+    addMoneyByCurrency(cashCollected, currency, getFreightCashAmount(shipment))
+    addMoneyByCurrency(depositsCollected, currency, getFreightAcompteAmount(shipment))
+    addMoneyByCurrency(pdOutstanding, currency, getFreightPdAmount(shipment))
+  }
+
+  return {
+    cashCollected,
+    depositsCollected,
+    pdOutstanding,
+    shipmentCount: active.length,
+  }
+}
+
+export function formatFreightMoneyByCurrency(bag: FreightMoneyByCurrency): string {
+  const parts: string[] = []
+  for (const code of [CURRENCY.USD, CURRENCY.CDF] as const) {
+    const amount = bag[code]
+    if (amount == null || amount <= 0) continue
+    parts.push(formatMoney(amount, code))
+  }
+  return parts.length > 0 ? parts.join(' · ') : formatMoney(0, CURRENCY.USD)
 }
 
 export function sortFreightShipmentsForManifest(shipments: FreightShipment[]): FreightShipment[] {
