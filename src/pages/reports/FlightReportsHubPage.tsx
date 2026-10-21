@@ -50,7 +50,7 @@ const cards = [
   },
   {
     title: 'Soldes bagages',
-    description: 'Check-ins ACC/PTA avec reste à payer pour le vol.',
+    description: 'Check-ins ACC/PDA avec reste à payer pour le vol.',
     icon: Scale,
     action: 'pendingBaggage' as const,
   },

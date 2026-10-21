@@ -435,7 +435,7 @@ export function getTicketIssuingOfficeLabel(ticket: Ticket): string {
 }
 
 function toFormPaymentMode(mode: PaymentMode): TicketFormData['paymentMode'] {
-  if (mode === PAYMENT_MODE.CASH || mode === PAYMENT_MODE.ACC || mode === PAYMENT_MODE.PTA) {
+  if (mode === PAYMENT_MODE.CASH || mode === PAYMENT_MODE.ACC || mode === PAYMENT_MODE.PDA || mode === PAYMENT_MODE.PTA) {
     return mode
   }
   return PAYMENT_MODE.CASH

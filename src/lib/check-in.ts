@@ -465,13 +465,13 @@ export function toCheckInCreatePayload(data: CheckInCreateFormData): CheckInCrea
 
   if (
     excess > 0
-    && paymentMode !== CHECK_IN_PAYMENT_MODE.PTA
+    && paymentMode !== CHECK_IN_PAYMENT_MODE.PDA && paymentMode !== CHECK_IN_PAYMENT_MODE.PTA
     && data.cashRegister?.trim()
   ) {
     payload.cashRegister = data.cashRegister
   }
 
-  if (data.mixedPayment && excess > 0 && paymentMode !== CHECK_IN_PAYMENT_MODE.PTA) {
+  if (data.mixedPayment && excess > 0 && paymentMode !== CHECK_IN_PAYMENT_MODE.PDA && paymentMode !== CHECK_IN_PAYMENT_MODE.PTA) {
     payload.paidAmountUsd = formatDecimal(data.paidAmountUsd || '0')
     payload.paidAmountCdf = formatDecimal(data.paidAmountCdf || '0')
     const exchangeRate = formatExchangeRateForPayload(data.exchangeRate)
@@ -515,13 +515,13 @@ export function toCheckInBatchPayload(
 
   if (
     excess > 0
-    && paymentMode !== CHECK_IN_PAYMENT_MODE.PTA
+    && paymentMode !== CHECK_IN_PAYMENT_MODE.PDA && paymentMode !== CHECK_IN_PAYMENT_MODE.PTA
     && data.cashRegister?.trim()
   ) {
     payload.cashRegister = data.cashRegister
   }
 
-  if (data.mixedPayment && excess > 0 && paymentMode !== CHECK_IN_PAYMENT_MODE.PTA) {
+  if (data.mixedPayment && excess > 0 && paymentMode !== CHECK_IN_PAYMENT_MODE.PDA && paymentMode !== CHECK_IN_PAYMENT_MODE.PTA) {
     payload.paidAmountUsd = formatDecimal(data.paidAmountUsd || '0')
     payload.paidAmountCdf = formatDecimal(data.paidAmountCdf || '0')
     const exchangeRate = formatExchangeRateForPayload(data.exchangeRate)

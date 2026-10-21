@@ -209,7 +209,7 @@ export function CheckInPaymentModal({
       open={open}
       onOpenChange={handleOpenChange}
       title="Encaisser le solde bagages"
-      description="Règlement du reste à payer (acompte ACC ou PTA) à destination."
+      description="Règlement du reste à payer (acompte ACC ou PDA) à destination."
       className="rounded-2xl sm:max-w-lg"
     >
       <form onSubmit={(e) => void submit(e)} className="space-y-4">

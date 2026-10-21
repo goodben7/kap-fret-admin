@@ -217,7 +217,7 @@ export function CheckInPendingPaymentsModal({
       open={open}
       onOpenChange={handleOpenChange}
       title="Soldes bagages en attente"
-      description="PDF des check-ins avec reste à payer (ACC / PTA) pour un vol."
+      description="PDF des check-ins avec reste à payer (ACC / PDA) pour un vol."
       className={cn(
         'rounded-2xl',
         previewUrl ? 'sm:max-w-[min(96vw,72rem)]' : 'sm:max-w-xl',

@@ -397,7 +397,7 @@ export function FreightShipmentForm({
   useEffect(() => {
     if (isCashPayment) {
       setValue('paidAmount', computedTotalAmount, { shouldValidate: true })
-    } else if (paymentMode === FREIGHT_PAYMENT_MODE.PTA) {
+    } else if ((paymentMode === FREIGHT_PAYMENT_MODE.PDA || paymentMode === FREIGHT_PAYMENT_MODE.PTA)) {
       setValue('paidAmount', '0.00', { shouldValidate: true })
     }
   }, [isCashPayment, paymentMode, computedTotalAmount, setValue])

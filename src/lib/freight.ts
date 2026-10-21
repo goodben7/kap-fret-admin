@@ -418,7 +418,7 @@ export function getFreightPdAmount(shipment: FreightShipment): number {
   }
   if (
     shipment.paymentMode !== FREIGHT_PAYMENT_MODE.ACC
-    && shipment.paymentMode !== FREIGHT_PAYMENT_MODE.PTA
+    && shipment.paymentMode !== FREIGHT_PAYMENT_MODE.PDA && shipment.paymentMode !== FREIGHT_PAYMENT_MODE.PTA
   ) {
     return 0
   }
@@ -431,7 +431,7 @@ export function shouldCollectFreightRemainingOnDelivery(shipment: FreightShipmen
   if (remaining <= 0) return false
   return (
     shipment.paymentMode === FREIGHT_PAYMENT_MODE.ACC
-    || shipment.paymentMode === FREIGHT_PAYMENT_MODE.PTA
+    || shipment.paymentMode === FREIGHT_PAYMENT_MODE.PDA || shipment.paymentMode === FREIGHT_PAYMENT_MODE.PTA
   )
 }
 
@@ -487,7 +487,7 @@ function addMoneyByCurrency(
  * KPI paiement fret pour une liste filtrée.
  * - Cash = encaissement départ mode CASH
  * - Acomptes = `acompteAmount` (ou paidAmount ACC en fallback)
- * - PD = `pdAmount` (ou remainingAmount ACC/PTA en fallback)
+ * - PD = `pdAmount` (ou remainingAmount ACC/PDA en fallback)
  * Les LTA annulées sont exclues.
  */
 export function summarizeFreightPaymentKpis(shipments: FreightShipment[]): FreightPaymentKpis {

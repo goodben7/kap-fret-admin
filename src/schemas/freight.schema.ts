@@ -75,7 +75,7 @@ export const freightShipmentSchema = z
   paymentMode: z.enum([
     FREIGHT_PAYMENT_MODE.CASH,
     FREIGHT_PAYMENT_MODE.ACC,
-    FREIGHT_PAYMENT_MODE.PTA,
+    FREIGHT_PAYMENT_MODE.PDA,
   ]),
   observations: z.string().optional(),
   cashRegister: z.string().optional(),
@@ -186,7 +186,7 @@ export const freightShipmentPatchSchema = z
   paymentMode: z.enum([
     FREIGHT_PAYMENT_MODE.CASH,
     FREIGHT_PAYMENT_MODE.ACC,
-    FREIGHT_PAYMENT_MODE.PTA,
+    FREIGHT_PAYMENT_MODE.PDA,
   ]),
   observations: z.string().optional(),
 })

@@ -66,6 +66,8 @@ export const FREIGHT_STATUS_TRANSITIONS = [
 export const FREIGHT_PAYMENT_MODE = {
   CASH: 'CASH',
   ACC: 'ACC',
+  PDA: 'PDA',
+  /** @deprecated legacy — traiter comme PDA */
   PTA: 'PTA',
 } as const
 
@@ -74,12 +76,19 @@ export type FreightPaymentMode = (typeof FREIGHT_PAYMENT_MODE)[keyof typeof FREI
 export const FREIGHT_PAYMENT_MODE_LABELS: Record<FreightPaymentMode, string> = {
   CASH: 'Cash',
   ACC: 'ACC (acompte)',
-  PTA: 'PTA (à destination)',
+  PDA: 'PDA (à destination)',
+  PTA: 'PDA (à destination)',
 }
 
-export const FREIGHT_PAYMENT_MODE_OPTIONS: { value: FreightPaymentMode; label: string }[] = (
-  Object.entries(FREIGHT_PAYMENT_MODE_LABELS) as [FreightPaymentMode, string][]
-).map(([value, label]) => ({ value, label }))
+export function isFreightPayAtDestination(mode: string | undefined | null): boolean {
+  return mode === FREIGHT_PAYMENT_MODE.PDA || mode === FREIGHT_PAYMENT_MODE.PTA
+}
+
+export const FREIGHT_PAYMENT_MODE_OPTIONS: { value: FreightPaymentMode; label: string }[] = [
+  FREIGHT_PAYMENT_MODE.CASH,
+  FREIGHT_PAYMENT_MODE.ACC,
+  FREIGHT_PAYMENT_MODE.PDA,
+].map((value) => ({ value, label: FREIGHT_PAYMENT_MODE_LABELS[value] }))
 
 export function freightPaymentModeFilterOptions(allLabel = 'Tous les modes') {
   return [{ value: '', label: allLabel }, ...FREIGHT_PAYMENT_MODE_OPTIONS]

@@ -1,7 +1,11 @@
 import { jsPDF, GState } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { BRAND } from '@/constants/brand'
-import { CHECK_IN_STATUS, CHECK_IN_EXCESS_PRICE_PER_KG_USD } from '@/constants/check-in'
+import {
+  CHECK_IN_STATUS,
+  CHECK_IN_EXCESS_PRICE_PER_KG_USD,
+  CHECK_IN_PAYMENT_MODE,
+} from '@/constants/check-in'
 import {
   buildCheckInManifestFilters,
   type CheckInFilters,
@@ -39,6 +43,10 @@ const NAVY = { r: 11, g: 33, b: 61 }
 const ORANGE = { r: 245, g: 124, b: 0 }
 /** En-tête tableau — bleu clair (modèle papier) */
 const HEADER_FILL: [number, number, number] = [173, 216, 230]
+/** Sous-en-têtes USD/CDF — vert clair (modèle papier) */
+const CURRENCY_HEADER_FILL: [number, number, number] = [198, 224, 180]
+/** Colonne P.D — bleu gris (modèle papier) */
+const PD_COLUMN_FILL: [number, number, number] = [200, 220, 235]
 const GRID_COLOR: [number, number, number] = [40, 40, 40]
 
 const MARGIN_X = 10
@@ -52,25 +60,27 @@ const USABLE_TABLE_WIDTH_MM = 297 - MARGIN_X * 2
 /**
  * Colonnes alignées sur le modèle papier :
  * N° | NOMS | N° BILLETS | POIDS CHECK-IN | POIDS TOTAL | FRANCHISES |
- * BAGAGES A MAIN | TOTAL EXCEDENTS | PRIX | NET USD/CDF | SOLDE USD/CDF | OBSERVAT°
+ * BAGAGES A MAIN | EXCEDENTS | PRIX | MNT | NET USD/CDF | SOLDE USD/CDF | P.D | OBSERVATION
  */
-const COLUMN_COUNT = 14
+const COLUMN_COUNT = 16
 
 const COLUMN_WIDTHS_MM = {
   index: 7,
-  name: 40,
-  ticket: 22,
-  checkInWeight: 16,
-  totalWeight: 16,
-  franchise: 15,
-  hand: 14,
-  excess: 15,
-  prix: 10,
-  netToPayUsd: 12,
-  netToPayCdf: 12,
-  balanceUsd: 12,
-  balanceCdf: 12,
-  observations: 74,
+  name: 36,
+  ticket: 20,
+  checkInWeight: 15,
+  totalWeight: 15,
+  franchise: 14,
+  hand: 13,
+  excess: 13,
+  prix: 9,
+  mnt: 12,
+  netToPayUsd: 11,
+  netToPayCdf: 11,
+  balanceUsd: 11,
+  balanceCdf: 11,
+  pd: 10,
+  observations: 69,
 } as const
 
 const TABLE_WIDTH_MM = USABLE_TABLE_WIDTH_MM
@@ -174,6 +184,33 @@ function emptyManifestRow(): string[] {
   return row
 }
 
+function formatRowIndex(index: number): string {
+  return String(index + 1).padStart(2, '0')
+}
+
+/** Montant excédent (MNT) — total dû en $. */
+function formatMntCell(checkIn: CheckIn): string {
+  const netToPay = parseFloat(String(checkIn.netToPay ?? '').replace(',', '.')) || 0
+  if (netToPay > 0) return formatAmountCell(netToPay, CURRENCY.USD)
+  const excessKg = parseFloat(String(checkIn.excessWeightKg ?? '').replace(',', '.')) || 0
+  if (excessKg <= 0) return '—'
+  return formatAmountCell(excessKg * CHECK_IN_EXCESS_PRICE_PER_KG_USD, CURRENCY.USD)
+}
+
+/** Colonne P.D — reste à payer à destination (ACC / PDA). */
+function formatPdCell(checkIn: CheckIn): string {
+  const explicit = parseFloat(String(checkIn.pdAmount ?? '').replace(',', '.'))
+  if (Number.isFinite(explicit) && explicit > 0) {
+    return formatAmountCell(explicit, getCheckInPaymentCurrency(checkIn))
+  }
+  const mode = checkIn.paymentMode
+  if (mode === CHECK_IN_PAYMENT_MODE.PDA || mode === CHECK_IN_PAYMENT_MODE.PTA || mode === CHECK_IN_PAYMENT_MODE.ACC) {
+    const remaining = getCheckInRemainingAmount(checkIn)
+    return remaining > 0 ? formatAmountCell(remaining, getCheckInPaymentCurrency(checkIn)) : '—'
+  }
+  return '—'
+}
+
 function buildCheckInManifestRows(checkIns: CheckIn[]): ManifestTableBuildResult {
   const sortedCheckIns = sortCheckInsForManifest(checkIns)
   const rows: string[][] = []
@@ -182,6 +219,8 @@ function buildCheckInManifestRows(checkIns: CheckIn[]): ManifestTableBuildResult
   let runningNetCdf = 0
   let runningBalanceUsd = 0
   let runningBalanceCdf = 0
+  let runningMnt = 0
+  let runningPd = 0
   let rowIndex = 0
 
   for (let index = 0; index < sortedCheckIns.length; index += 1) {
@@ -189,7 +228,17 @@ function buildCheckInManifestRows(checkIns: CheckIn[]): ManifestTableBuildResult
     const netToPay = parseFloat(checkIn.netToPay) || 0
     const remaining = getCheckInRemainingAmount(checkIn)
     const paymentCurrency = getCheckInPaymentCurrency(checkIn)
+    const pdAmount = parseFloat(String(checkIn.pdAmount ?? '').replace(',', '.'))
+    const pdValue = Number.isFinite(pdAmount) && pdAmount > 0
+      ? pdAmount
+      : (
+        (checkIn.paymentMode === CHECK_IN_PAYMENT_MODE.PDA || checkIn.paymentMode === CHECK_IN_PAYMENT_MODE.PTA)
+        || checkIn.paymentMode === CHECK_IN_PAYMENT_MODE.ACC
+      )
+        ? remaining
+        : 0
 
+    runningMnt += netToPay
     if (paymentCurrency === CURRENCY.USD) {
       runningNetUsd += netToPay
       runningBalanceUsd += remaining
@@ -197,12 +246,13 @@ function buildCheckInManifestRows(checkIns: CheckIn[]): ManifestTableBuildResult
       runningNetCdf += netToPay
       runningBalanceCdf += remaining
     }
+    runningPd += pdValue
 
     const [netUsd, netCdf] = formatNetToPayCells(netToPay, paymentCurrency)
     const [balanceUsd, balanceCdf] = formatNetToPayCells(remaining, paymentCurrency)
 
     rows.push([
-      String(index + 1),
+      formatRowIndex(index),
       getCheckInPassengerName(checkIn) ?? '—',
       getCheckInTicketNumber(checkIn),
       formatCheckInWeightBreakdown(checkIn),
@@ -211,10 +261,12 @@ function buildCheckInManifestRows(checkIns: CheckIn[]): ManifestTableBuildResult
       formatKgCell(checkIn.handBaggageWeight),
       formatKgCell(checkIn.excessWeightKg),
       PRIX_CELL,
+      formatMntCell(checkIn),
       netUsd,
       netCdf,
       balanceUsd,
       balanceCdf,
+      formatPdCell(checkIn),
       hasCheckInObservations(checkIn.observations) ? checkIn.observations!.trim() : '',
     ])
     rowIndex += 1
@@ -234,10 +286,12 @@ function buildCheckInManifestRows(checkIns: CheckIn[]): ManifestTableBuildResult
       '',
       '',
       '',
+      runningMnt > 0 ? formatAmountCell(runningMnt, CURRENCY.USD) : '—',
       totalNetUsd,
       totalNetCdf,
       totalBalanceUsd,
       totalBalanceCdf,
+      runningPd > 0 ? formatAmountCell(runningPd, CURRENCY.USD) : '—',
       '',
     ])
     totalRowIndexes.add(rowIndex)
@@ -470,11 +524,13 @@ export async function generateCheckInManifestPdf(params: CheckInManifestParams):
         { content: 'POIDS TOTAL\nCHECK-IN', rowSpan: 2 },
         { content: 'POIDS\nFRANCHISES', rowSpan: 2 },
         { content: 'BAGAGES\nA MAIN', rowSpan: 2 },
-        { content: 'TOTAL\nEXCEDENTS', rowSpan: 2 },
+        { content: 'EXCEDENTS', rowSpan: 2 },
         { content: 'PRIX', rowSpan: 2 },
-        { content: 'NET A PAYER\nEXCEDENT', colSpan: 2 },
+        { content: 'MNT', rowSpan: 2 },
+        { content: 'NET PAYER\nEXCEDENT', colSpan: 2 },
         { content: 'SOLDE', colSpan: 2 },
-        { content: 'OBSERVAT°', rowSpan: 2 },
+        { content: 'P.D', rowSpan: 2 },
+        { content: 'OBSERVATION', rowSpan: 2 },
       ],
       ['USD', 'CDF', 'USD', 'CDF'],
     ],
@@ -482,8 +538,8 @@ export async function generateCheckInManifestPdf(params: CheckInManifestParams):
     theme: 'grid',
     styles: {
       font: 'helvetica',
-      fontSize: 6.5,
-      cellPadding: 1.2,
+      fontSize: 6.2,
+      cellPadding: 1.1,
       lineColor: GRID_COLOR,
       lineWidth: 0.25,
       valign: 'middle',
@@ -496,8 +552,8 @@ export async function generateCheckInManifestPdf(params: CheckInManifestParams):
       textColor: [20, 20, 20],
       fontStyle: 'bold',
       halign: 'center',
-      fontSize: 5.8,
-      cellPadding: 1.4,
+      fontSize: 5.5,
+      cellPadding: 1.2,
       valign: 'middle',
       lineColor: GRID_COLOR,
       lineWidth: 0.25,
@@ -512,20 +568,38 @@ export async function generateCheckInManifestPdf(params: CheckInManifestParams):
       6: { cellWidth: COLUMN_WIDTHS_MM.hand, halign: 'right' },
       7: { cellWidth: COLUMN_WIDTHS_MM.excess, halign: 'right' },
       8: { cellWidth: COLUMN_WIDTHS_MM.prix, halign: 'center', fontStyle: 'bold' },
-      9: { cellWidth: COLUMN_WIDTHS_MM.netToPayUsd, halign: 'right' },
-      10: { cellWidth: COLUMN_WIDTHS_MM.netToPayCdf, halign: 'right' },
-      11: { cellWidth: COLUMN_WIDTHS_MM.balanceUsd, halign: 'right' },
-      12: { cellWidth: COLUMN_WIDTHS_MM.balanceCdf, halign: 'right' },
-      13: { cellWidth: COLUMN_WIDTHS_MM.observations },
+      9: { cellWidth: COLUMN_WIDTHS_MM.mnt, halign: 'right' },
+      10: { cellWidth: COLUMN_WIDTHS_MM.netToPayUsd, halign: 'right' },
+      11: { cellWidth: COLUMN_WIDTHS_MM.netToPayCdf, halign: 'right' },
+      12: { cellWidth: COLUMN_WIDTHS_MM.balanceUsd, halign: 'right' },
+      13: { cellWidth: COLUMN_WIDTHS_MM.balanceCdf, halign: 'right' },
+      14: { cellWidth: COLUMN_WIDTHS_MM.pd, halign: 'center', fillColor: PD_COLUMN_FILL },
+      15: { cellWidth: COLUMN_WIDTHS_MM.observations },
     },
     margin: { left: MARGIN_X, right: MARGIN_X, bottom: FOOTER_HEIGHT_MM },
     showHead: singlePage ? 'firstPage' : 'everyPage',
     didParseCell: (data) => {
+      // Sous-en-têtes USD/CDF en vert clair (modèle papier)
+      if (data.section === 'head' && data.row.index === 1) {
+        data.cell.styles.fillColor = CURRENCY_HEADER_FILL
+      }
+      // Colonne P.D teintée (en-tête + corps)
+      if (data.column.index === 14) {
+        data.cell.styles.fillColor = PD_COLUMN_FILL
+      }
       if (data.section !== 'body' || !totalRowIndexes.has(data.row.index)) return
       data.cell.styles.fontStyle = 'bold'
-      data.cell.styles.fillColor = [235, 245, 250]
-      if (data.column.index === 1 || (data.column.index >= 9 && data.column.index <= 12)) {
-        data.cell.styles.halign = data.column.index === 1 ? 'left' : 'right'
+      if (data.column.index !== 14) {
+        data.cell.styles.fillColor = [235, 245, 250]
+      }
+      if (
+        data.column.index === 1
+        || data.column.index === 9
+        || (data.column.index >= 10 && data.column.index <= 13)
+        || data.column.index === 14
+      ) {
+        data.cell.styles.halign =
+          data.column.index === 1 ? 'left' : data.column.index === 14 ? 'center' : 'right'
       }
     },
   })

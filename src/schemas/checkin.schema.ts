@@ -13,7 +13,7 @@ const baggageTypes = [
 const paymentModes = [
   CHECK_IN_PAYMENT_MODE.CASH,
   CHECK_IN_PAYMENT_MODE.ACC,
-  CHECK_IN_PAYMENT_MODE.PTA,
+  CHECK_IN_PAYMENT_MODE.PDA,
 ] as const
 
 export const checkInBaggageItemSchema = z.object({
@@ -98,9 +98,9 @@ export const checkInCreateSchema = checkInFieldsSchema
         })
       }
     }
-    // PTA : pas de caisse à l'origine
+    // PDA : pas de caisse à l'origine
 
-    if (data.mixedPayment && mode !== CHECK_IN_PAYMENT_MODE.PTA) {
+    if (data.mixedPayment && mode !== CHECK_IN_PAYMENT_MODE.PDA && mode !== CHECK_IN_PAYMENT_MODE.PTA) {
       const usd = parseFloat(String(data.paidAmountUsd ?? '').replace(',', '.'))
       const cdf = parseFloat(String(data.paidAmountCdf ?? '').replace(',', '.'))
       if (!Number.isFinite(usd) || usd <= 0) {

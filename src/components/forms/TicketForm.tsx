@@ -905,9 +905,9 @@ function TicketCreateForm({
                     />
                   </div>
                 ) : null}
-                {paymentMode === PAYMENT_MODE.PTA && (
+                {(paymentMode === PAYMENT_MODE.PDA || paymentMode === PAYMENT_MODE.PTA) && (
                   <p className="text-xs text-muted-foreground">
-                    PTA : paiement à destination — pas d’encaissement immédiat en caisse.
+                    PDA : paiement à destination — pas d’encaissement immédiat en caisse.
                   </p>
                 )}
                 {paymentMode === PAYMENT_MODE.CASH && previewEnabled && (

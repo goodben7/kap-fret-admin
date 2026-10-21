@@ -88,7 +88,7 @@ export const ticketSchema = z
     paymentMode: z.enum([
       PAYMENT_MODE.CASH,
       PAYMENT_MODE.ACC,
-      PAYMENT_MODE.PTA,
+      PAYMENT_MODE.PDA,
     ]),
     paymentCurrency: z.enum([CURRENCY.CDF, CURRENCY.USD], { message: 'Devise de paiement requise' }),
     mixedPayment: z.boolean().optional(),
@@ -206,7 +206,7 @@ export const ticketPatchSchema = z
     paymentMode: z.enum([
       PAYMENT_MODE.CASH,
       PAYMENT_MODE.ACC,
-      PAYMENT_MODE.PTA,
+      PAYMENT_MODE.PDA,
     ]),
     sponsor: z.string().optional(),
   })

@@ -19,6 +19,8 @@ export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
 export const PAYMENT_MODE = {
   CASH: 'CASH',
   ACC: 'ACC',
+  PDA: 'PDA',
+  /** @deprecated legacy — traiter comme PDA */
   PTA: 'PTA',
   /** Legacy — billets existants uniquement */
   CARD: 'CARD',
@@ -31,17 +33,23 @@ export type PaymentMode = (typeof PAYMENT_MODE)[keyof typeof PAYMENT_MODE]
 export const PAYMENT_MODE_LABELS: Record<PaymentMode, string> = {
   CASH: 'Cash',
   ACC: 'ACC',
-  PTA: 'PTA',
+  PDA: 'PDA',
+  PTA: 'PDA',
   CARD: 'Carte bancaire',
   MOBILE_MONEY: 'Mobile Money',
   SPONSOR: 'Sponsor',
+}
+
+/** True si mode payer-à-destination (PDA ou ancien PTA). */
+export function isPayAtDestination(mode: string | undefined | null): boolean {
+  return mode === PAYMENT_MODE.PDA || mode === PAYMENT_MODE.PTA
 }
 
 /** Modes proposés à la création / filtres — alignés sur Ticket::getPaymentModes() */
 export const PAYMENT_MODE_OPTIONS: { value: PaymentMode; label: string }[] = [
   PAYMENT_MODE.CASH,
   PAYMENT_MODE.ACC,
-  PAYMENT_MODE.PTA,
+  PAYMENT_MODE.PDA,
 ].map((value) => ({ value, label: PAYMENT_MODE_LABELS[value] }))
 
 export function paymentModeFilterOptions(allLabel = 'Tous les modes') {

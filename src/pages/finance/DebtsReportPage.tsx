@@ -42,7 +42,7 @@ function isTicketDebt(ticket: TicketType): boolean {
   if (ticket.status === TICKET_STATUS.CANCELLED || ticket.status === TICKET_STATUS.REFUNDED) {
     return false
   }
-  if (ticket.paymentMode === PAYMENT_MODE.ACC || ticket.paymentMode === PAYMENT_MODE.PTA) {
+  if (ticket.paymentMode === PAYMENT_MODE.ACC || (ticket.paymentMode === PAYMENT_MODE.PDA || ticket.paymentMode === PAYMENT_MODE.PTA)) {
     return getTicketRemainingAmount(ticket) > 0.001
   }
   return getTicketRemainingAmount(ticket) > 0.001
@@ -53,7 +53,7 @@ function isFreightDebt(shipment: FreightShipment): boolean {
   if (remaining <= 0.001) return false
   return (
     shipment.paymentMode === FREIGHT_PAYMENT_MODE.ACC
-    || shipment.paymentMode === FREIGHT_PAYMENT_MODE.PTA
+    || (shipment.paymentMode === FREIGHT_PAYMENT_MODE.PDA || shipment.paymentMode === FREIGHT_PAYMENT_MODE.PTA)
     || remaining > 0
   )
 }
@@ -101,7 +101,7 @@ export function DebtsReportPage() {
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold tracking-tight">Dettes</h1>
           <p className="text-sm text-muted-foreground">
-            Soldes ouverts — billets (ACC/PTA), fret et excédents bagages (ACC/PTA)
+            Soldes ouverts — billets (ACC/PDA), fret et excédents bagages (ACC/PDA)
           </p>
         </div>
       </div>
@@ -142,7 +142,7 @@ export function DebtsReportPage() {
         <EmptyState
           icon={Wallet}
           title="Aucune dette ouverte"
-          description="Les acomptes, ACC/PTA billets, fret et bagages apparaîtront ici."
+          description="Les acomptes, ACC/PDA billets, fret et bagages apparaîtront ici."
         />
       ) : (
         <div className="space-y-8">
