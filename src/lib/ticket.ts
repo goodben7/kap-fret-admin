@@ -234,7 +234,7 @@ export function toTicketCreatePayload(data: TicketFormData): TicketCreatePayload
     basePrice: String(primary.basePrice),
     currency: CURRENCY.USD,
     paymentCurrency: data.paymentCurrency,
-    tva: String(primary.tva),
+    tva: String(primary.tva || '0'),
     fpt: String(primary.fpt),
     rva: String(primary.rva),
     baggageAllowanceKg: String(primary.baggageAllowanceKg),
@@ -299,7 +299,7 @@ export function toTicketBatchPayload(data: TicketFormData): TicketBatchCreatePay
         category: passenger.category,
         gender: passenger.gender,
         basePrice: formatDecimal(passenger.basePrice),
-        tva: formatDecimal(passenger.tva),
+        tva: formatDecimal(passenger.tva || '0'),
         fpt: formatDecimal(passenger.fpt),
         rva: formatDecimal(passenger.rva),
         baggageAllowanceKg: formatDecimal(passenger.baggageAllowanceKg),
@@ -347,7 +347,7 @@ export function getTicketFormGroupTotal(data: Pick<TicketFormData, 'passengers'>
   return data.passengers.reduce((sum, passenger) => {
     return sum + getTicketTotal({
       basePrice: passenger.basePrice,
-      tva: passenger.tva,
+      tva: passenger.tva || '0',
       fpt: passenger.fpt,
       rva: passenger.rva,
     })
@@ -399,7 +399,7 @@ export function toTicketPatchPayload(data: TicketPatchFormData): TicketPatchPayl
     travelDate: toTravelDateIso(data.travelDate, data.travelTime),
     travelTime: data.travelTime,
     basePrice: formatDecimal(data.basePrice),
-    tva: formatDecimal(data.tva),
+    tva: formatDecimal(data.tva || '0'),
     fpt: formatDecimal(data.fpt),
     rva: formatDecimal(data.rva),
     baggageAllowanceKg: formatDecimal(data.baggageAllowanceKg),

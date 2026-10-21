@@ -40,6 +40,8 @@ export interface CashTransaction extends HydraResource {
   transactionCurrency: string | CashTransactionCurrencyRef
   rateUsed: string
   description: string
+  /** Précision libre (ex. note ops) — distincte du libellé. */
+  otherDetail?: string | null
   referenceType: CashTransactionReferenceType
   referenceId: string
   transactionDate: string
@@ -60,6 +62,7 @@ export interface CashTransactionCreatePayload {
   currency: string
   paymentCurrency?: string
   description: string
+  otherDetail?: string
   referenceType: CashTransactionReferenceType
   referenceId: string
   transactionDate: string
@@ -93,6 +96,7 @@ export interface CashTransactionPatchPayload {
   amount?: string
   currency?: string
   description?: string
+  otherDetail?: string
   transactionDate?: string
   paymentCurrency?: string
 }

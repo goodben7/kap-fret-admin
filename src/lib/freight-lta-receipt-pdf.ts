@@ -59,7 +59,11 @@ export function downloadFreightLtaReceiptPdf(shipment: FreightShipment): void {
   doc.setFontSize(10)
   doc.text(`N° LTA : ${shipment.ltaNumber}`, marginX, y)
   y += 6
-  doc.text(`Date : ${formatDateTime(shipment.shipmentDate)}`, marginX, y)
+  doc.text(
+    `Date : ${shipment.shipmentDate ? formatDateTime(shipment.shipmentDate) : '—'}`,
+    marginX,
+    y,
+  )
   y += 6
   doc.text(`Statut : ${FREIGHT_STATUS_LABELS[shipment.status] ?? shipment.status}`, marginX, y)
   y += 6

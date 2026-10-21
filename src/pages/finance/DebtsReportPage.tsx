@@ -18,9 +18,15 @@ import {
   getTicketTotalAmount,
 } from '@/lib/ticket'
 import {
+  CHECK_IN_PAYMENT_MODE_LABELS,
+} from '@/constants/check-in'
+import {
+  getCheckInPaidAmount,
   getCheckInPassengerName,
+  getCheckInPaymentMode,
+  getCheckInRemainingAmount,
   getCheckInTicketNumber,
-  hasCheckInObservations,
+  hasCheckInOpenDebt,
 } from '@/lib/check-in'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -53,7 +59,7 @@ function isFreightDebt(shipment: FreightShipment): boolean {
 }
 
 function isCheckInDebt(checkIn: CheckIn): boolean {
-  return hasCheckInObservations(checkIn.destinationObservations)
+  return hasCheckInOpenDebt(checkIn)
 }
 
 export function DebtsReportPage() {
@@ -79,6 +85,7 @@ export function DebtsReportPage() {
     (sum, s) => sum + (parseFloat(s.remainingAmount) || 0),
     0,
   )
+  const checkInTotal = checkInDebts.reduce((sum, c) => sum + getCheckInRemainingAmount(c), 0)
 
   const loading = ticketsQuery.isLoading || freightQuery.isLoading || checkInsQuery.isLoading
   const empty = !loading && ticketDebts.length === 0 && freightDebts.length === 0 && checkInDebts.length === 0
@@ -94,7 +101,7 @@ export function DebtsReportPage() {
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold tracking-tight">Dettes</h1>
           <p className="text-sm text-muted-foreground">
-            Soldes ouverts — billets (ACC/PTA/acomptes), fret et paiements à destination
+            Soldes ouverts — billets (ACC/PTA), fret et excédents bagages (ACC/PTA)
           </p>
         </div>
       </div>
@@ -120,9 +127,11 @@ export function DebtsReportPage() {
         </Card>
         <Card className="rounded-2xl border-border/80 shadow-sm">
           <CardContent className="p-4">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Check-in destination</p>
-            <p className="mt-1 text-2xl font-bold tabular-nums">{checkInDebts.length}</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">obs. à destination</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Bagages</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums text-brand-orange">
+              {formatMoney(checkInTotal, CURRENCY.USD)}
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{checkInDebts.length} check-in(s)</p>
           </CardContent>
         </Card>
       </div>
@@ -133,7 +142,7 @@ export function DebtsReportPage() {
         <EmptyState
           icon={Wallet}
           title="Aucune dette ouverte"
-          description="Les acomptes, ACC/PTA et soldes fret apparaîtront ici."
+          description="Les acomptes, ACC/PTA billets, fret et bagages apparaîtront ici."
         />
       ) : (
         <div className="space-y-8">
@@ -243,27 +252,57 @@ export function DebtsReportPage() {
             <section className="space-y-3">
               <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                 <Scale className="h-4 w-4" />
-                Check-in — à destination
+                Excédent bagages
               </h2>
               <div className="grid gap-3 md:grid-cols-2">
-                {checkInDebts.map((checkIn) => (
-                  <Card key={checkIn.id} className="rounded-2xl border-border/80 shadow-sm">
-                    <CardContent className="space-y-2 p-4">
-                      <Link
-                        to={`/checkins/${checkIn.id}`}
-                        className="font-mono text-sm font-semibold text-primary hover:underline"
-                      >
-                        {checkIn.id}
-                      </Link>
-                      <p className="font-medium">
-                        {getCheckInPassengerName(checkIn) ?? getCheckInTicketNumber(checkIn)}
-                      </p>
-                      <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-                        {checkIn.destinationObservations}
-                      </p>
-                    </CardContent>
-                  </Card>
-                ))}
+                {checkInDebts.map((checkIn) => {
+                  const remaining = getCheckInRemainingAmount(checkIn)
+                  const paid = getCheckInPaidAmount(checkIn)
+                  const total = parseFloat(checkIn.netToPay) || 0
+                  const mode = getCheckInPaymentMode(checkIn)
+                  return (
+                    <Card key={checkIn.id} className="rounded-2xl border-border/80 shadow-sm">
+                      <CardContent className="space-y-2 p-4">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <Link
+                              to={`/checkins/${checkIn.id}`}
+                              className="font-mono text-sm font-semibold text-primary hover:underline"
+                            >
+                              {checkIn.id}
+                            </Link>
+                            <p className="truncate font-medium">
+                              {getCheckInPassengerName(checkIn) ?? getCheckInTicketNumber(checkIn)}
+                            </p>
+                            <p className="truncate font-mono text-xs text-muted-foreground">
+                              {getCheckInTicketNumber(checkIn)}
+                            </p>
+                          </div>
+                          <Badge variant="warning">
+                            {CHECK_IN_PAYMENT_MODE_LABELS[mode as keyof typeof CHECK_IN_PAYMENT_MODE_LABELS]
+                              ?? mode}
+                          </Badge>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 rounded-xl bg-muted/40 p-2 text-center text-xs">
+                          <div>
+                            <p className="text-muted-foreground">Total</p>
+                            <p className="font-semibold tabular-nums">{formatMoney(total, CURRENCY.USD)}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Payé</p>
+                            <p className="font-semibold tabular-nums">{formatMoney(paid, CURRENCY.USD)}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Reste</p>
+                            <p className="font-bold tabular-nums text-brand-orange">
+                              {formatMoney(remaining, CURRENCY.USD)}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
               </div>
             </section>
           )}

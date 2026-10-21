@@ -14,7 +14,7 @@ export interface FreightHistoryEntry {
 function pushEntry(
   entries: FreightHistoryEntry[],
   id: string,
-  date: string | undefined,
+  date: string | null | undefined,
   label: string,
   source: 'freight' | 'activity',
   actor?: string | FreightUserRef,

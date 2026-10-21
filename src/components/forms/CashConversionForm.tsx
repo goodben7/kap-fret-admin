@@ -242,7 +242,7 @@ export function CashConversionForm({
             )}
             <div className="sm:col-span-2">
               <Input
-                label="Description (optionnel)"
+                label="Libellé (optionnel)"
                 error={errors.description?.message}
                 className={fieldClass}
                 {...register('description')}

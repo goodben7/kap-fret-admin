@@ -26,7 +26,7 @@ export function downloadFreightLtaThermalReceiptPdf(shipment: FreightShipment): 
 
   thermalBrandHeader(ctx, 'Reçu LTA — 80 mm')
   thermalLine(ctx, 'N° LTA', shipment.ltaNumber, true)
-  thermalLine(ctx, 'Date', formatDateTime(shipment.shipmentDate))
+  thermalLine(ctx, 'Date', shipment.shipmentDate ? formatDateTime(shipment.shipmentDate) : '—')
   thermalLine(ctx, 'Statut', FREIGHT_STATUS_LABELS[shipment.status] ?? shipment.status)
   thermalLine(ctx, 'Bureau', getFreightIssuingOfficeLabel(shipment))
   thermalLine(ctx, 'Expéditeur', shipment.senderName)

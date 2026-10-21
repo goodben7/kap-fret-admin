@@ -18,7 +18,8 @@ export interface FreightPackage extends HydraResource {
 export interface FreightShipment extends HydraResource {
   id: string
   ltaNumber: string
-  shipmentDate: string
+  /** Null tant que la LTA n'a pas de date (posée au SENT si absente). */
+  shipmentDate?: string | null
   airline?: string | null
   aircraft?: string | null
   registration?: string | null
@@ -48,7 +49,7 @@ export interface FreightShipment extends HydraResource {
   pdAmount?: string
   paymentMode: FreightPaymentMode
   status: FreightStatus
-  sentAt?: string
+  sentAt?: string | null
   sentBy?: string | FreightUserRef
   arrivedAt?: string
   arrivedBy?: string | FreightUserRef
@@ -75,7 +76,7 @@ export interface FreightPackageCreatePayload {
 }
 
 export interface FreightShipmentCreatePayload {
-  shipmentDate: string
+  shipmentDate?: string | null
   airline?: string | null
   aircraft?: string | null
   registration?: string | null
@@ -112,7 +113,7 @@ export interface FreightShipmentCreatePayload {
 
 /** PATCH /api/freight_shipments/{id} — n° LTA auto, non modifiable */
 export interface FreightShipmentPatchPayload {
-  shipmentDate: string
+  shipmentDate?: string | null
   airline?: string | null
   aircraft?: string | null
   registration?: string | null
@@ -150,4 +151,7 @@ export interface FreightPackagePatchPayload {
 
 export interface FreightStatusPayload {
   status: FreightStatus
+  /** Posée au passage SENT (ex. date du vol d'expédition). */
+  shipmentDate?: string | null
+  observations?: string | null
 }

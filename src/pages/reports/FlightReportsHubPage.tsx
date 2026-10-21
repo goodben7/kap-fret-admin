@@ -15,6 +15,7 @@ import { PassengerManifestModal } from '@/components/tickets/PassengerManifestMo
 import { TicketSalesManifestModal } from '@/components/tickets/TicketSalesManifestModal'
 import { FreightManifestModal } from '@/components/freight/FreightManifestModal'
 import { FlightExpensesModal } from '@/components/reports/FlightExpensesModal'
+import { CheckInPendingPaymentsModal } from '@/components/checkins/CheckInPendingPaymentsModal'
 
 const cards = [
   {
@@ -47,6 +48,12 @@ const cards = [
     icon: Package,
     action: 'freight' as const,
   },
+  {
+    title: 'Soldes bagages',
+    description: 'Check-ins ACC/PTA avec reste à payer pour le vol.',
+    icon: Scale,
+    action: 'pendingBaggage' as const,
+  },
 ]
 
 export function FlightReportsHubPage() {
@@ -54,6 +61,7 @@ export function FlightReportsHubPage() {
   const [passengersOpen, setPassengersOpen] = useState(false)
   const [salesOpen, setSalesOpen] = useState(false)
   const [freightOpen, setFreightOpen] = useState(false)
+  const [pendingBaggageOpen, setPendingBaggageOpen] = useState(false)
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 lg:max-w-4xl">
@@ -111,6 +119,7 @@ export function FlightReportsHubPage() {
                 if (card.action === 'passengers') setPassengersOpen(true)
                 if (card.action === 'sales') setSalesOpen(true)
                 if (card.action === 'freight') setFreightOpen(true)
+                if (card.action === 'pendingBaggage') setPendingBaggageOpen(true)
               }}
             >
               <Card className="rounded-2xl border-border/80 shadow-sm transition-colors hover:border-brand-orange/40">
@@ -125,6 +134,10 @@ export function FlightReportsHubPage() {
       <PassengerManifestModal open={passengersOpen} onOpenChange={setPassengersOpen} />
       <TicketSalesManifestModal open={salesOpen} onOpenChange={setSalesOpen} />
       <FreightManifestModal open={freightOpen} onOpenChange={setFreightOpen} />
+      <CheckInPendingPaymentsModal
+        open={pendingBaggageOpen}
+        onOpenChange={setPendingBaggageOpen}
+      />
     </div>
   )
 }

@@ -65,7 +65,7 @@ export function downloadCashTransactionsListPdf({
 
   autoTable(doc, {
     startY: y,
-    head: [['ID', 'Type', 'Montant', 'Devise', 'Réf.', 'ID réf.', 'Statut', 'Date', 'Description']],
+    head: [['ID', 'Type', 'Montant', 'Devise', 'Réf.', 'ID réf.', 'Statut', 'Date', 'Libellé']],
     body: rows,
     styles: { fontSize: 7, cellPadding: 1.5 },
     headStyles: { fillColor: [11, 33, 61], textColor: 255 },

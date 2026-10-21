@@ -22,6 +22,7 @@ import { getCurrentTravelTimeInput, getTodayTravelDateInput } from '@/lib/ticket
 import { resolveUserIssuingOfficeIri } from '@/lib/issuing-office'
 import { extractIri } from '@/lib/hydra'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -88,6 +89,7 @@ export function CashTransactionForm({
       currency: '',
       cashRegister: '',
       description: '',
+      otherDetail: '',
       referenceId: '',
       validated: true,
     },
@@ -170,10 +172,18 @@ export function CashTransactionForm({
           )}
           <div className="sm:col-span-2">
             <Input
-              label="Description"
+              label="Libellé"
               error={errors.description?.message}
               className={fieldClass}
               {...register('description')}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <Textarea
+              label="Autre détail"
+              error={errors.otherDetail?.message}
+              className="min-h-[72px] rounded-xl border-transparent bg-muted/40 focus-visible:bg-background focus-visible:border-input"
+              {...register('otherDetail')}
             />
           </div>
           <Select

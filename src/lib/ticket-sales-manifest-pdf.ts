@@ -3,11 +3,17 @@ import autoTable from 'jspdf-autotable'
 import { BRAND } from '@/constants/brand'
 import {
   CURRENCY,
+  GENDER,
+  GENDER_LABELS,
   PAYMENT_MODE_LABELS,
+  TICKET_CATEGORY,
+  TICKET_CATEGORY_LABELS,
   TICKET_STATUS,
   normalizeCurrency,
   type Currency,
+  type Gender,
   type PaymentMode,
+  type TicketCategory,
 } from '@/constants/ticket'
 import { getTicketTotal, sortTicketsByCreatedAtAsc } from '@/lib/ticket'
 import {
@@ -45,26 +51,27 @@ export interface TicketSalesManifestParams {
 
 const NAVY = { r: 11, g: 33, b: 61 }
 const ORANGE = { r: 245, g: 124, b: 0 }
-const HEADER_FILL: [number, number, number] = [252, 211, 177]
 
-const MARGIN_X = 12
-const FOOTER_HEIGHT_MM = 22
-const LOGO_WIDTH_MM = 30
-const LOGO_HEIGHT_MM = 18
+const MARGIN_X = 10
+const FOOTER_HEIGHT_MM = 24
+const LOGO_WIDTH_MM = 28
+const LOGO_HEIGHT_MM = 16
 
 const USABLE_TABLE_WIDTH_MM = 297 - MARGIN_X * 2
 const TABLE_WIDTH_MM = USABLE_TABLE_WIDTH_MM
-const COLUMN_COUNT = 8
+const COLUMN_COUNT = 9
 
+/** Colonnes alignées sur le modèle papier : N°, noms, sexe, billet, catégorie, mode, montant, solde, sponsor */
 const COLUMN_WIDTHS_MM = {
   index: 10,
   name: 68,
-  ticket: 36,
-  age: 16,
-  paymentMode: 32,
-  amount: 32,
-  balance: 32,
-  sponsor: 47,
+  gender: 14,
+  ticket: 30,
+  category: 22,
+  paymentMode: 26,
+  amount: 28,
+  balance: 28,
+  sponsor: 51,
 } as const
 
 const HEADER_ROW_MM = 10
@@ -72,6 +79,12 @@ const ROW_HEIGHT_MM = 7
 const MIN_EMPTY_ROWS_AFTER_DATA = 3
 
 const MANIFEST_CURRENCY_ORDER: Currency[] = [CURRENCY.USD, CURRENCY.CDF]
+
+const SHORT_CATEGORY_LABELS: Record<TicketCategory, string> = {
+  [TICKET_CATEGORY.INF]: 'INF',
+  [TICKET_CATEGORY.CD]: 'CD',
+  [TICKET_CATEGORY.AD]: 'AD',
+}
 
 function formatManifestDate(dateInput: string): string {
   const [year, month, day] = dateInput.split('-')
@@ -105,9 +118,17 @@ function formatPaymentMode(mode: PaymentMode | string | undefined): string {
   return PAYMENT_MODE_LABELS[mode as PaymentMode] ?? mode
 }
 
-function formatAge(age: number | undefined): string {
-  if (age == null || Number.isNaN(age)) return '—'
-  return String(age)
+function formatGender(gender: Gender | string | undefined): string {
+  if (!gender) return '—'
+  if (gender === GENDER.MALE || gender === GENDER.FEMALE) return gender
+  return GENDER_LABELS[gender as Gender] ?? String(gender)
+}
+
+function formatCategory(category: TicketCategory | string | undefined): string {
+  if (!category) return '—'
+  const key = category.trim().toUpperCase() as TicketCategory
+  if (key in SHORT_CATEGORY_LABELS) return SHORT_CATEGORY_LABELS[key]
+  return TICKET_CATEGORY_LABELS[key as TicketCategory] ?? category
 }
 
 function emptyManifestRow(): string[] {
@@ -120,7 +141,6 @@ interface ManifestTableBuildResult {
 }
 
 function buildTicketSalesManifestRows(tickets: Ticket[]): ManifestTableBuildResult {
-  // Ordre createdAt croissant (indépendant du check-in).
   const orderedTickets = prepareTicketsForSalesManifest(tickets)
   const rows: string[][] = []
   const totalRowIndexes = new Set<number>()
@@ -144,9 +164,10 @@ function buildTicketSalesManifestRows(tickets: Ticket[]): ManifestTableBuildResu
 
     rows.push([
       String(index + 1),
-      ticket.passengerName,
-      ticket.ticketNumber,
-      formatAge(ticket.age),
+      ticket.passengerName?.trim() || '—',
+      formatGender(ticket.gender),
+      ticket.ticketNumber?.trim() || '—',
+      formatCategory(ticket.category),
       formatPaymentMode(ticket.paymentMode),
       formatMoneyCell(amount, currency),
       formatMoneyCell(running, currency),
@@ -162,6 +183,7 @@ function buildTicketSalesManifestRows(tickets: Ticket[]): ManifestTableBuildResu
     rows.push([
       '',
       `TOTAL ${currency}`,
+      '',
       '',
       '',
       '',
@@ -219,9 +241,9 @@ function buildTableBodyRows(
 
 function drawBrandTitle(doc: jsPDF, centerX: number, y: number) {
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(20)
+  doc.setFontSize(22)
 
-  const kapPart = 'KAP '
+  const kapPart = 'KAP-'
   const fretPart = 'FRET'
   doc.setTextColor(NAVY.r, NAVY.g, NAVY.b)
   const kapWidth = doc.getTextWidth(kapPart)
@@ -243,7 +265,7 @@ function drawHeader(
   const pageWidth = doc.internal.pageSize.getWidth()
   const centerX = pageWidth / 2
   const rightX = pageWidth - MARGIN_X
-  const topY = 10
+  const topY = 8
 
   if (logoDataUrl) {
     try {
@@ -256,11 +278,11 @@ function drawHeader(
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
   doc.setTextColor(0, 0, 0)
-  doc.text(`DATE DU VOL : ${formatManifestDate(params.travelDate)}`, rightX, topY + 3, {
+  doc.text(`DATE DU VOL : ${formatManifestDate(params.travelDate)}`, rightX, topY + 4, {
     align: 'right',
   })
 
-  drawBrandTitle(doc, centerX, topY + 10)
+  drawBrandTitle(doc, centerX, topY + 8)
 
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(10)
@@ -268,22 +290,25 @@ function drawHeader(
   doc.text(
     `MANIFESTE VENTE BILLETS VOL NUMÉRO : ${params.flightNumber}`,
     centerX,
-    topY + 18,
+    topY + 16,
     { align: 'center' },
   )
 
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(9.5)
   doc.setTextColor(0, 0, 0)
-  doc.text(`DIRECTION : ${params.departureLabel.toUpperCase()}`, centerX, topY + 25, {
+  doc.text(`DIRECTION : ${params.departureLabel.toUpperCase()}`, centerX, topY + 23, {
     align: 'center',
   })
-  doc.text(
-    `TRAJET : ${params.departureCode} – ${params.destinationCode}`,
-    centerX,
-    topY + 31,
-    { align: 'center' },
-  )
+
+  const trajetLabel = `TRAJET : ${params.departureLabel.toUpperCase()} – ${params.destinationLabel.toUpperCase()}`
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.text(trajetLabel, centerX, topY + 30, { align: 'center' })
+  const trajetWidth = doc.getTextWidth(trajetLabel)
+  doc.setLineWidth(0.4)
+  doc.setDrawColor(0, 0, 0)
+  doc.line(centerX - trajetWidth / 2, topY + 31.5, centerX + trajetWidth / 2, topY + 31.5)
 
   return topY + 38
 }
@@ -292,9 +317,9 @@ function drawFooter(doc: jsPDF, params: TicketSalesManifestParams) {
   const pageWidth = doc.internal.pageSize.getWidth()
   const pageHeight = doc.internal.pageSize.getHeight()
   const blockRight = pageWidth - MARGIN_X
-  const blockWidth = 98
+  const blockWidth = 100
   const blockLeft = blockRight - blockWidth
-  const signatureLineY = pageHeight - FOOTER_HEIGHT_MM + 4
+  const signatureLineY = pageHeight - FOOTER_HEIGHT_MM + 5
   const labelY = signatureLineY + 5
   const faitY = signatureLineY - 7
 
@@ -312,9 +337,17 @@ function drawFooter(doc: jsPDF, params: TicketSalesManifestParams) {
   doc.setDrawColor(60, 60, 60)
   doc.line(blockLeft, signatureLineY, blockRight, signatureLineY)
 
-  doc.setFont('helvetica', 'normal')
+  doc.setFont('helvetica', 'italic')
   doc.setFontSize(8)
   doc.text('SIGNATURE DU RESPONSABLE.', blockRight, labelY, { align: 'right' })
+}
+
+function drawPageBorder(doc: jsPDF) {
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const pageHeight = doc.internal.pageSize.getHeight()
+  doc.setDrawColor(0, 0, 0)
+  doc.setLineWidth(0.35)
+  doc.rect(4, 4, pageWidth - 8, pageHeight - 8)
 }
 
 export async function generateTicketSalesManifestPdf(
@@ -335,8 +368,9 @@ export async function generateTicketSalesManifestPdf(
     head: [[
       'N°',
       'NOMS & PRENOMS',
+      'SEXE',
       'N° BILLET',
-      'AGE',
+      'CATÉGORIE',
       'MODE PAIE.',
       'MONTANT',
       'SOLDE',
@@ -347,16 +381,17 @@ export async function generateTicketSalesManifestPdf(
     styles: {
       font: 'helvetica',
       fontSize: 7.5,
-      cellPadding: 1.8,
-      lineColor: [180, 180, 180],
-      lineWidth: 0.2,
+      cellPadding: 1.6,
+      lineColor: [40, 40, 40],
+      lineWidth: 0.25,
       valign: 'middle',
       minCellHeight: 6,
       overflow: 'linebreak',
+      textColor: [0, 0, 0],
     },
     headStyles: {
-      fillColor: HEADER_FILL,
-      textColor: [40, 40, 40],
+      fillColor: [255, 255, 255],
+      textColor: [0, 0, 0],
       fontStyle: 'bold',
       halign: 'center',
       fontSize: 7,
@@ -365,12 +400,13 @@ export async function generateTicketSalesManifestPdf(
     columnStyles: {
       0: { cellWidth: COLUMN_WIDTHS_MM.index, halign: 'center' },
       1: { cellWidth: COLUMN_WIDTHS_MM.name },
-      2: { cellWidth: COLUMN_WIDTHS_MM.ticket, halign: 'center' },
-      3: { cellWidth: COLUMN_WIDTHS_MM.age, halign: 'center' },
-      4: { cellWidth: COLUMN_WIDTHS_MM.paymentMode, halign: 'center' },
-      5: { cellWidth: COLUMN_WIDTHS_MM.amount, halign: 'right' },
-      6: { cellWidth: COLUMN_WIDTHS_MM.balance, halign: 'right' },
-      7: { cellWidth: COLUMN_WIDTHS_MM.sponsor },
+      2: { cellWidth: COLUMN_WIDTHS_MM.gender, halign: 'center' },
+      3: { cellWidth: COLUMN_WIDTHS_MM.ticket, halign: 'center' },
+      4: { cellWidth: COLUMN_WIDTHS_MM.category, halign: 'center' },
+      5: { cellWidth: COLUMN_WIDTHS_MM.paymentMode, halign: 'center' },
+      6: { cellWidth: COLUMN_WIDTHS_MM.amount, halign: 'right' },
+      7: { cellWidth: COLUMN_WIDTHS_MM.balance, halign: 'right' },
+      8: { cellWidth: COLUMN_WIDTHS_MM.sponsor },
     },
     margin: { left: MARGIN_X, right: MARGIN_X, bottom: FOOTER_HEIGHT_MM },
     showHead: singlePage ? 'firstPage' : 'everyPage',
@@ -378,7 +414,7 @@ export async function generateTicketSalesManifestPdf(
       if (data.section !== 'body' || !totalRowIndexes.has(data.row.index)) return
       data.cell.styles.fontStyle = 'bold'
       data.cell.styles.fillColor = [245, 245, 245]
-      if (data.column.index === 1 || data.column.index === 5 || data.column.index === 6) {
+      if (data.column.index === 1 || data.column.index === 6 || data.column.index === 7) {
         data.cell.styles.halign = data.column.index === 1 ? 'left' : 'right'
       }
     },
@@ -387,6 +423,7 @@ export async function generateTicketSalesManifestPdf(
   const pageCount = doc.getNumberOfPages()
   for (let page = 1; page <= pageCount; page += 1) {
     doc.setPage(page)
+    drawPageBorder(doc)
     drawFooter(doc, params)
   }
 

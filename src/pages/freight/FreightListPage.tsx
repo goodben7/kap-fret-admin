@@ -222,7 +222,7 @@ function FreightFiltersFields({
       <FilterSection title="N° expédition" icon={Package}>
         <Input
           label="N° expédition"
-          placeholder="Ex. LTA001/26-..."
+          placeholder="Ex. 0001/2"
           value={draft.ltaNumber}
           onChange={(e) => onChange({ ltaNumber: e.target.value })}
           className={filterInputClass}
@@ -369,7 +369,7 @@ function FreightCard({ shipment }: { shipment: FreightShipment }) {
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1">
                   <Calendar className="h-3.5 w-3.5 shrink-0" />
-                  {formatDate(shipment.shipmentDate)}
+                  {shipment.shipmentDate ? formatDate(shipment.shipmentDate) : 'Sans date'}
                 </span>
                 <span className="inline-flex items-center gap-1">
                   <Scale className="h-3.5 w-3.5 shrink-0" />

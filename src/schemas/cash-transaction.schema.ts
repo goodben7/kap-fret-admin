@@ -12,7 +12,8 @@ export const cashTransactionCreateSchema = z
     }),
     amount: z.string().min(1, 'Montant requis'),
     currency: z.string().min(1, 'Devise requise'),
-    description: z.string().min(1, 'Description requise'),
+    description: z.string().min(1, 'Libellé requis'),
+    otherDetail: z.string().optional(),
     referenceType: z.enum([
       CASH_TRANSACTION_REFERENCE_TYPE.TICKET,
       CASH_TRANSACTION_REFERENCE_TYPE.CHECKIN,
@@ -76,7 +77,8 @@ export const cashTransactionPatchSchema = z
     }),
     amount: z.string().min(1, 'Montant requis'),
     currency: z.string().min(1, 'Devise requise'),
-    description: z.string().min(1, 'Description requise'),
+    description: z.string().min(1, 'Libellé requis'),
+    otherDetail: z.string().optional(),
     transactionDate: z.string().min(1, 'Date requise'),
     transactionTime: z.string().min(1, 'Heure requise'),
   })

@@ -71,7 +71,8 @@ export const ticketPassengerSchema = z.object({
   birthDate: optionalBirthDateSchema,
   gender: z.enum([GENDER.MALE, GENDER.FEMALE], { message: 'Sexe requis' }),
   basePrice: z.string().min(1, 'Prix de base requis'),
-  tva: z.string().min(1, 'TVA requise'),
+  /** Optionnel — défaut 0 si vide. */
+  tva: z.string().optional(),
   fpt: z.string().min(1, 'FPT requis'),
   rva: z.string().min(1, 'RVA requis'),
   baggageAllowanceKg: z.string().min(1, 'Franchise bagage requise'),
@@ -198,7 +199,7 @@ export const ticketPatchSchema = z
     departure: z.string().min(1, 'Checkpoint de départ requis'),
     destination: z.string().min(1, 'Checkpoint de destination requis'),
     basePrice: z.string().min(1, 'Prix de base requis'),
-    tva: z.string().min(1, 'TVA requise'),
+    tva: z.string().optional(),
     fpt: z.string().min(1, 'FPT requis'),
     rva: z.string().min(1, 'RVA requis'),
     baggageAllowanceKg: z.string().min(1, 'Franchise bagage requise'),
@@ -217,7 +218,7 @@ export const ticketPatchSchema = z
         message: 'Le prix de base doit être supérieur à 0',
       })
     }
-    for (const field of ['tva', 'fpt', 'rva', 'baggageAllowanceKg'] as const) {
+    for (const field of ['fpt', 'rva', 'baggageAllowanceKg'] as const) {
       if (parseNonNegativeAmount(data[field]) === null) {
         ctx.addIssue({
           code: 'custom',
@@ -225,6 +226,14 @@ export const ticketPatchSchema = z
           message: 'Montant invalide',
         })
       }
+    }
+    const tvaValue = data.tva?.trim() ?? ''
+    if (tvaValue !== '' && parseNonNegativeAmount(tvaValue) === null) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['tva'],
+        message: 'Montant invalide',
+      })
     }
     validateBirthDateForCategory(
       data.birthDate,

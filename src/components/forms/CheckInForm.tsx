@@ -20,7 +20,12 @@ import {
   type CheckInCreateFormData,
   type CheckInPatchFormData,
 } from '@/schemas/checkin.schema'
-import { CHECK_IN_EXCESS_PRICE_PER_KG_USD } from '@/constants/check-in'
+import {
+  CHECK_IN_EXCESS_PRICE_PER_KG_USD,
+  CHECK_IN_PAYMENT_MODE,
+  CHECK_IN_PAYMENT_MODE_LABELS,
+  type CheckInPaymentMode,
+} from '@/constants/check-in'
 import {
   BAGGAGE_TYPE,
   BAGGAGE_TYPE_OPTIONS,
@@ -71,6 +76,11 @@ import { useFormDraft } from '@/hooks/useFormDraft'
 import { STORAGE_KEYS } from '@/constants/storage'
 
 const FORM_ID = 'checkin-form'
+
+const paymentModeOptions = Object.entries(CHECK_IN_PAYMENT_MODE_LABELS).map(([value, label]) => ({
+  value,
+  label,
+}))
 
 const fieldClass =
   'h-11 rounded-xl border-transparent bg-muted/40 focus-visible:bg-background focus-visible:border-input'
@@ -334,6 +344,8 @@ export function CheckInForm(props: CheckInFormProps) {
       excessPrice: '0',
       currency: CURRENCY.USD,
       paymentCurrency: CURRENCY.USD,
+      paymentMode: CHECK_IN_PAYMENT_MODE.CASH,
+      paidAmount: '',
       mixedPayment: false,
       paidAmountUsd: '',
       paidAmountCdf: '',
@@ -439,6 +451,8 @@ export function CheckInForm(props: CheckInFormProps) {
 
   const excessWeightKg = watch('excessWeightKg')
   const paymentCurrency = watch('paymentCurrency')
+  const paymentMode = watch('paymentMode') ?? CHECK_IN_PAYMENT_MODE.CASH
+  const paidAmount = watch('paidAmount')
   const mixedPayment = watch('mixedPayment')
   const paidAmountUsd = watch('paidAmountUsd')
   const paidAmountCdf = watch('paidAmountCdf')
@@ -450,6 +464,31 @@ export function CheckInForm(props: CheckInFormProps) {
   const hasExcessPayment = !isEdit && (parseFloat(excessWeightKg ?? '') || 0) > 0
   const tarificationInactive = !isEdit && !hasExcessPayment
   const netToPayNumber = parseFloat(netToPay) || 0
+  const isCashPayment = paymentMode === CHECK_IN_PAYMENT_MODE.CASH
+  const isAccPayment = paymentMode === CHECK_IN_PAYMENT_MODE.ACC
+  const isPtaPayment = paymentMode === CHECK_IN_PAYMENT_MODE.PTA
+  const needsCashRegister = hasExcessPayment && !isPtaPayment
+  const depositAmountNumber = isAccPayment
+    ? (parseFloat(String(paidAmount ?? '').replace(',', '.')) || 0)
+    : netToPayNumber
+  const remainingPreview = Math.max(0, netToPayNumber - (isCashPayment ? netToPayNumber : depositAmountNumber))
+
+  const handlePaymentModeChange = (mode: CheckInPaymentMode) => {
+    setValue('paymentMode', mode, { shouldValidate: true })
+    if (mode === CHECK_IN_PAYMENT_MODE.PTA) {
+      setValue('cashRegister', '', { shouldValidate: true })
+      setValue('paidAmount', '', { shouldValidate: true })
+      setValue('mixedPayment', false, { shouldValidate: true })
+      setValue('paidAmountUsd', '', { shouldValidate: true })
+      setValue('paidAmountCdf', '', { shouldValidate: true })
+      setValue('exchangeRate', '', { shouldValidate: true })
+    } else if (mode === CHECK_IN_PAYMENT_MODE.CASH) {
+      setValue('paidAmount', '', { shouldValidate: true })
+    } else if (mode === CHECK_IN_PAYMENT_MODE.ACC) {
+      const half = netToPayNumber > 0 ? (netToPayNumber / 2).toFixed(2) : ''
+      setValue('paidAmount', half, { shouldValidate: true })
+    }
+  }
 
   const adminUsdToCdfRate = useMemo(() => getActiveUsdToCdfRate(exchangeRates), [exchangeRates])
 
@@ -473,7 +512,7 @@ export function CheckInForm(props: CheckInFormProps) {
   const mixedPaymentOk =
     !!mixedPayment
     && isMixedPaymentWithinTolerance(
-      netToPayNumber,
+      depositAmountNumber,
       paidAmountUsd ?? '',
       paidAmountCdf ?? '',
       exchangeRates,
@@ -494,34 +533,34 @@ export function CheckInForm(props: CheckInFormProps) {
   const usdCurrencyIri = resolveCurrencyIriByCode(currencies, CURRENCY.USD)
   const paymentCurrencyIri = resolveCurrencyIriByCode(currencies, paymentCurrency ?? CURRENCY.USD)
   const fallbackPaymentAmount = useMemo(() => {
-    if (mixedPayment) return undefined
+    if (mixedPayment || isPtaPayment) return undefined
     const converted = computeCheckInPaymentAmount(
-      netToPayNumber,
+      depositAmountNumber,
       paymentCurrency ?? CURRENCY.USD,
       exchangeRates,
     )
     return converted != null ? parseFloat(converted) : undefined
-  }, [mixedPayment, netToPayNumber, paymentCurrency, exchangeRates])
+  }, [mixedPayment, isPtaPayment, depositAmountNumber, paymentCurrency, exchangeRates])
   const localPreviewEnabled =
-    hasExcessPayment
+    needsCashRegister
     && !mixedPayment
     && paymentCurrency !== CURRENCY.USD
-    && netToPayNumber > 0
+    && depositAmountNumber > 0
     && fallbackPaymentAmount != null
   const previewEnabled =
-    hasExcessPayment
+    needsCashRegister
     && !mixedPayment
     && !!cashRegister
     && !!usdCurrencyIri
     && !!paymentCurrencyIri
-    && netToPayNumber > 0
+    && depositAmountNumber > 0
   const {
     data: conversionPreview,
     isLoading: conversionPreviewLoading,
     isError: conversionPreviewError,
   } = usePreviewConversion({
     cashRegister: cashRegister || undefined,
-    amount: netToPay ?? '0',
+    amount: String(depositAmountNumber || 0),
     currencyIri: usdCurrencyIri,
     paymentCurrencyIri: paymentCurrency !== CURRENCY.USD ? paymentCurrencyIri : undefined,
     enabled: previewEnabled,
@@ -1091,8 +1130,8 @@ export function CheckInForm(props: CheckInFormProps) {
                 />
 
                 <Textarea
-                  label="Paiement à destination"
-                  placeholder="Modalités à régler à l'arrivée..."
+                  label="Notes destination"
+                  placeholder="Remarques pour l'arrivée (optionnel)..."
                   rows={2}
                   error={errors.destinationObservations?.message}
                   {...register('destinationObservations')}
@@ -1108,7 +1147,16 @@ export function CheckInForm(props: CheckInFormProps) {
         title="Tarification excédent"
         icon={Banknote}
       >
-        {!isEdit && hasExcessPayment && (
+        <Select
+          label="Mode de paiement"
+          options={paymentModeOptions}
+          variant="filter"
+          value={paymentMode}
+          onChange={(e) => handlePaymentModeChange(e.target.value as CheckInPaymentMode)}
+          error={errors.paymentMode?.message}
+          className="sm:col-span-2"
+        />
+        {needsCashRegister && (
           <div className="sm:col-span-2">
             <Select
               label="Caisse"
@@ -1128,6 +1176,12 @@ export function CheckInForm(props: CheckInFormProps) {
             />
           </div>
         )}
+        {isPtaPayment && (
+          <p className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-900 sm:col-span-2">
+            PTA — aucun encaissement à l&apos;origine. Le solde ({formatMoney(netToPayNumber, CURRENCY.USD)})
+            sera dû à destination.
+          </p>
+        )}
         <Input
           label="Devise"
           value="Dollar US (USD)"
@@ -1135,7 +1189,21 @@ export function CheckInForm(props: CheckInFormProps) {
           readOnly
           className={lockedFieldClass}
         />
-        {!isEdit && !tarificationInactive && (
+        {isAccPayment && (
+          <Input
+            label="Acompte encaissé (USD)"
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            min="0"
+            placeholder="0,00"
+            className={fieldClass}
+            error={errors.paidAmount?.message}
+            value={paidAmount ?? ''}
+            onChange={(e) => setValue('paidAmount', e.target.value, { shouldValidate: true })}
+          />
+        )}
+        {!isPtaPayment && !tarificationInactive && (
           <label
             className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors sm:col-span-2 ${
               mixedPayment
@@ -1167,7 +1235,7 @@ export function CheckInForm(props: CheckInFormProps) {
             </span>
           </label>
         )}
-        {!mixedPayment && (
+        {!isPtaPayment && !mixedPayment && (
           <Select
             label="Devise de paiement"
             options={CURRENCY_OPTIONS}
@@ -1182,7 +1250,7 @@ export function CheckInForm(props: CheckInFormProps) {
             }
           />
         )}
-        {mixedPayment && !tarificationInactive && (
+        {mixedPayment && !isPtaPayment && !tarificationInactive && (
           <>
             <Input
               label="Montant encaissé (USD)"
@@ -1198,7 +1266,7 @@ export function CheckInForm(props: CheckInFormProps) {
                 const nextUsd = e.target.value
                 setValue('paidAmountUsd', nextUsd, { shouldValidate: true })
                 const suggested = suggestMixedPaymentCdf(
-                  netToPayNumber,
+                  depositAmountNumber,
                   nextUsd,
                   exchangeRates,
                   CURRENCY.USD,
@@ -1229,7 +1297,7 @@ export function CheckInForm(props: CheckInFormProps) {
                 setValue('exchangeRate', nextRate, { shouldValidate: true })
                 if ((paidAmountUsd ?? '').trim()) {
                   const suggested = suggestMixedPaymentCdf(
-                    netToPayNumber,
+                    depositAmountNumber,
                     paidAmountUsd ?? '',
                     exchangeRates,
                     CURRENCY.USD,
@@ -1251,14 +1319,16 @@ export function CheckInForm(props: CheckInFormProps) {
                 </span>
               </div>
               <div className="mt-1 flex items-center justify-between gap-2">
-                <span className="text-muted-foreground">Net à payer</span>
+                <span className="text-muted-foreground">
+                  {isAccPayment ? 'Acompte dû' : 'Net à payer'}
+                </span>
                 <span className="font-semibold tabular-nums">
-                  {formatMoney(netToPayNumber, CURRENCY.USD)}
+                  {formatMoney(depositAmountNumber, CURRENCY.USD)}
                 </span>
               </div>
               {paidAmountUsd && paidAmountCdf && mixedUsdEquivalent != null && !mixedPaymentOk && (
                 <p className="mt-2 text-xs text-destructive">
-                  L&apos;équivalent mixte doit correspondre au net à payer (± 0,05 USD). Vérifiez le taux de change.
+                  L&apos;équivalent mixte doit correspondre au montant encaissé (± 0,05 USD). Vérifiez le taux de change.
                 </p>
               )}
               {mixedPaymentOk && (
@@ -1302,28 +1372,47 @@ export function CheckInForm(props: CheckInFormProps) {
           {...register('netToPay')}
         />
         {!tarificationInactive && (
-          <div className="flex items-center justify-between rounded-xl bg-brand-orange/10 px-4 py-3 sm:col-span-2">
-            <span className="text-sm font-semibold">Net à payer</span>
-            <span className="text-lg font-bold tabular-nums text-brand-orange">
-              {formatMoney(netToPayNumber, CURRENCY.USD)}
-            </span>
+          <div className="space-y-2 sm:col-span-2">
+            <div className="flex items-center justify-between rounded-xl bg-brand-orange/10 px-4 py-3">
+              <span className="text-sm font-semibold">Net à payer</span>
+              <span className="text-lg font-bold tabular-nums text-brand-orange">
+                {formatMoney(netToPayNumber, CURRENCY.USD)}
+              </span>
+            </div>
+            {(isAccPayment || isPtaPayment) && (
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3">
+                  <p className="text-xs text-muted-foreground">Encaissé à l&apos;origine</p>
+                  <p className="mt-0.5 font-semibold tabular-nums">
+                    {formatMoney(isCashPayment ? netToPayNumber : depositAmountNumber, CURRENCY.USD)}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3">
+                  <p className="text-xs text-muted-foreground">Solde à destination</p>
+                  <p className="mt-0.5 font-bold tabular-nums text-brand-orange">
+                    {formatMoney(remainingPreview, CURRENCY.USD)}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
-        {(previewEnabled || localPreviewEnabled) && (
+        {!isPtaPayment && (previewEnabled || localPreviewEnabled) && (
           <ConversionPreviewCard
             preview={conversionPreview}
             isLoading={conversionPreviewLoading}
             isError={conversionPreviewError}
-            referenceAmount={netToPayNumber}
+            referenceAmount={depositAmountNumber}
             referenceCurrency={CURRENCY.USD}
             paymentCurrency={paymentCurrency}
             fallbackPaymentAmount={fallbackPaymentAmount}
           />
         )}
-        {!previewEnabled
+        {!isPtaPayment
+          && !previewEnabled
           && !mixedPayment
           && paymentCurrency !== CURRENCY.USD
-          && netToPayNumber > 0
+          && depositAmountNumber > 0
           && fallbackPaymentAmount == null && (
           <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive sm:col-span-2">
             Aucun taux de change actif pour convertir le montant USD vers {paymentCurrency}.
@@ -1343,7 +1432,10 @@ export function CheckInForm(props: CheckInFormProps) {
 
       <CheckInFormActions
         formId={FORM_ID}
-        canSubmit={isValid && (!mixedPayment || !hasExcessPayment || mixedPaymentOk)}
+        canSubmit={
+          isValid
+          && (!mixedPayment || !hasExcessPayment || isPtaPayment || mixedPaymentOk)
+        }
         isLoading={isLoading}
         submitLabel={
           isGroupCheckIn

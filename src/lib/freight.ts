@@ -147,7 +147,8 @@ export function toShipmentDateIso(date: string, time: string): string {
   return `${date}T${normalizedTime}Z`
 }
 
-export function parseShipmentDate(isoDate: string): { date: string; time: string } {
+export function parseShipmentDate(isoDate?: string | null): { date: string; time: string } {
+  if (!isoDate?.trim()) return { date: '', time: '' }
   const [datePart, timePart] = isoDate.split('T')
   const time = timePart?.slice(0, 5) ?? '00:00'
   return { date: datePart ?? isoDate, time }
@@ -155,8 +156,11 @@ export function parseShipmentDate(isoDate: string): { date: string; time: string
 
 export function toFreightCreatePayload(data: FreightShipmentFormData): FreightShipmentCreatePayload {
   const packageNumber = getTodayTravelDateInput()
+  const hasShipmentDate = !!data.shipmentDate?.trim()
   const payload: FreightShipmentCreatePayload = {
-    shipmentDate: toShipmentDateIso(data.shipmentDate, data.shipmentTime),
+    shipmentDate: hasShipmentDate
+      ? toShipmentDateIso(data.shipmentDate!.trim(), data.shipmentTime?.trim() || '00:00')
+      : null,
     airline: optionalText(data.airline),
     aircraft: optionalText(data.aircraft),
     registration: optionalText(data.registration),
@@ -220,8 +224,11 @@ export function toFreightCreatePayload(data: FreightShipmentFormData): FreightSh
 }
 
 export function toFreightPatchPayload(data: FreightShipmentPatchFormData): FreightShipmentPatchPayload {
+  const hasShipmentDate = !!data.shipmentDate?.trim()
   return {
-    shipmentDate: toShipmentDateIso(data.shipmentDate, data.shipmentTime),
+    shipmentDate: hasShipmentDate
+      ? toShipmentDateIso(data.shipmentDate!.trim(), data.shipmentTime?.trim() || '00:00')
+      : null,
     airline: optionalText(data.airline),
     aircraft: optionalText(data.aircraft),
     registration: optionalText(data.registration),
@@ -552,7 +559,7 @@ function compareFreightIds(a: string | number | undefined, b: string | number | 
 }
 
 function getFreightSortTimestamp(shipment: FreightShipment): number {
-  for (const value of [shipment.createdAt, shipment.shipmentDate, shipment.updatedAt]) {
+  for (const value of [shipment.createdAt, shipment.shipmentDate ?? undefined, shipment.updatedAt]) {
     const timestamp = parseFreightSortTimestamp(value)
     if (timestamp > 0) return timestamp
   }

@@ -492,9 +492,35 @@ function TicketCreateForm({
                       )
                     }
                   />
+                  <Select
+                    label="Sexe"
+                    placeholder="Sélectionner..."
+                    options={Object.entries(GENDER_LABELS).map(([value, label]) => ({ value, label }))}
+                    error={passengerErrors?.gender?.message}
+                    disabled={locked}
+                    variant="filter"
+                    className={fieldClass}
+                    {...register(`passengers.${index}.gender`)}
+                  />
+                  <Input
+                    label="Prix de base (USD)"
+                    inputMode="decimal"
+                    error={passengerErrors?.basePrice?.message}
+                    disabled={locked}
+                    className={fieldClass}
+                    {...register(`passengers.${index}.basePrice`)}
+                  />
+                  <Input
+                    label="Kilo total accordé"
+                    inputMode="decimal"
+                    error={passengerErrors?.baggageAllowanceKg?.message}
+                    disabled={locked}
+                    className={fieldClass}
+                    {...register(`passengers.${index}.baggageAllowanceKg`)}
+                  />
                   <div className="space-y-1.5">
                     <Input
-                      label="Date de naissance"
+                      label="Date de naissance (optionnel)"
                       type="date"
                       error={passengerErrors?.birthDate?.message}
                       disabled={locked}
@@ -506,7 +532,7 @@ function TicketCreateForm({
                       if (age === undefined) {
                         return (
                           <p className="text-xs text-muted-foreground">
-                            Optionnel — âge calculé à la date de voyage
+                            Âge calculé à la date de voyage si renseignée
                           </p>
                         )
                       }
@@ -517,16 +543,6 @@ function TicketCreateForm({
                       )
                     })()}
                   </div>
-                  <Select
-                    label="Sexe"
-                    placeholder="Sélectionner..."
-                    options={Object.entries(GENDER_LABELS).map(([value, label]) => ({ value, label }))}
-                    error={passengerErrors?.gender?.message}
-                    disabled={locked}
-                    variant="filter"
-                    className={fieldClass}
-                    {...register(`passengers.${index}.gender`)}
-                  />
                   <div className="space-y-1.5 sm:col-span-2">
                     <Input
                       label="N° billet (optionnel)"
@@ -541,15 +557,7 @@ function TicketCreateForm({
                     </p>
                   </div>
                   <Input
-                    label="Prix de base (USD)"
-                    inputMode="decimal"
-                    error={passengerErrors?.basePrice?.message}
-                    disabled={locked}
-                    className={fieldClass}
-                    {...register(`passengers.${index}.basePrice`)}
-                  />
-                  <Input
-                    label="TVA"
+                    label="TVA (optionnel)"
                     inputMode="decimal"
                     error={passengerErrors?.tva?.message}
                     disabled={locked}
@@ -571,14 +579,6 @@ function TicketCreateForm({
                     disabled={locked}
                     className={fieldClass}
                     {...register(`passengers.${index}.rva`)}
-                  />
-                  <Input
-                    label="Kilo total accordé"
-                    inputMode="decimal"
-                    error={passengerErrors?.baggageAllowanceKg?.message}
-                    disabled={locked}
-                    className={fieldClass}
-                    {...register(`passengers.${index}.baggageAllowanceKg`)}
                   />
                 </div>
               </div>
@@ -1172,7 +1172,7 @@ function TicketEditForm({
             className={fieldClass}
             {...register('basePrice')}
           />
-          <Input label="TVA" inputMode="decimal" error={errors.tva?.message} disabled={locked} className={fieldClass} {...register('tva')} />
+          <Input label="TVA (optionnel)" inputMode="decimal" error={errors.tva?.message} disabled={locked} className={fieldClass} {...register('tva')} />
           <Input label="FPT" inputMode="decimal" error={errors.fpt?.message} disabled={locked} className={fieldClass} {...register('fpt')} />
           <Input label="RVA" inputMode="decimal" error={errors.rva?.message} disabled={locked} className={fieldClass} {...register('rva')} />
           <Input

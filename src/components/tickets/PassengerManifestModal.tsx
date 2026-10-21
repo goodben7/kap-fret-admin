@@ -6,6 +6,7 @@ import { Modal } from '@/components/ui/modal'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { CheckpointAsyncSelect } from '@/components/ui/checkpoint-async-select'
+import { ManifestPassengerPicker } from '@/components/tickets/ManifestPassengerPicker'
 import {
   passengerManifestSchema,
   type PassengerManifestFormData,
@@ -29,6 +30,7 @@ import {
   generatePassengerManifestPdf,
   getCheckpointManifestName,
   getCheckpointRouteCode,
+  type PassengerManifestEntry,
 } from '@/lib/passenger-manifest-pdf'
 import { toast } from 'sonner'
 
@@ -41,6 +43,7 @@ interface PassengerManifestModalProps {
 }
 
 export function PassengerManifestModal({ open, onOpenChange }: PassengerManifestModalProps) {
+  const [isLoadingList, setIsLoadingList] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null)
@@ -48,6 +51,8 @@ export function PassengerManifestModal({ open, onOpenChange }: PassengerManifest
   const [fileName, setFileName] = useState('MANIFESTE_PASSAGERS.pdf')
   const [departureLabel, setDepartureLabel] = useState('')
   const [destinationLabel, setDestinationLabel] = useState('')
+  const [loadedEntries, setLoadedEntries] = useState<PassengerManifestEntry[]>([])
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const departurePrefillDone = useRef(false)
 
   const { user } = useAuth()
@@ -108,7 +113,43 @@ export function PassengerManifestModal({ open, onOpenChange }: PassengerManifest
     setPdfBlob(null)
     setPassengerCount(0)
     setFileName('MANIFESTE_PASSAGERS.pdf')
+    setLoadedEntries([])
+    setSelectedIds(new Set())
   }, [open, reset])
+
+  const loadedTickets = useMemo(
+    () => loadedEntries.map((entry) => entry.ticket),
+    [loadedEntries],
+  )
+
+  const clearPreview = () => {
+    setPreviewUrl((current) => {
+      if (current) URL.revokeObjectURL(current)
+      return null
+    })
+    setPdfBlob(null)
+    setPassengerCount(0)
+  }
+
+  const togglePassenger = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+    clearPreview()
+  }
+
+  const selectAllPassengers = () => {
+    setSelectedIds(new Set(loadedTickets.map((ticket) => ticket.id)))
+    clearPreview()
+  }
+
+  const clearPassengerSelection = () => {
+    setSelectedIds(new Set())
+    clearPreview()
+  }
 
   useEffect(() => {
     if (!open || !userCheckpointIri || departurePrefillDone.current) return
@@ -121,6 +162,17 @@ export function PassengerManifestModal({ open, onOpenChange }: PassengerManifest
       if (previewUrl) URL.revokeObjectURL(previewUrl)
     }
   }, [previewUrl])
+
+  useEffect(() => {
+    setLoadedEntries([])
+    setSelectedIds(new Set())
+    setPreviewUrl((current) => {
+      if (current) URL.revokeObjectURL(current)
+      return null
+    })
+    setPdfBlob(null)
+    setPassengerCount(0)
+  }, [departure, destination, travelDate])
 
   useEffect(() => {
     if (!departure) {
@@ -150,10 +202,44 @@ export function PassengerManifestModal({ open, onOpenChange }: PassengerManifest
     }
   }, [destination, resolveCheckpoint])
 
-  const canGenerate = !!departure?.trim() && !!destination?.trim() && !!travelDate?.trim()
+  const canLoad = !!departure?.trim() && !!destination?.trim() && !!travelDate?.trim()
+  const canGenerate = selectedIds.size > 0
   const hasRouteSummary = !!departureLabel && !!destinationLabel && !!travelDate
 
+  const loadPassengers = handleSubmit(async (data) => {
+    setIsLoadingList(true)
+    clearPreview()
+    try {
+      const passengers = await fetchPassengersForManifest(
+        data.departure,
+        data.destination,
+        data.travelDate,
+      )
+      if (passengers.length === 0) {
+        setLoadedEntries([])
+        setSelectedIds(new Set())
+        toast.error('Aucun billet trouvé pour ce trajet et cette date')
+        return
+      }
+      setLoadedEntries(passengers)
+      setSelectedIds(new Set(passengers.map((entry) => entry.ticket.id)))
+      toast.success(`${passengers.length} passager${passengers.length !== 1 ? 's' : ''} chargé${passengers.length !== 1 ? 's' : ''}`)
+    } catch (error) {
+      if (isAxiosError(error)) {
+        toast.error(extractApiErrorMessage(error.response?.data, error.response?.status))
+      } else {
+        toast.error('Impossible de charger les passagers')
+      }
+    } finally {
+      setIsLoadingList(false)
+    }
+  })
+
   const generate = handleSubmit(async (data) => {
+    if (selectedIds.size === 0) {
+      toast.error('Sélectionnez au moins un passager')
+      return
+    }
     setIsGenerating(true)
     try {
       const [departureCheckpoint, destinationCheckpoint] = await Promise.all([
@@ -161,13 +247,9 @@ export function PassengerManifestModal({ open, onOpenChange }: PassengerManifest
         resolveCheckpoint(data.destination),
       ])
 
-      const passengers = await fetchPassengersForManifest(
-        data.departure,
-        data.destination,
-        data.travelDate,
-      )
+      const passengers = loadedEntries.filter((entry) => selectedIds.has(entry.ticket.id))
       if (passengers.length === 0) {
-        toast.error('Aucun billet trouvé pour ce trajet et cette date')
+        toast.error('Aucun passager sélectionné')
         return
       }
 
@@ -224,7 +306,7 @@ export function PassengerManifestModal({ open, onOpenChange }: PassengerManifest
       open={open}
       onOpenChange={handleOpenChange}
       title="Manifeste passagers"
-      description="Générez le PDF du vol à partir du départ, de la destination et de la date de voyage."
+      description="Chargez les billets du vol, décochez ceux qui ne voyagent pas, puis générez le PDF."
       className={cn(
         'rounded-2xl',
         previewUrl ? 'sm:max-w-[min(96vw,72rem)]' : 'sm:max-w-xl',
@@ -292,6 +374,37 @@ export function PassengerManifestModal({ open, onOpenChange }: PassengerManifest
               </div>
             )}
 
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 w-full rounded-xl"
+              disabled={isLoadingList || !canLoad}
+              onClick={() => void loadPassengers()}
+            >
+              {isLoadingList ? (
+                <>
+                  <LoaderIcon />
+                  Chargement...
+                </>
+              ) : (
+                <>
+                  <Users className="h-4 w-4" />
+                  Charger les passagers
+                </>
+              )}
+            </Button>
+
+            {loadedTickets.length > 0 && (
+              <ManifestPassengerPicker
+                tickets={loadedTickets}
+                selectedIds={selectedIds}
+                onToggle={togglePassenger}
+                onSelectAll={selectAllPassengers}
+                onClear={clearPassengerSelection}
+                disabled={isGenerating || isLoadingList}
+              />
+            )}
+
             <div className="flex flex-col gap-2 sm:flex-row">
               <Button
                 type="submit"
@@ -323,9 +436,9 @@ export function PassengerManifestModal({ open, onOpenChange }: PassengerManifest
               )}
             </div>
 
-            {!canGenerate && (
+            {!canLoad && (
               <p className="text-xs text-muted-foreground">
-                Renseignez le départ, la destination et la date pour activer la génération.
+                Renseignez le départ, la destination et la date pour charger les passagers.
               </p>
             )}
           </div>

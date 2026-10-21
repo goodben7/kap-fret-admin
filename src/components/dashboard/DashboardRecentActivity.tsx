@@ -165,7 +165,7 @@ function RecentShipmentsList({ shipments }: { shipments: FreightShipment[] }) {
                   </span>
                   <span className="inline-flex items-center gap-1">
                     <Calendar className="h-3 w-3 shrink-0" aria-hidden="true" />
-                    {formatDate(shipment.shipmentDate)}
+                    {shipment.shipmentDate ? formatDate(shipment.shipmentDate) : 'Sans date'}
                   </span>
                   <span className="inline-flex items-center gap-1">
                     <Scale className="h-3 w-3 shrink-0" aria-hidden="true" />

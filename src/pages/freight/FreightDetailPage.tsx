@@ -455,7 +455,10 @@ export function FreightDetailPage() {
                 <p className="text-xs text-muted-foreground">Compagnie</p>
                 <p className="truncate text-lg font-semibold">{shipment.airline}</p>
                 <p className="mt-0.5 text-sm text-muted-foreground">
-                  {formatDateTime(shipment.shipmentDate)} · {shipment.packageCount} colis
+                  {shipment.shipmentDate
+                    ? formatDateTime(shipment.shipmentDate)
+                    : 'Date à poser à l’expédition'}{' '}
+                  · {shipment.packageCount} colis
                 </p>
               </div>
               <div className="shrink-0 text-right">
@@ -559,7 +562,13 @@ export function FreightDetailPage() {
           <DetailRow label="Compagnie" value={shipment.airline} />
           <DetailRow label="Avion" value={shipment.aircraft} />
           <DetailRow label="Immatriculation" value={shipment.registration} mono />
-          <DetailRow label="Date" value={formatDateTime(shipment.shipmentDate)} />
+          <DetailRow
+            label="Date"
+            value={shipment.shipmentDate ? formatDateTime(shipment.shipmentDate) : '— (posée au SENT)'}
+          />
+          {shipment.sentAt && (
+            <DetailRow label="Expédié le" value={formatDateTime(shipment.sentAt)} />
+          )}
           <CheckpointDetailRow title="Chargement" checkpoint={shipment.loadingPlace} />
           <CheckpointDetailRow title="Déchargement" checkpoint={shipment.unloadingPlace} />
           <DetailRow label="Bureau" value={getFreightIssuingOfficeLabel(shipment)} />

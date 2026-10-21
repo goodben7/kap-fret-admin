@@ -8,6 +8,7 @@ import {
 } from '@/lib/check-in-filters'
 import {
   getCheckInPassengerName,
+  getCheckInRemainingAmount,
   getCheckInTicketId,
   getCheckInTicketNumber,
   hasCheckInObservations,
@@ -177,20 +178,28 @@ function buildCheckInManifestRows(checkIns: CheckIn[]): ManifestTableBuildResult
   const sortedCheckIns = sortCheckInsForManifest(checkIns)
   const rows: string[][] = []
   const totalRowIndexes = new Set<number>()
-  let runningUsd = 0
-  let runningCdf = 0
+  let runningNetUsd = 0
+  let runningNetCdf = 0
+  let runningBalanceUsd = 0
+  let runningBalanceCdf = 0
   let rowIndex = 0
 
   for (let index = 0; index < sortedCheckIns.length; index += 1) {
     const checkIn = sortedCheckIns[index]!
     const netToPay = parseFloat(checkIn.netToPay) || 0
+    const remaining = getCheckInRemainingAmount(checkIn)
     const paymentCurrency = getCheckInPaymentCurrency(checkIn)
 
-    if (paymentCurrency === CURRENCY.USD) runningUsd += netToPay
-    else runningCdf += netToPay
+    if (paymentCurrency === CURRENCY.USD) {
+      runningNetUsd += netToPay
+      runningBalanceUsd += remaining
+    } else {
+      runningNetCdf += netToPay
+      runningBalanceCdf += remaining
+    }
 
     const [netUsd, netCdf] = formatNetToPayCells(netToPay, paymentCurrency)
-    const [balanceUsd, balanceCdf] = formatBalanceCells(runningUsd, runningCdf)
+    const [balanceUsd, balanceCdf] = formatNetToPayCells(remaining, paymentCurrency)
 
     rows.push([
       String(index + 1),
@@ -212,8 +221,8 @@ function buildCheckInManifestRows(checkIns: CheckIn[]): ManifestTableBuildResult
   }
 
   if (sortedCheckIns.length > 0) {
-    const [totalNetUsd, totalNetCdf] = formatBalanceCells(runningUsd, runningCdf)
-    const [totalBalanceUsd, totalBalanceCdf] = formatBalanceCells(runningUsd, runningCdf)
+    const [totalNetUsd, totalNetCdf] = formatBalanceCells(runningNetUsd, runningNetCdf)
+    const [totalBalanceUsd, totalBalanceCdf] = formatBalanceCells(runningBalanceUsd, runningBalanceCdf)
 
     rows.push([
       '',

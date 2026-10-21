@@ -233,7 +233,8 @@ export function BoardingPage() {
           <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Passagers prêts</h1>
         </div>
         <p className="text-sm text-muted-foreground">
-          Check-ins du vol — validez l&apos;identité puis marquez l&apos;embarquement (billet → Utilisé).
+          Après check-in, le billet reste émis. Ici vous validez l&apos;identité puis marquez
+          manuellement l&apos;embarquement (billet → Utilisé).
         </p>
       </div>
 

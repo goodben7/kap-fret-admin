@@ -64,8 +64,15 @@ export function useUpdateFreightShipment() {
 export function useUpdateFreightStatus() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: FreightStatus }) =>
-      freightService.updateStatus(id, status),
+    mutationFn: ({
+      id,
+      status,
+      shipmentDate,
+    }: {
+      id: string
+      status: FreightStatus
+      shipmentDate?: string | null
+    }) => freightService.updateStatus(id, status, { shipmentDate }),
     onSuccess: (_data, { id }) => {
       void queryClient.invalidateQueries({ queryKey: freightKeys.lists() })
       void queryClient.invalidateQueries({ queryKey: freightKeys.detail(id) })
@@ -78,7 +85,8 @@ export function useUpdateFreightStatus() {
 export function useMarkFreightShipmentsSent() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (ids: string[]) => freightService.markManyAsSent(ids),
+    mutationFn: ({ ids, shipmentDate }: { ids: string[]; shipmentDate?: string }) =>
+      freightService.markManyAsSent(ids, shipmentDate),
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: freightKeys.lists() })
       void queryClient.invalidateQueries({ queryKey: freightKeys.details() })

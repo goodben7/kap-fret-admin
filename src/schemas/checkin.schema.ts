@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { CHECK_IN_PAYMENT_MODE } from '@/constants/check-in'
 import { BAGGAGE_TYPE } from '@/constants/check-in-baggage'
 import { CURRENCY } from '@/constants/ticket'
 
@@ -7,6 +8,12 @@ const baggageTypes = [
   BAGGAGE_TYPE.HAND,
   BAGGAGE_TYPE.HAND_HOLD,
   BAGGAGE_TYPE.OVERSIZE,
+] as const
+
+const paymentModes = [
+  CHECK_IN_PAYMENT_MODE.CASH,
+  CHECK_IN_PAYMENT_MODE.ACC,
+  CHECK_IN_PAYMENT_MODE.PTA,
 ] as const
 
 export const checkInBaggageItemSchema = z.object({
@@ -23,6 +30,9 @@ const checkInFieldsSchema = z.object({
   excessPrice: z.string().min(1, 'Prix excédent requis'),
   currency: z.enum([CURRENCY.CDF, CURRENCY.USD], { message: 'Devise requise' }),
   paymentCurrency: z.enum([CURRENCY.CDF, CURRENCY.USD], { message: 'Devise de paiement requise' }),
+  paymentMode: z.enum(paymentModes).optional(),
+  /** Acompte ACC — montant encaissé à l'origine */
+  paidAmount: z.string().optional(),
   mixedPayment: z.boolean().optional(),
   paidAmountUsd: z.string().optional(),
   paidAmountCdf: z.string().optional(),
@@ -44,13 +54,10 @@ export const checkInCreateSchema = checkInFieldsSchema
   })
   .superRefine((data, ctx) => {
     const excess = parseFloat(data.excessWeightKg) || 0
-    if (excess > 0 && !data.cashRegister?.trim()) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['cashRegister'],
-        message: 'Caisse requise lorsqu\'il y a un excédent bagage',
-      })
-    }
+    const net = parseFloat(String(data.netToPay ?? '').replace(',', '.')) || 0
+    const mode = data.paymentMode ?? CHECK_IN_PAYMENT_MODE.CASH
+    const deposit = parseFloat(String(data.paidAmount ?? '').replace(',', '.')) || 0
+
     if (data.hasWeightReduction && !data.weightJustification?.trim()) {
       ctx.addIssue({
         code: 'custom',
@@ -58,7 +65,42 @@ export const checkInCreateSchema = checkInFieldsSchema
         message: 'Justification requise pour une réduction de poids',
       })
     }
-    if (data.mixedPayment && excess > 0) {
+
+    if (excess <= 0 || net <= 0) return
+
+    if (mode === CHECK_IN_PAYMENT_MODE.ACC) {
+      if (deposit <= 0) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['paidAmount'],
+          message: "L'acompte doit être supérieur à 0",
+        })
+      } else if (deposit >= net) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['paidAmount'],
+          message: "L'acompte doit être inférieur au net à payer (sinon choisissez Cash)",
+        })
+      }
+      if (!data.cashRegister?.trim()) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['cashRegister'],
+          message: 'Caisse requise pour un acompte ACC',
+        })
+      }
+    } else if (mode === CHECK_IN_PAYMENT_MODE.CASH) {
+      if (!data.cashRegister?.trim()) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['cashRegister'],
+          message: "Caisse requise lorsqu'il y a un excédent bagage",
+        })
+      }
+    }
+    // PTA : pas de caisse à l'origine
+
+    if (data.mixedPayment && mode !== CHECK_IN_PAYMENT_MODE.PTA) {
       const usd = parseFloat(String(data.paidAmountUsd ?? '').replace(',', '.'))
       const cdf = parseFloat(String(data.paidAmountCdf ?? '').replace(',', '.'))
       if (!Number.isFinite(usd) || usd <= 0) {
@@ -83,12 +125,12 @@ export const checkInCreateSchema = checkInFieldsSchema
           message: 'Taux de change requis (1 USD = N CDF)',
         })
       }
-      const due = parseFloat(String(data.netToPay ?? '').replace(',', '.')) || 0
-      if (Number.isFinite(usd) && usd >= due && due > 0) {
+      const dueForMixed = mode === CHECK_IN_PAYMENT_MODE.ACC ? deposit : net
+      if (Number.isFinite(usd) && usd >= dueForMixed && dueForMixed > 0) {
         ctx.addIssue({
           code: 'custom',
           path: ['paidAmountUsd'],
-          message: 'En mixte, le USD doit être inférieur au net à payer',
+          message: 'En mixte, le USD doit être inférieur au montant encaissé',
         })
       }
     }

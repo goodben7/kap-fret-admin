@@ -12,20 +12,30 @@ import {
   Scale,
   Ticket,
 } from 'lucide-react'
-import { CHECK_IN_STATUS, CHECK_IN_STATUS_LABELS } from '@/constants/check-in'
+import {
+  CHECK_IN_PAYMENT_MODE_LABELS,
+  CHECK_IN_STATUS,
+  CHECK_IN_STATUS_LABELS,
+} from '@/constants/check-in'
 import { CASH_TRANSACTION_REFERENCE_TYPE } from '@/constants/cash-transaction'
-import { CURRENCY_LABELS, normalizeCurrency } from '@/constants/ticket'
-import { useCheckIn } from '@/hooks/useCheckIns'
+import { CURRENCY, CURRENCY_LABELS, normalizeCurrency } from '@/constants/ticket'
+import { useCheckIn, usePayCheckIn } from '@/hooks/useCheckIns'
 import { RelatedCashTransactionsPanel } from '@/components/cash-transactions/RelatedCashTransactionsPanel'
+import { CheckInPaymentModal } from '@/components/checkins/CheckInPaymentModal'
+import type { TicketPaymentFormData } from '@/schemas/ticket-payment.schema'
 import {
   formatCheckInWeight,
   getBaggageTypeLabel,
   getCheckInCurrency,
   getCheckInIssuingOfficeLabel,
+  getCheckInPaidAmount,
   getCheckInPassengerName,
+  getCheckInPaymentMode,
+  getCheckInRemainingAmount,
   getCheckInTicketId,
   getCheckInTicketNumber,
   hasCheckInObservations,
+  hasCheckInOpenDebt,
   sortCheckInBaggagesByNewestFirst,
 } from '@/lib/check-in'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -146,7 +156,9 @@ export function CheckInDetailPage() {
   const { id } = useParams<{ id: string }>()
   const checkInId = id ?? ''
   const [activeTab, setActiveTab] = useState<CheckInDetailTab>('details')
+  const [paymentOpen, setPaymentOpen] = useState(false)
   const { data: checkIn, isLoading } = useCheckIn(checkInId)
+  const payCheckIn = usePayCheckIn()
 
   if (isLoading) {
     return (
@@ -175,6 +187,13 @@ export function CheckInDetailPage() {
   const ticketId = getCheckInTicketId(checkIn)
   const excessWeight = parseFloat(checkIn.excessWeightKg) || 0
   const netToPay = parseFloat(checkIn.netToPay) || 0
+  const paidAmount = getCheckInPaidAmount(checkIn)
+  const remainingAmount = getCheckInRemainingAmount(checkIn)
+  const paymentMode = getCheckInPaymentMode(checkIn)
+  const paymentModeLabel =
+    CHECK_IN_PAYMENT_MODE_LABELS[paymentMode as keyof typeof CHECK_IN_PAYMENT_MODE_LABELS]
+    ?? paymentMode
+  const openDebt = hasCheckInOpenDebt(checkIn)
   const showObservations = hasCheckInObservations(checkIn.observations)
   const showWeightJustification = hasCheckInObservations(checkIn.weightJustification)
   const showDestinationObservations = hasCheckInObservations(checkIn.destinationObservations)
@@ -182,6 +201,26 @@ export function CheckInDetailPage() {
   const baggages = sortCheckInBaggagesByNewestFirst(checkIn.baggages ?? [])
   const isCancelled = checkIn.status === CHECK_IN_STATUS.CANCELLED
   const statusLabel = checkIn.status ? (CHECK_IN_STATUS_LABELS[checkIn.status] ?? checkIn.status) : null
+
+  const handlePaymentConfirm = async (data: TicketPaymentFormData) => {
+    const payload = data.mixedPayment
+      ? {
+          paymentCurrency: CURRENCY.USD as typeof CURRENCY.USD,
+          paidAmountUsd: data.paidAmountUsd,
+          paidAmountCdf: data.paidAmountCdf,
+          exchangeRate: data.exchangeRate,
+          cashRegister: data.cashRegister,
+          description: data.description,
+        }
+      : {
+          amount: data.amount,
+          paymentCurrency: data.paymentCurrency,
+          cashRegister: data.cashRegister,
+          description: data.description,
+        }
+    await payCheckIn.mutateAsync({ id: checkIn.id, payload })
+    setPaymentOpen(false)
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 pb-28 lg:max-w-4xl lg:pb-6">
@@ -231,17 +270,33 @@ export function CheckInDetailPage() {
                 <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">{ticketNumber}</p>
               </div>
               <div className="shrink-0 text-right">
-                <p className="text-xs text-muted-foreground">Net à payer</p>
+                <p className="text-xs text-muted-foreground">
+                  {openDebt ? 'Solde dû' : 'Net à payer'}
+                </p>
                 <p
                   className={cn(
                     'text-2xl font-bold tabular-nums',
-                    netToPay > 0 ? 'text-brand-orange' : 'text-foreground',
+                    (openDebt ? remainingAmount : netToPay) > 0
+                      ? 'text-brand-orange'
+                      : 'text-foreground',
                   )}
                 >
-                  {money(checkIn.netToPay)}
+                  {money(openDebt ? remainingAmount : checkIn.netToPay)}
                 </p>
               </div>
             </div>
+            {openDebt && (
+              <div className="pt-1">
+                <Button
+                  type="button"
+                  className="h-10 w-full rounded-xl sm:w-auto"
+                  onClick={() => setPaymentOpen(true)}
+                >
+                  <Banknote className="h-4 w-4" />
+                  Encaisser le solde
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -318,7 +373,14 @@ export function CheckInDetailPage() {
           <div className="grid gap-0 lg:grid-cols-2 lg:gap-x-8">
             <DetailRow label="Devise" value={CURRENCY_LABELS[currency]} />
             <DetailRow label="Devise de paiement" value={CURRENCY_LABELS[paymentCurrency]} />
+            <DetailRow label="Mode" value={paymentModeLabel} />
             <DetailRow label="Prix excédent" value={money(checkIn.excessPrice)} />
+            <DetailRow label="Payé" value={money(paidAmount)} />
+            <DetailRow
+              label="Reste"
+              value={money(remainingAmount)}
+              highlight={remainingAmount > 0}
+            />
             <div className="mt-3 flex items-center justify-between rounded-xl bg-brand-orange/10 px-4 py-3 lg:col-span-2">
               <span className="text-sm font-semibold">Net à payer</span>
               <span className="text-lg font-bold tabular-nums text-brand-orange">{money(checkIn.netToPay)}</span>
@@ -382,7 +444,7 @@ export function CheckInDetailPage() {
             {showDestinationObservations && (
               <div className={cn('space-y-1', (showWeightJustification || showObservations) && 'pt-3')}>
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Paiement à destination
+                  Notes destination
                 </p>
                 <p className="whitespace-pre-wrap text-sm leading-relaxed">{checkIn.destinationObservations}</p>
               </div>
@@ -400,8 +462,18 @@ export function CheckInDetailPage() {
 
       {activeTab === 'details' && (
       <div className="fixed inset-x-0 bottom-[4.25rem] z-30 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85 lg:hidden">
-        <div className="mx-auto max-w-3xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-          <Button asChild className="h-11 w-full rounded-xl font-semibold">
+        <div className="mx-auto max-w-3xl space-y-2 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          {openDebt && (
+            <Button
+              type="button"
+              className="h-11 w-full rounded-xl font-semibold"
+              onClick={() => setPaymentOpen(true)}
+            >
+              <Banknote className="h-4 w-4" />
+              Encaisser le solde
+            </Button>
+          )}
+          <Button asChild variant={openDebt ? 'outline' : 'default'} className="h-11 w-full rounded-xl font-semibold">
             <Link to={`/checkins/${checkIn.id}/edit`}>
               <Pencil className="h-4 w-4" />
               Modifier le check-in
@@ -410,6 +482,14 @@ export function CheckInDetailPage() {
         </div>
       </div>
       )}
+
+      <CheckInPaymentModal
+        open={paymentOpen}
+        onOpenChange={setPaymentOpen}
+        checkIn={checkIn}
+        onConfirm={handlePaymentConfirm}
+        isLoading={payCheckIn.isPending}
+      />
     </div>
   )
 }

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { ArrowRight, Calendar, Download, FileText, LoaderIcon, MapPin, Receipt } from 'lucide-react'
+import { ArrowRight, Calendar, Download, FileText, LoaderIcon, MapPin, Receipt, Users } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { CheckpointAsyncSelect } from '@/components/ui/checkpoint-async-select'
+import { ManifestPassengerPicker } from '@/components/tickets/ManifestPassengerPicker'
 import {
   passengerManifestSchema,
   type PassengerManifestFormData,
@@ -32,6 +33,7 @@ import {
   resolveTicketSalesManifestFlightNumber,
 } from '@/lib/ticket-sales-manifest-pdf'
 import { toast } from 'sonner'
+import type { Ticket } from '@/types/ticket'
 
 const fieldClass =
   'h-11 rounded-xl border-transparent bg-muted/40 focus-visible:bg-background focus-visible:border-input'
@@ -42,6 +44,7 @@ interface TicketSalesManifestModalProps {
 }
 
 export function TicketSalesManifestModal({ open, onOpenChange }: TicketSalesManifestModalProps) {
+  const [isLoadingList, setIsLoadingList] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null)
@@ -49,6 +52,8 @@ export function TicketSalesManifestModal({ open, onOpenChange }: TicketSalesMani
   const [fileName, setFileName] = useState('MANIFESTE_VENTE_BILLETS.pdf')
   const [departureLabel, setDepartureLabel] = useState('')
   const [destinationLabel, setDestinationLabel] = useState('')
+  const [loadedTickets, setLoadedTickets] = useState<Ticket[]>([])
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const departurePrefillDone = useRef(false)
 
   const { user } = useAuth()
@@ -109,7 +114,38 @@ export function TicketSalesManifestModal({ open, onOpenChange }: TicketSalesMani
     setPdfBlob(null)
     setTicketCount(0)
     setFileName('MANIFESTE_VENTE_BILLETS.pdf')
+    setLoadedTickets([])
+    setSelectedIds(new Set())
   }, [open, reset])
+
+  const clearPreview = () => {
+    setPreviewUrl((current) => {
+      if (current) URL.revokeObjectURL(current)
+      return null
+    })
+    setPdfBlob(null)
+    setTicketCount(0)
+  }
+
+  const togglePassenger = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+    clearPreview()
+  }
+
+  const selectAllPassengers = () => {
+    setSelectedIds(new Set(loadedTickets.map((ticket) => ticket.id)))
+    clearPreview()
+  }
+
+  const clearPassengerSelection = () => {
+    setSelectedIds(new Set())
+    clearPreview()
+  }
 
   useEffect(() => {
     if (!open || !userCheckpointIri || departurePrefillDone.current) return
@@ -122,6 +158,17 @@ export function TicketSalesManifestModal({ open, onOpenChange }: TicketSalesMani
       if (previewUrl) URL.revokeObjectURL(previewUrl)
     }
   }, [previewUrl])
+
+  useEffect(() => {
+    setLoadedTickets([])
+    setSelectedIds(new Set())
+    setPreviewUrl((current) => {
+      if (current) URL.revokeObjectURL(current)
+      return null
+    })
+    setPdfBlob(null)
+    setTicketCount(0)
+  }, [departure, destination, travelDate])
 
   useEffect(() => {
     if (!departure) {
@@ -151,17 +198,14 @@ export function TicketSalesManifestModal({ open, onOpenChange }: TicketSalesMani
     }
   }, [destination, resolveCheckpoint])
 
-  const canGenerate = !!departure?.trim() && !!destination?.trim() && !!travelDate?.trim()
+  const canLoad = !!departure?.trim() && !!destination?.trim() && !!travelDate?.trim()
+  const canGenerate = selectedIds.size > 0
   const hasRouteSummary = !!departureLabel && !!destinationLabel && !!travelDate
 
-  const generate = handleSubmit(async (data) => {
-    setIsGenerating(true)
+  const loadTickets = handleSubmit(async (data) => {
+    setIsLoadingList(true)
+    clearPreview()
     try {
-      const [departureCheckpoint, destinationCheckpoint] = await Promise.all([
-        resolveCheckpoint(data.departure),
-        resolveCheckpoint(data.destination),
-      ])
-
       const { items } = await ticketService.getAll({
         departure: data.departure,
         destination: data.destination,
@@ -169,10 +213,42 @@ export function TicketSalesManifestModal({ open, onOpenChange }: TicketSalesMani
         itemsPerPage: 500,
         page: 1,
       })
-
       const tickets = prepareTicketsForSalesManifest(items)
       if (tickets.length === 0) {
+        setLoadedTickets([])
+        setSelectedIds(new Set())
         toast.error('Aucun billet trouvé pour ce trajet et cette date')
+        return
+      }
+      setLoadedTickets(tickets)
+      setSelectedIds(new Set(tickets.map((ticket) => ticket.id)))
+      toast.success(`${tickets.length} billet${tickets.length !== 1 ? 's' : ''} chargé${tickets.length !== 1 ? 's' : ''}`)
+    } catch (error) {
+      if (isAxiosError(error)) {
+        toast.error(extractApiErrorMessage(error.response?.data, error.response?.status))
+      } else {
+        toast.error('Impossible de charger les billets')
+      }
+    } finally {
+      setIsLoadingList(false)
+    }
+  })
+
+  const generate = handleSubmit(async (data) => {
+    if (selectedIds.size === 0) {
+      toast.error('Sélectionnez au moins un billet')
+      return
+    }
+    setIsGenerating(true)
+    try {
+      const [departureCheckpoint, destinationCheckpoint] = await Promise.all([
+        resolveCheckpoint(data.departure),
+        resolveCheckpoint(data.destination),
+      ])
+
+      const tickets = loadedTickets.filter((ticket) => selectedIds.has(ticket.id))
+      if (tickets.length === 0) {
+        toast.error('Aucun billet sélectionné')
         return
       }
 
@@ -233,7 +309,7 @@ export function TicketSalesManifestModal({ open, onOpenChange }: TicketSalesMani
       open={open}
       onOpenChange={handleOpenChange}
       title="Manifeste vente billets"
-      description="Générez le PDF commercial du vol : montants, modes de paiement et sponsors."
+      description="Chargez les billets du vol, décochez ceux à exclure, puis générez le PDF commercial."
       className={cn(
         'rounded-2xl',
         previewUrl ? 'sm:max-w-[min(96vw,72rem)]' : 'sm:max-w-xl',
@@ -301,6 +377,37 @@ export function TicketSalesManifestModal({ open, onOpenChange }: TicketSalesMani
               </div>
             )}
 
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 w-full rounded-xl"
+              disabled={isLoadingList || !canLoad}
+              onClick={() => void loadTickets()}
+            >
+              {isLoadingList ? (
+                <>
+                  <LoaderIcon />
+                  Chargement...
+                </>
+              ) : (
+                <>
+                  <Users className="h-4 w-4" />
+                  Charger les billets
+                </>
+              )}
+            </Button>
+
+            {loadedTickets.length > 0 && (
+              <ManifestPassengerPicker
+                tickets={loadedTickets}
+                selectedIds={selectedIds}
+                onToggle={togglePassenger}
+                onSelectAll={selectAllPassengers}
+                onClear={clearPassengerSelection}
+                disabled={isGenerating || isLoadingList}
+              />
+            )}
+
             <div className="flex flex-col gap-2 sm:flex-row">
               <Button
                 type="submit"
@@ -332,9 +439,9 @@ export function TicketSalesManifestModal({ open, onOpenChange }: TicketSalesMani
               )}
             </div>
 
-            {!canGenerate && (
+            {!canLoad && (
               <p className="text-xs text-muted-foreground">
-                Renseignez le départ, la destination et la date pour activer la génération.
+                Renseignez le départ, la destination et la date pour charger les billets.
               </p>
             )}
           </div>

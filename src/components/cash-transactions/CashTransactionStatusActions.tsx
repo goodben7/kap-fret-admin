@@ -19,6 +19,7 @@ const ACTION_META: Record<
   CashTransactionStatus,
   {
     label: string
+    shortLabel: string
     description: string
     icon: typeof CheckCircle2
     iconClass: string
@@ -27,6 +28,7 @@ const ACTION_META: Record<
 > = {
   [CASH_TRANSACTION_STATUS.PENDING]: {
     label: 'Remettre en attente',
+    shortLabel: 'Attente',
     description: 'Retour au statut initial',
     icon: Clock3,
     iconClass: 'text-muted-foreground',
@@ -34,6 +36,7 @@ const ACTION_META: Record<
   },
   [CASH_TRANSACTION_STATUS.IN_REVIEW]: {
     label: 'Mettre en examen',
+    shortLabel: 'Examen',
     description: 'Signaler pour revue',
     icon: Search,
     iconClass: 'text-amber-600',
@@ -41,6 +44,7 @@ const ACTION_META: Record<
   },
   [CASH_TRANSACTION_STATUS.VALIDATED]: {
     label: 'Valider',
+    shortLabel: 'Valider',
     description: 'Approuver la transaction',
     icon: CheckCircle2,
     iconClass: 'text-emerald-600',
@@ -48,6 +52,7 @@ const ACTION_META: Record<
   },
   [CASH_TRANSACTION_STATUS.REJECTED]: {
     label: 'Rejeter',
+    shortLabel: 'Rejeter',
     description: 'Refuser la transaction',
     icon: XCircle,
     iconClass: 'text-destructive',
@@ -122,7 +127,7 @@ export function CashTransactionStatusActions({
     return (
       <>
         <div
-          className={cn('grid grid-cols-1 gap-2 sm:grid-cols-3', className)}
+          className={cn('flex flex-wrap gap-1.5', className)}
           onClick={(e) => e.stopPropagation()}
         >
           {actions.map((status) => {
@@ -133,12 +138,13 @@ export function CashTransactionStatusActions({
                 key={status}
                 type="button"
                 variant="outline"
-                className="h-11 justify-start gap-2 rounded-xl px-3"
+                size="sm"
+                className="h-8 gap-1.5 rounded-lg px-2.5"
                 disabled={changeStatus.isPending}
                 onClick={() => setPendingStatus(status)}
               >
-                <Icon className={cn('h-4 w-4 shrink-0', meta.iconClass)} aria-hidden="true" />
-                <span className="text-sm font-medium">{meta.label}</span>
+                <Icon className={cn('h-3.5 w-3.5 shrink-0', meta.iconClass)} aria-hidden="true" />
+                <span className="text-xs font-medium">{meta.shortLabel}</span>
               </Button>
             )
           })}

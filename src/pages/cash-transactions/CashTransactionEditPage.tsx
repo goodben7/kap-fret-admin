@@ -5,8 +5,10 @@ import { CashTransactionEditForm } from '@/components/forms/CashTransactionEditF
 import {
   canEditOrDeleteCashTransaction,
   cashTransactionToPatchFormDefaults,
+  isCashTransactionEditLockedByTime,
   toCashTransactionPatchPayload,
 } from '@/lib/cash-transaction'
+import { useAuth } from '@/hooks/useAuth'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import type { CashTransactionPatchFormData } from '@/schemas/cash-transaction.schema'
@@ -15,6 +17,7 @@ export function CashTransactionEditPage() {
   const { id } = useParams<{ id: string }>()
   const transactionId = id ?? ''
   const navigate = useNavigate()
+  const { user } = useAuth()
   const { data: transaction, isLoading } = useCashTransaction(transactionId)
   const updateTransaction = useUpdateCashTransaction()
 
@@ -37,12 +40,17 @@ export function CashTransactionEditPage() {
     )
   }
 
-  if (!canEditOrDeleteCashTransaction(transaction)) {
+  if (!canEditOrDeleteCashTransaction(transaction, user?.roles)) {
+    const lockedByTime = isCashTransactionEditLockedByTime(transaction, user?.roles)
     return (
       <EmptyState
         icon={Pencil}
         title="Modification impossible"
-        description="Seuls les mouvements manuels (entrée/sortie) non validés peuvent être modifiés."
+        description={
+          lockedByTime
+            ? 'Modification verrouillée après 24 h. Contactez un administrateur.'
+            : 'Seuls les mouvements manuels (entrée/sortie) non validés peuvent être modifiés.'
+        }
         action={{
           label: 'Voir la transaction',
           onClick: () => { window.location.href = `/cash-transactions/${transaction.id}` },

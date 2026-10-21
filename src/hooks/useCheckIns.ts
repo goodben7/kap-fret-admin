@@ -4,7 +4,12 @@ import {
   type CheckInFilters,
 } from '@/services/checkin.service'
 import { checkInFiltersKey } from '@/lib/check-in-filters'
-import type { CheckInBatchCreatePayload, CheckInCreatePayload, CheckInPatchPayload } from '@/types/check-in'
+import type {
+  CheckInBatchCreatePayload,
+  CheckInCreatePayload,
+  CheckInPatchPayload,
+  CheckInPaymentPayload,
+} from '@/types/check-in'
 import { toast } from 'sonner'
 
 export const checkInKeys = {
@@ -67,6 +72,19 @@ export function useUpdateCheckIn() {
       void queryClient.invalidateQueries({ queryKey: checkInKeys.lists() })
       void queryClient.invalidateQueries({ queryKey: checkInKeys.detail(id) })
       toast.success('Check-in mis à jour')
+    },
+  })
+}
+
+export function usePayCheckIn() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: CheckInPaymentPayload }) =>
+      checkInService.pay(id, payload),
+    onSuccess: (_data, { id }) => {
+      void queryClient.invalidateQueries({ queryKey: checkInKeys.lists() })
+      void queryClient.invalidateQueries({ queryKey: checkInKeys.detail(id) })
+      toast.success('Paiement bagages enregistré')
     },
   })
 }

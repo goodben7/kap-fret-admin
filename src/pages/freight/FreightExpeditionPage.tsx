@@ -168,9 +168,9 @@ export function FreightExpeditionPage() {
 
   const queryFilters = useMemo(() => {
     if (!applied) return null
+    // Pas de filtre date API : inclut les LTA PENDING sans date (posée au SENT)
     return {
       status: FREIGHT_STATUS.PENDING,
-      shipmentDate: applied.shipmentDate,
       loadingPlace: applied.loadingPlace,
       unloadingPlace: applied.unloadingPlace,
       page: 1,
@@ -186,7 +186,12 @@ export function FreightExpeditionPage() {
 
   const shipments = useMemo(() => {
     if (!applied) return []
-    return (data?.items ?? []).filter((s) => s.status === FREIGHT_STATUS.PENDING)
+    const day = applied.shipmentDate
+    return (data?.items ?? []).filter((s) => {
+      if (s.status !== FREIGHT_STATUS.PENDING) return false
+      if (!s.shipmentDate) return true
+      return s.shipmentDate.startsWith(day)
+    })
   }, [applied, data?.items])
 
   const allSelected = shipments.length > 0 && shipments.every((s) => selectedIds.has(s.id))
@@ -219,8 +224,11 @@ export function FreightExpeditionPage() {
 
   const handleConfirm = async () => {
     const ids = shipments.filter((s) => selectedIds.has(s.id)).map((s) => s.id)
-    if (ids.length === 0) return
-    const result = await markSent.mutateAsync(ids)
+    if (ids.length === 0 || !applied) return
+    const result = await markSent.mutateAsync({
+      ids,
+      shipmentDate: applied.shipmentDate,
+    })
     setConfirmOpen(false)
     if (result.succeeded.length > 0) {
       setSelectedIds((prev) => {
@@ -309,7 +317,7 @@ export function FreightExpeditionPage() {
         <EmptyState
           icon={Package}
           title="Aucune LTA en attente"
-          description={`Pas d’expédition PENDING pour ${formatDate(applied.shipmentDate)} sur ce trajet.`}
+          description={`Pas de LTA en attente (sans date ou datée du ${formatDate(applied.shipmentDate)}) sur ce trajet.`}
         />
       ) : (
         <div className="space-y-3">

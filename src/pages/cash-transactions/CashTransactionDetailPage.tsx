@@ -26,8 +26,10 @@ import {
   getCashTransactionStatus,
   getCashTransactionStatusLabel,
   getCashTransactionTypeLabel,
+  isCashTransactionEditLockedByTime,
 } from '@/lib/cash-transaction'
 import { CASH_TRANSACTION_TYPE } from '@/constants/cash-transaction'
+import { useAuth } from '@/hooks/useAuth'
 import { getUserRefLabel } from '@/lib/user-ref'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -78,6 +80,7 @@ export function CashTransactionDetailPage() {
   const { id } = useParams<{ id: string }>()
   const transactionId = id ?? ''
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [deleteOpen, setDeleteOpen] = useState(false)
 
   const { data: transaction, isLoading } = useCashTransaction(transactionId)
@@ -110,7 +113,8 @@ export function CashTransactionDetailPage() {
   const status = getCashTransactionStatus(transaction)
   const requiresValidation = cashTransactionRequiresValidation(transaction)
   const showStatusActions = canChangeCashTransactionStatus(transaction)
-  const canMutate = canEditOrDeleteCashTransaction(transaction)
+  const canMutate = canEditOrDeleteCashTransaction(transaction, user?.roles)
+  const editLockedByTime = isCashTransactionEditLockedByTime(transaction, user?.roles)
   const showBottomBar = showStatusActions || canMutate
 
   const handleDelete = async () => {
@@ -155,11 +159,20 @@ export function CashTransactionDetailPage() {
                 )}
               </div>
               <p className="text-base font-semibold leading-snug">{transaction.description}</p>
+              {transaction.otherDetail?.trim() && (
+                <p className="text-sm text-muted-foreground">{transaction.otherDetail}</p>
+              )}
             </div>
             <TransactionAmounts transaction={transaction} />
           </div>
         </CardContent>
       </Card>
+
+      {editLockedByTime && (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Modification verrouillée après 24 h. Contactez un administrateur.
+        </p>
+      )}
 
       {canMutate && (
         <Card className="hidden rounded-2xl border-border/80 shadow-sm lg:block">
@@ -224,6 +237,9 @@ export function CashTransactionDetailPage() {
             />
           )}
           <DetailRow label="Bureau" value={getCashTransactionIssuingOfficeLabel(transaction.issuingOffice)} />
+          {transaction.otherDetail?.trim() && (
+            <DetailRow label="Autre détail" value={transaction.otherDetail} />
+          )}
           <DetailRow label="Type référence" value={getCashTransactionReferenceTypeLabel(transaction.referenceType)} />
           <DetailRow
             label="Référence"

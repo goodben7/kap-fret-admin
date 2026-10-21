@@ -3,7 +3,13 @@ import { buildCheckInFilterParams, type CheckInFilters } from '@/lib/check-in-fi
 import { extractHydraMember, extractHydraTotalItems } from '@/lib/hydra'
 import { normalizeCheckInResource, sortCheckInsByCreatedAtAsc } from '@/lib/check-in'
 import type { HydraCollection } from '@/types/hydra'
-import type { CheckIn, CheckInBatchCreatePayload, CheckInCreatePayload, CheckInPatchPayload } from '@/types/check-in'
+import type {
+  CheckIn,
+  CheckInBatchCreatePayload,
+  CheckInCreatePayload,
+  CheckInPatchPayload,
+  CheckInPaymentPayload,
+} from '@/types/check-in'
 
 export type { CheckInFilters } from '@/lib/check-in-filters'
 
@@ -84,5 +90,12 @@ export const checkInService = {
       headers: { ...JSON_HEADERS, 'Content-Type': 'application/merge-patch+json' },
     })
     return data
+  },
+
+  async pay(id: string, payload: CheckInPaymentPayload) {
+    const { data } = await api.post<CheckIn>(`/api/check_ins/${id}/payment`, payload, {
+      headers: JSON_HEADERS,
+    })
+    return normalizeCheckInResource(data)
   },
 }

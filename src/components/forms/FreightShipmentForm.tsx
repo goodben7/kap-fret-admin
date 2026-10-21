@@ -41,7 +41,6 @@ import { getActiveUsdToCdfRate } from '@/lib/exchange-rate'
 import { extractIri, extractResourceId } from '@/lib/hydra'
 import { resolveUserIssuingOfficeIri } from '@/lib/issuing-office'
 import { getCheckpointIri } from '@/services/issuing-office.service'
-import { getUpcomingFlightTravelDateInput } from '@/lib/ticket'
 import {
   computeFreightOrdinaryFromUnitPrice,
   computeFreightPackagesTotalWeight,
@@ -214,8 +213,8 @@ export function FreightShipmentForm({
     resolver: zodResolver(freightShipmentSchema),
     mode: 'onChange',
     defaultValues: {
-      shipmentDate: getUpcomingFlightTravelDateInput(),
-      shipmentTime: '06:00',
+      shipmentDate: '',
+      shipmentTime: '',
       airline: '',
       aircraft: '',
       registration: '',
@@ -510,8 +509,23 @@ export function FreightShipmentForm({
   return (
     <form id={FORM_ID} onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <FormSection title="Expédition" icon={Plane}>
-        <Input label="Date" type="date" className={fieldClass} error={errors.shipmentDate?.message} {...register('shipmentDate')} />
-        <Input label="Heure" type="time" className={fieldClass} error={errors.shipmentTime?.message} {...register('shipmentTime')} />
+        <Input
+          label="Date (optionnel)"
+          type="date"
+          className={fieldClass}
+          error={errors.shipmentDate?.message}
+          {...register('shipmentDate')}
+        />
+        <Input
+          label="Heure (optionnel)"
+          type="time"
+          className={fieldClass}
+          error={errors.shipmentTime?.message}
+          {...register('shipmentTime')}
+        />
+        <p className="text-xs text-muted-foreground sm:col-span-2">
+          Sans date : elle sera posée automatiquement au passage « Expédié ».
+        </p>
         <Input label="Compagnie aérienne" className={fieldClass} error={errors.airline?.message} {...register('airline')} />
         <Input label="Avion" className={fieldClass} error={errors.aircraft?.message} {...register('aircraft')} />
         <Input label="Immatriculation" className={fieldClass} error={errors.registration?.message} {...register('registration')} />
@@ -548,6 +562,9 @@ export function FreightShipmentForm({
           tabIndex={-1}
           {...register('packageCount', { valueAsNumber: true })}
         />
+        <p className="text-xs text-muted-foreground sm:col-span-2">
+          N° LTA auto : séquence / nb colis (ex. 0001/1, 0002/4)
+        </p>
       </FormSection>
 
       <FormSection title="Expéditeur" icon={Send}>

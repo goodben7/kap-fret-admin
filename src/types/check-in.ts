@@ -1,4 +1,6 @@
+import type { CheckInPaymentMode } from '@/constants/check-in'
 import type { BaggageType } from '@/constants/check-in-baggage'
+import type { Currency } from '@/constants/ticket'
 import type { HydraResource } from './hydra'
 import type { IssuingOffice } from './issuing-office'
 import type { Ticket } from './ticket'
@@ -22,6 +24,11 @@ export interface CheckIn extends HydraResource {
   currency?: string
   paymentCurrency?: string
   netToPay: string
+  paymentMode?: CheckInPaymentMode | string
+  paidAmount?: string
+  remainingAmount?: string
+  acompteAmount?: string
+  pdAmount?: string
   handBaggageWeight: string
   observations?: string
   weightJustification?: string | null
@@ -55,6 +62,9 @@ export interface CheckInCreatePayload {
   excessPrice: string
   currency: string
   paymentCurrency: string
+  paymentMode: string
+  /** Acompte ACC (montant encaissé à l'origine). */
+  paidAmount?: string
   /** Paiement mixte : partie USD (avec paidAmountCdf). */
   paidAmountUsd?: string
   /** Paiement mixte : partie CDF (avec paidAmountUsd). */
@@ -81,6 +91,8 @@ export interface CheckInBatchCreatePayload {
   excessPrice: string
   currency: string
   paymentCurrency: string
+  paymentMode: string
+  paidAmount?: string
   paidAmountUsd?: string
   paidAmountCdf?: string
   /** Paiement mixte : taux manuel 1 USD = N CDF. */
@@ -93,6 +105,17 @@ export interface CheckInBatchCreatePayload {
   destinationObservations?: string | null
   encodedAt?: string
   baggages: CheckInBaggageInput[]
+}
+
+/** POST /api/check_ins/{id}/payment */
+export interface CheckInPaymentPayload {
+  amount?: string
+  paymentCurrency: Currency
+  paidAmountUsd?: string
+  paidAmountCdf?: string
+  exchangeRate?: string
+  cashRegister: string
+  description: string
 }
 
 /** PATCH /api/check_ins/{id} — sans ticket, caisse ni issuingOffice */

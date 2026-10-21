@@ -1,4 +1,8 @@
-import { CHECK_IN_EXCESS_PRICE_PER_KG_USD } from '@/constants/check-in'
+import {
+  CHECK_IN_EXCESS_PRICE_PER_KG_USD,
+  CHECK_IN_PAYMENT_MODE,
+  type CheckInPaymentMode,
+} from '@/constants/check-in'
 import {
   BAGGAGE_TYPE,
   BAGGAGE_TYPE_LABELS,
@@ -405,8 +409,35 @@ export function buildCheckInBaggageTransactionDescription(
   return `Check-in ${checkInId} — ${label}`
 }
 
+export function getCheckInPaidAmount(checkIn: CheckIn): number {
+  return parseFloat(String(checkIn.paidAmount ?? '0').replace(',', '.')) || 0
+}
+
+export function getCheckInRemainingAmount(checkIn: CheckIn): number {
+  const explicit = parseFloat(String(checkIn.remainingAmount ?? '').replace(',', '.'))
+  if (Number.isFinite(explicit)) return Math.max(0, explicit)
+  const net = parseFloat(String(checkIn.netToPay ?? '0').replace(',', '.')) || 0
+  return Math.max(0, net - getCheckInPaidAmount(checkIn))
+}
+
+export function getCheckInPaymentMode(checkIn: CheckIn): CheckInPaymentMode | string {
+  return checkIn.paymentMode ?? CHECK_IN_PAYMENT_MODE.CASH
+}
+
+export function hasCheckInOpenDebt(checkIn: CheckIn): boolean {
+  if (checkIn.status === 'CANCELLED') return false
+  return getCheckInRemainingAmount(checkIn) > 0.001
+}
+
+export function buildCheckInPaymentDescription(checkIn: CheckIn): string {
+  const name = getCheckInPassengerName(checkIn)
+  const ticket = getCheckInTicketNumber(checkIn)
+  return `Solde excédent bagage — ${checkIn.id}${ticket ? ` — ${ticket}` : ''}${name ? ` — ${name}` : ''}`
+}
+
 export function toCheckInCreatePayload(data: CheckInCreateFormData): CheckInCreatePayload {
   const excess = parseFloat(data.excessWeightKg) || 0
+  const paymentMode = data.paymentMode ?? CHECK_IN_PAYMENT_MODE.CASH
   const payload: CheckInCreatePayload = {
     ticket: data.ticketIri,
     checkInWeight: formatDecimal(data.checkInWeight),
@@ -417,6 +448,7 @@ export function toCheckInCreatePayload(data: CheckInCreateFormData): CheckInCrea
     paymentCurrency: data.mixedPayment
       ? CURRENCY.USD
       : normalizeCurrency(data.paymentCurrency),
+    paymentMode: excess > 0 ? paymentMode : CHECK_IN_PAYMENT_MODE.CASH,
     netToPay: formatDecimal(data.netToPay),
     handBaggageWeight: formatDecimal(data.handBaggageWeight || '0'),
     observations: data.observations?.trim() ?? '',
@@ -427,11 +459,19 @@ export function toCheckInCreatePayload(data: CheckInCreateFormData): CheckInCrea
     baggages: data.baggages.filter(hasBaggageWeight).map(toBaggageCreateInput),
   }
 
-  if (excess > 0 && data.cashRegister?.trim()) {
+  if (excess > 0 && paymentMode === CHECK_IN_PAYMENT_MODE.ACC) {
+    payload.paidAmount = formatDecimal(data.paidAmount || '0')
+  }
+
+  if (
+    excess > 0
+    && paymentMode !== CHECK_IN_PAYMENT_MODE.PTA
+    && data.cashRegister?.trim()
+  ) {
     payload.cashRegister = data.cashRegister
   }
 
-  if (data.mixedPayment && excess > 0) {
+  if (data.mixedPayment && excess > 0 && paymentMode !== CHECK_IN_PAYMENT_MODE.PTA) {
     payload.paidAmountUsd = formatDecimal(data.paidAmountUsd || '0')
     payload.paidAmountCdf = formatDecimal(data.paidAmountCdf || '0')
     const exchangeRate = formatExchangeRateForPayload(data.exchangeRate)
@@ -447,6 +487,7 @@ export function toCheckInBatchPayload(
   ticketIris: string[],
 ): import('@/types/check-in').CheckInBatchCreatePayload {
   const excess = parseFloat(data.excessWeightKg) || 0
+  const paymentMode = data.paymentMode ?? CHECK_IN_PAYMENT_MODE.CASH
   const payload: import('@/types/check-in').CheckInBatchCreatePayload = {
     tickets: ticketIris,
     checkInWeight: formatDecimal(data.checkInWeight),
@@ -457,6 +498,7 @@ export function toCheckInBatchPayload(
     paymentCurrency: data.mixedPayment
       ? CURRENCY.USD
       : normalizeCurrency(data.paymentCurrency),
+    paymentMode: excess > 0 ? paymentMode : CHECK_IN_PAYMENT_MODE.CASH,
     netToPay: formatDecimal(data.netToPay),
     handBaggageWeight: formatDecimal(data.handBaggageWeight || '0'),
     observations: data.observations?.trim() ?? '',
@@ -467,11 +509,19 @@ export function toCheckInBatchPayload(
     baggages: data.baggages.filter(hasBaggageWeight).map(toBaggageCreateInput),
   }
 
-  if (excess > 0 && data.cashRegister?.trim()) {
+  if (excess > 0 && paymentMode === CHECK_IN_PAYMENT_MODE.ACC) {
+    payload.paidAmount = formatDecimal(data.paidAmount || '0')
+  }
+
+  if (
+    excess > 0
+    && paymentMode !== CHECK_IN_PAYMENT_MODE.PTA
+    && data.cashRegister?.trim()
+  ) {
     payload.cashRegister = data.cashRegister
   }
 
-  if (data.mixedPayment && excess > 0) {
+  if (data.mixedPayment && excess > 0 && paymentMode !== CHECK_IN_PAYMENT_MODE.PTA) {
     payload.paidAmountUsd = formatDecimal(data.paidAmountUsd || '0')
     payload.paidAmountCdf = formatDecimal(data.paidAmountCdf || '0')
     const exchangeRate = formatExchangeRateForPayload(data.exchangeRate)

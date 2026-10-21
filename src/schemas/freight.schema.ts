@@ -41,8 +41,9 @@ export const freightPackageSchema = freightPackageCreateSchema.extend({
 
 export const freightShipmentSchema = z
   .object({
-  shipmentDate: z.string().min(1, 'Date requise'),
-  shipmentTime: z.string().min(1, 'Heure requise'),
+  /** Optionnelle à la création — posée au passage SENT si absente */
+  shipmentDate: z.string().optional(),
+  shipmentTime: z.string().optional(),
   airline: z.string(),
   aircraft: z.string(),
   registration: z.string(),
@@ -81,6 +82,23 @@ export const freightShipmentSchema = z
   packages: z.array(freightPackageCreateSchema).min(1, 'Au moins un colis requis'),
 })
   .superRefine((data, ctx) => {
+    const hasDate = !!data.shipmentDate?.trim()
+    const hasTime = !!data.shipmentTime?.trim()
+    if (hasDate && !hasTime) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['shipmentTime'],
+        message: 'Heure requise si une date est renseignée',
+      })
+    }
+    if (hasTime && !hasDate) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['shipmentDate'],
+        message: 'Date requise si une heure est renseignée',
+      })
+    }
+
     if (
       (data.paymentMode === FREIGHT_PAYMENT_MODE.CASH || data.paymentMode === FREIGHT_PAYMENT_MODE.ACC)
       && !data.cashRegister?.trim()
@@ -140,8 +158,8 @@ export const freightShipmentSchema = z
 
 export const freightShipmentPatchSchema = z
   .object({
-  shipmentDate: z.string().min(1, 'Date requise'),
-  shipmentTime: z.string().min(1, 'Heure requise'),
+  shipmentDate: z.string().optional(),
+  shipmentTime: z.string().optional(),
   airline: z.string(),
   aircraft: z.string(),
   registration: z.string(),
@@ -173,6 +191,23 @@ export const freightShipmentPatchSchema = z
   observations: z.string().optional(),
 })
   .superRefine((data, ctx) => {
+    const hasDate = !!data.shipmentDate?.trim()
+    const hasTime = !!data.shipmentTime?.trim()
+    if (hasDate && !hasTime) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['shipmentTime'],
+        message: 'Heure requise si une date est renseignée',
+      })
+    }
+    if (hasTime && !hasDate) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['shipmentDate'],
+        message: 'Date requise si une heure est renseignée',
+      })
+    }
+
     if (data.paymentMode !== FREIGHT_PAYMENT_MODE.ACC) return
 
     const total = parseFloat(data.totalAmount) || 0

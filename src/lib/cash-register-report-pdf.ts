@@ -95,7 +95,7 @@ function formatMoneyCell(amount: number, currency: Currency): string {
 }
 
 function formatBalanceCell(amount: number, currency: Currency): string {
-  if (!Number.isFinite(amount)) return '—'
+  if (!Number.isFinite(amount) || amount === 0) return '-'
   return formatReportMoney(amount, currency)
 }
 
@@ -144,11 +144,34 @@ function buildTableBodyRows(
   return dataRows
 }
 
+/** Extrait un n° billet lisible depuis le libellé (`Ticket XXX - …`). */
+function extractTicketNumberFromDescription(description: string | undefined): string | null {
+  const desc = description?.trim()
+  if (!desc) return null
+  const match = desc.match(/(?:Remboursement\s+)?Ticket\s+([A-Z0-9/-]+)/i)
+  return match?.[1] ?? null
+}
+
 function buildTransactionObservation(transaction: CashTransaction): string {
-  const refLabel = getCashTransactionReferenceTypeLabel(transaction.referenceType)
-  if (transaction.referenceId?.trim()) {
-    return `${refLabel} · ${transaction.referenceId}`
+  const other = transaction.otherDetail?.trim()
+  const ticketNumber = extractTicketNumberFromDescription(transaction.description)
+
+  if (transaction.referenceType === 'TICKET' && ticketNumber) {
+    const base = `Billet ${ticketNumber}`
+    return other ? `${base} · ${other}` : base
   }
+
+  if (transaction.referenceType === 'MANUAL') {
+    return other || '—'
+  }
+
+  const refLabel = getCashTransactionReferenceTypeLabel(transaction.referenceType)
+  const desc = transaction.description?.trim()
+  // Préférer le libellé humain plutôt que l'id opaque de référence
+  if (desc) {
+    return other ? `${desc} · ${other}` : desc
+  }
+  if (other) return `${refLabel} · ${other}`
   return refLabel
 }
 
@@ -396,7 +419,7 @@ export async function generateCashRegisterReportPdf(params: CashRegisterReportPa
     head: [
       [
         { content: 'DATE', rowSpan: 2, styles: { valign: 'middle' } },
-        { content: 'Description', rowSpan: 2, styles: { valign: 'middle' } },
+        { content: 'Libellé', rowSpan: 2, styles: { valign: 'middle' } },
         { content: 'ENTREE', colSpan: 2, styles: { halign: 'center' } },
         { content: 'SORTIE', colSpan: 2, styles: { halign: 'center' } },
         { content: 'SOLDE', colSpan: 2, styles: { halign: 'center' } },

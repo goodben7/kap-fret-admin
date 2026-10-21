@@ -10,6 +10,7 @@ import {
   type CashTransactionStatus,
   type CashTransactionType,
 } from '@/constants/cash-transaction'
+import { ROLES, hasRole, type Role } from '@/constants/roles'
 import { CURRENCY } from '@/constants/ticket'
 import { extractIri } from '@/lib/hydra'
 import type { CashTransactionCreateFormData, CashTransactionConversionFormData, CashTransactionPatchFormData, CashTransactionTransferFormData } from '@/schemas/cash-transaction.schema'
@@ -76,12 +77,14 @@ export function parseTransactionTime(isoDate: string, fallback = '00:00'): strin
 export function toCashTransactionCreatePayload(
   data: CashTransactionCreateFormData,
 ): CashTransactionCreatePayload {
+  const otherDetail = data.otherDetail?.trim()
   return {
     cashRegister: data.cashRegister,
     type: data.type,
     amount: data.amount,
     currency: data.currency,
     description: data.description.trim(),
+    ...(otherDetail ? { otherDetail } : {}),
     referenceType: data.referenceType,
     referenceId:
       data.referenceType === CASH_TRANSACTION_REFERENCE_TYPE.MANUAL
@@ -132,6 +135,7 @@ export function toCashTransactionPatchPayload(
     amount: data.amount.replace(',', '.'),
     currency: data.currency,
     description: data.description.trim(),
+    otherDetail: data.otherDetail?.trim() ?? '',
     transactionDate: toTransactionDateIso(data.transactionDate, data.transactionTime),
     paymentCurrency: data.currency,
   }
@@ -150,6 +154,7 @@ export function cashTransactionToPatchFormDefaults(
     amount: transaction.amount,
     currency: currencyIri,
     description: transaction.description ?? '',
+    otherDetail: transaction.otherDetail ?? '',
     transactionDate: parseTransactionDate(transaction.transactionDate),
     transactionTime: parseTransactionTime(transaction.transactionDate),
   }
@@ -233,9 +238,35 @@ export function canChangeCashTransactionStatus(
   return getAvailableCashTransactionStatusActions(status).length > 0
 }
 
-/** Édition / suppression : MANUAL + ENTRY/EXIT + non validé + statut ouvert. */
+/** Fenêtre d'édition ops après création (admin peut dépasser). */
+export const CASH_TRANSACTION_EDIT_WINDOW_HOURS = 24
+
+export function canBypassCashTransactionEditWindow(userRoles: string[] | undefined): boolean {
+  return hasRole(userRoles ?? [], [ROLES.SPADM, ROLES.ADM] as Role[])
+}
+
+export function isCashTransactionWithinEditWindow(
+  transaction: Pick<CashTransaction, 'createdAt' | 'transactionDate'>,
+  now = new Date(),
+): boolean {
+  const raw = transaction.createdAt ?? transaction.transactionDate
+  if (!raw?.trim()) return true
+  const created = new Date(raw)
+  if (Number.isNaN(created.getTime())) return true
+  const lockAt = created.getTime() + CASH_TRANSACTION_EDIT_WINDOW_HOURS * 60 * 60 * 1000
+  return now.getTime() <= lockAt
+}
+
+/**
+ * Édition / suppression : MANUAL + ENTRY/EXIT + non validé + statut ouvert.
+ * Ops : verrouillage 24 h après création (SPADM / ADM peuvent encore modifier).
+ */
 export function canEditOrDeleteCashTransaction(
-  transaction: Pick<CashTransaction, 'type' | 'referenceType' | 'validated' | 'status'>,
+  transaction: Pick<
+    CashTransaction,
+    'type' | 'referenceType' | 'validated' | 'status' | 'createdAt' | 'transactionDate'
+  >,
+  userRoles?: string[],
 ): boolean {
   if (transaction.validated !== false) return false
   if (transaction.referenceType !== CASH_TRANSACTION_REFERENCE_TYPE.MANUAL) return false
@@ -246,10 +277,41 @@ export function canEditOrDeleteCashTransaction(
     return false
   }
   const status = getCashTransactionStatus(transaction)
-  return (
-    status === CASH_TRANSACTION_STATUS.PENDING
-    || status === CASH_TRANSACTION_STATUS.IN_REVIEW
-  )
+  if (
+    status !== CASH_TRANSACTION_STATUS.PENDING
+    && status !== CASH_TRANSACTION_STATUS.IN_REVIEW
+  ) {
+    return false
+  }
+  if (canBypassCashTransactionEditWindow(userRoles)) return true
+  return isCashTransactionWithinEditWindow(transaction)
+}
+
+/** True si le mouvement serait éditable sauf le verrou 24 h. */
+export function isCashTransactionEditLockedByTime(
+  transaction: Pick<
+    CashTransaction,
+    'type' | 'referenceType' | 'validated' | 'status' | 'createdAt' | 'transactionDate'
+  >,
+  userRoles?: string[],
+): boolean {
+  if (canBypassCashTransactionEditWindow(userRoles)) return false
+  if (transaction.validated !== false) return false
+  if (transaction.referenceType !== CASH_TRANSACTION_REFERENCE_TYPE.MANUAL) return false
+  if (
+    transaction.type !== CASH_TRANSACTION_TYPE.ENTRY
+    && transaction.type !== CASH_TRANSACTION_TYPE.EXIT
+  ) {
+    return false
+  }
+  const status = getCashTransactionStatus(transaction)
+  if (
+    status !== CASH_TRANSACTION_STATUS.PENDING
+    && status !== CASH_TRANSACTION_STATUS.IN_REVIEW
+  ) {
+    return false
+  }
+  return !isCashTransactionWithinEditWindow(transaction)
 }
 
 export function cashTransactionReferencePath(

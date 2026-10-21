@@ -38,6 +38,7 @@ import {
 import {
   CASH_TRANSACTION_REFERENCE_TYPE_LABELS,
   CASH_TRANSACTION_REFERENCE_TYPE_OPTIONS,
+  CASH_TRANSACTION_STATUS,
   CASH_TRANSACTION_STATUS_OPTIONS,
   CASH_TRANSACTION_TYPE,
   CASH_TRANSACTION_TYPE_LABELS,
@@ -250,6 +251,45 @@ function CashTransactionFilterModal({
           />
         </div>
 
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Select
+            label="Type"
+            options={[{ value: '', label: 'Tous' }, ...CASH_TRANSACTION_TYPE_OPTIONS]}
+            value={draft.type}
+            onChange={(e) => onChange({ type: e.target.value as CashTransactionFiltersState['type'] })}
+            variant="filter"
+          />
+          <Select
+            label="Statut"
+            options={statusFilterOptions()}
+            value={draft.status}
+            onChange={(e) => onChange({ status: e.target.value as CashTransactionFiltersState['status'] })}
+            variant="filter"
+          />
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant={
+              draft.type === CASH_TRANSACTION_TYPE.EXIT
+              && draft.status === CASH_TRANSACTION_STATUS.IN_REVIEW
+                ? 'default'
+                : 'outline'
+            }
+            className="rounded-full"
+            onClick={() =>
+              onChange({
+                type: CASH_TRANSACTION_TYPE.EXIT,
+                status: CASH_TRANSACTION_STATUS.IN_REVIEW,
+              })
+            }
+          >
+            Dépenses en examen
+          </Button>
+        </div>
+
         <details className="rounded-xl border border-border/60 bg-muted/20 p-3">
           <summary className="cursor-pointer text-sm font-medium text-muted-foreground">
             Filtres avancés
@@ -261,20 +301,6 @@ function CashTransactionFilterModal({
               value={draft.id}
               onChange={(e) => onChange({ id: e.target.value })}
               className={filterInputClass}
-            />
-            <Select
-              label="Type"
-              options={[{ value: '', label: 'Tous' }, ...CASH_TRANSACTION_TYPE_OPTIONS]}
-              value={draft.type}
-              onChange={(e) => onChange({ type: e.target.value as CashTransactionFiltersState['type'] })}
-              variant="filter"
-            />
-            <Select
-              label="Statut"
-              options={statusFilterOptions()}
-              value={draft.status}
-              onChange={(e) => onChange({ status: e.target.value as CashTransactionFiltersState['status'] })}
-              variant="filter"
             />
             <Select
               label="Nécessite validation"
@@ -661,7 +687,7 @@ export function CashTransactionsListPage() {
                 <TableRow className="hover:bg-transparent">
                   <TableHead>Date</TableHead>
                   <TableHead>Type</TableHead>
-                  <TableHead>Description</TableHead>
+                  <TableHead>Libellé</TableHead>
                   <TableHead className="text-right">Montant</TableHead>
                   <TableHead>Statut</TableHead>
                 </TableRow>

@@ -85,8 +85,14 @@ export const freightService = {
     return data
   },
 
-  async updateStatus(id: string, status: FreightStatus) {
+  async updateStatus(
+    id: string,
+    status: FreightStatus,
+    options?: { shipmentDate?: string | null; observations?: string | null },
+  ) {
     const body: FreightStatusPayload = { status }
+    if (options?.shipmentDate) body.shipmentDate = options.shipmentDate
+    if (options?.observations != null) body.observations = options.observations
     const { data } = await api.post<FreightShipment>(`/api/freight_shipments/${id}/status`, body, {
       headers: JSON_HEADERS,
     })
@@ -97,14 +103,17 @@ export const freightService = {
    * Marque plusieurs LTA PENDING → SENT (boucle sur l’endpoint unitaire).
    * Retourne le détail succès / échecs pour l’UI.
    */
-  async markManyAsSent(ids: string[]) {
+  async markManyAsSent(ids: string[], shipmentDate?: string) {
     const uniqueIds = [...new Set(ids.map((id) => id.trim()).filter(Boolean))]
     const succeeded: string[] = []
     const failed: { id: string; message: string }[] = []
+    const dateIso = shipmentDate?.trim()
+      ? (shipmentDate.includes('T') ? shipmentDate : `${shipmentDate}T06:00:00Z`)
+      : undefined
 
     for (const id of uniqueIds) {
       try {
-        await freightService.updateStatus(id, 'SENT')
+        await freightService.updateStatus(id, 'SENT', dateIso ? { shipmentDate: dateIso } : undefined)
         succeeded.push(id)
       } catch (error) {
         const message = isAxiosError(error)
