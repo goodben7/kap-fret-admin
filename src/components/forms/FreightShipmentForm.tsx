@@ -18,6 +18,7 @@ import { CURRENCY, CURRENCY_OPTIONS } from '@/constants/ticket'
 import {
   FREIGHT_PAYMENT_MODE,
   FREIGHT_PAYMENT_MODE_LABELS,
+  isFreightPayAtDestination,
   NATURE_OF_GOODS,
   NATURE_OF_GOODS_LABELS,
   PACKAGING_TYPE,
@@ -413,7 +414,7 @@ export function FreightShipmentForm({
   useEffect(() => {
     if (isCashPayment) {
       setValue('paidAmount', computedTotalAmount, { shouldValidate: true })
-    } else if ((paymentMode === FREIGHT_PAYMENT_MODE.PDA || paymentMode === FREIGHT_PAYMENT_MODE.PTA)) {
+    } else if (isFreightPayAtDestination(paymentMode)) {
       setValue('paidAmount', '0.00', { shouldValidate: true })
     }
   }, [isCashPayment, paymentMode, computedTotalAmount, setValue])

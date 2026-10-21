@@ -91,7 +91,22 @@ export function isFreightPayAtDestination(mode: string | undefined | null): bool
   return mode === FREIGHT_PAYMENT_MODE.PDA || mode === FREIGHT_PAYMENT_MODE.PTA
 }
 
-export const FREIGHT_PAYMENT_MODE_OPTIONS: { value: FreightPaymentMode; label: string }[] = [
+/** Modes formulaires / création (sans alias legacy PTA). */
+export type FreightFormPaymentMode =
+  | typeof FREIGHT_PAYMENT_MODE.CASH
+  | typeof FREIGHT_PAYMENT_MODE.ACC
+  | typeof FREIGHT_PAYMENT_MODE.PDA
+
+/** PTA legacy → PDA pour les formulaires. */
+export function toFreightFormPaymentMode(
+  mode: string | null | undefined,
+): FreightFormPaymentMode {
+  if (mode === FREIGHT_PAYMENT_MODE.ACC) return FREIGHT_PAYMENT_MODE.ACC
+  if (isFreightPayAtDestination(mode)) return FREIGHT_PAYMENT_MODE.PDA
+  return FREIGHT_PAYMENT_MODE.CASH
+}
+
+export const FREIGHT_PAYMENT_MODE_OPTIONS: { value: FreightFormPaymentMode; label: string }[] = [
   FREIGHT_PAYMENT_MODE.CASH,
   FREIGHT_PAYMENT_MODE.ACC,
   FREIGHT_PAYMENT_MODE.PDA,

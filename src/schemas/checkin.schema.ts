@@ -100,7 +100,7 @@ export const checkInCreateSchema = checkInFieldsSchema
     }
     // PDA : pas de caisse à l'origine
 
-    if (data.mixedPayment && mode !== CHECK_IN_PAYMENT_MODE.PDA && mode !== CHECK_IN_PAYMENT_MODE.PTA) {
+    if (data.mixedPayment && mode !== CHECK_IN_PAYMENT_MODE.PDA) {
       const usd = parseFloat(String(data.paidAmountUsd ?? '').replace(',', '.'))
       const cdf = parseFloat(String(data.paidAmountCdf ?? '').replace(',', '.'))
       if (!Number.isFinite(usd) || usd <= 0) {

@@ -34,8 +34,23 @@ export function isCheckInPayAtDestination(mode: string | undefined | null): bool
   return mode === CHECK_IN_PAYMENT_MODE.PDA || mode === CHECK_IN_PAYMENT_MODE.PTA
 }
 
+/** Modes formulaires / création (sans alias legacy PTA). */
+export type CheckInFormPaymentMode =
+  | typeof CHECK_IN_PAYMENT_MODE.CASH
+  | typeof CHECK_IN_PAYMENT_MODE.ACC
+  | typeof CHECK_IN_PAYMENT_MODE.PDA
+
+/** PTA legacy → PDA pour les formulaires. */
+export function toCheckInFormPaymentMode(
+  mode: string | null | undefined,
+): CheckInFormPaymentMode {
+  if (mode === CHECK_IN_PAYMENT_MODE.ACC) return CHECK_IN_PAYMENT_MODE.ACC
+  if (isCheckInPayAtDestination(mode)) return CHECK_IN_PAYMENT_MODE.PDA
+  return CHECK_IN_PAYMENT_MODE.CASH
+}
+
 /** Modes proposés à la création (sans alias legacy PTA). */
-export const CHECK_IN_PAYMENT_MODE_OPTIONS: { value: CheckInPaymentMode; label: string }[] = [
+export const CHECK_IN_PAYMENT_MODE_OPTIONS: { value: CheckInFormPaymentMode; label: string }[] = [
   CHECK_IN_PAYMENT_MODE.CASH,
   CHECK_IN_PAYMENT_MODE.ACC,
   CHECK_IN_PAYMENT_MODE.PDA,

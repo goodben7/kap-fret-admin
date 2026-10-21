@@ -6,7 +6,11 @@ import { Link } from 'react-router-dom'
 import { Banknote, Plane, User } from 'lucide-react'
 import { freightShipmentPatchSchema, type FreightShipmentPatchFormData } from '@/schemas/freight.schema'
 import { CURRENCY, CURRENCY_OPTIONS } from '@/constants/ticket'
-import { FREIGHT_PAYMENT_MODE, FREIGHT_PAYMENT_MODE_LABELS } from '@/constants/freight'
+import {
+  FREIGHT_PAYMENT_MODE,
+  FREIGHT_PAYMENT_MODE_LABELS,
+  isFreightPayAtDestination,
+} from '@/constants/freight'
 import { FREIGHT_PERISHABLE_CASH_MESSAGE } from '@/constants/freight-business-rules'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -145,7 +149,7 @@ export function FreightShipmentPatchForm({
   useEffect(() => {
     if (isCashPayment) {
       setValue('paidAmount', computedTotalAmount, { shouldValidate: true })
-    } else if ((paymentMode === FREIGHT_PAYMENT_MODE.PDA || paymentMode === FREIGHT_PAYMENT_MODE.PTA)) {
+    } else if (isFreightPayAtDestination(paymentMode)) {
       setValue('paidAmount', '0.00', { shouldValidate: true })
     }
   }, [isCashPayment, paymentMode, computedTotalAmount, setValue])

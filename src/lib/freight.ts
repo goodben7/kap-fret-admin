@@ -1,6 +1,11 @@
 import { extractIri, extractResourceId } from '@/lib/hydra'
 import { normalizeCurrency, CURRENCY, type Currency } from '@/constants/ticket'
-import { FREIGHT_PAYMENT_MODE, FREIGHT_STATUS, FREIGHT_ORDINARY_PRICE_PER_KG_USD } from '@/constants/freight'
+import {
+  FREIGHT_PAYMENT_MODE,
+  FREIGHT_STATUS,
+  FREIGHT_ORDINARY_PRICE_PER_KG_USD,
+  toFreightFormPaymentMode,
+} from '@/constants/freight'
 import { convertAmountBetweenCurrencyCodes } from '@/lib/exchange-rate'
 import { formatExchangeRateForPayload } from '@/lib/mixed-payment'
 import { getCheckpointDisplayName, getCheckpointLabelFromRef } from '@/lib/checkpoint'
@@ -296,7 +301,7 @@ export function shipmentToFormDefaults(shipment: FreightShipment): Partial<Freig
     totalAmount: shipment.totalAmount,
     paidAmount: shipment.paidAmount,
     remainingAmount: shipment.remainingAmount,
-    paymentMode: shipment.paymentMode,
+    paymentMode: toFreightFormPaymentMode(shipment.paymentMode),
     observations: shipment.observations ?? '',
     packages: (shipment.packages ?? []).map((pkg) => ({
       packagingType: pkg.packagingType,
@@ -335,7 +340,7 @@ export function shipmentToPatchFormDefaults(shipment: FreightShipment): Partial<
     currency: normalizeCurrency(shipment.currency),
     paidAmount: shipment.paidAmount,
     remainingAmount: shipment.remainingAmount,
-    paymentMode: shipment.paymentMode,
+    paymentMode: toFreightFormPaymentMode(shipment.paymentMode),
     observations: shipment.observations ?? '',
   }
 }

@@ -4,7 +4,14 @@ import { convertAmountBetweenCurrencyCodes } from '@/lib/exchange-rate'
 import { formatExchangeRateForPayload } from '@/lib/mixed-payment'
 import { ageFromBirthDate, toDateInputValue } from '@/lib/passenger-age'
 import type { ExchangeRateResource } from '@/types/exchange-rate'
-import { GENDER, PAYMENT_MODE, CURRENCY, TICKET_CATEGORY_BASE_PRICE_USD, TICKET_STATUS } from '@/constants/ticket'
+import {
+  GENDER,
+  PAYMENT_MODE,
+  CURRENCY,
+  TICKET_CATEGORY_BASE_PRICE_USD,
+  TICKET_STATUS,
+  toFormPaymentMode,
+} from '@/constants/ticket'
 import type { Currency, Gender, PaymentMode, TicketCategory } from '@/constants/ticket'
 import type { Ticket, TicketBatchCreatePayload, TicketCreatePayload, TicketPatchPayload, TicketReportTravelDatePayload, TicketPaymentPayload } from '@/types/ticket'
 import type { TicketFormData, TicketPatchFormData } from '@/schemas/ticket.schema'
@@ -441,11 +448,8 @@ export function getTicketIssuingOfficeLabel(ticket: Ticket): string {
   return String(ticket.issuingOffice)
 }
 
-function toFormPaymentMode(mode: PaymentMode): TicketFormData['paymentMode'] {
-  if (mode === PAYMENT_MODE.CASH || mode === PAYMENT_MODE.ACC || mode === PAYMENT_MODE.PDA || mode === PAYMENT_MODE.PTA) {
-    return mode
-  }
-  return PAYMENT_MODE.CASH
+function toTicketFormPaymentMode(mode: PaymentMode): TicketFormData['paymentMode'] {
+  return toFormPaymentMode(mode)
 }
 
 export function ticketToFormDefaults(ticket: Ticket): Partial<TicketPatchFormData> {
@@ -469,7 +473,7 @@ export function ticketToFormDefaults(ticket: Ticket): Partial<TicketPatchFormDat
     fpt: ticket.fpt,
     rva: ticket.rva,
     baggageAllowanceKg: ticket.baggageAllowanceKg,
-    paymentMode: toFormPaymentMode(ticket.paymentMode),
+    paymentMode: toTicketFormPaymentMode(ticket.paymentMode),
     sponsor: ticket.sponsor ?? '',
   }
 }

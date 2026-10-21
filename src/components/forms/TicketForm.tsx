@@ -20,7 +20,15 @@ import {
   type TicketFormData,
   type TicketPatchFormData,
 } from '@/schemas/ticket.schema'
-import { GENDER_LABELS, PAYMENT_MODE, PAYMENT_MODE_OPTIONS, CURRENCY, CURRENCY_OPTIONS, TICKET_CATEGORY_OPTIONS } from '@/constants/ticket'
+import {
+  GENDER_LABELS,
+  PAYMENT_MODE,
+  PAYMENT_MODE_OPTIONS,
+  CURRENCY,
+  CURRENCY_OPTIONS,
+  TICKET_CATEGORY_OPTIONS,
+  isPayAtDestination,
+} from '@/constants/ticket'
 import { useAuth } from '@/hooks/useAuth'
 import { useCashRegistersForSelect } from '@/hooks/useCashRegisters'
 import { useCurrenciesForSelect } from '@/hooks/useCurrencies'
@@ -905,7 +913,7 @@ function TicketCreateForm({
                     />
                   </div>
                 ) : null}
-                {(paymentMode === PAYMENT_MODE.PDA || paymentMode === PAYMENT_MODE.PTA) && (
+                {isPayAtDestination(paymentMode) && (
                   <p className="text-xs text-muted-foreground">
                     PDA : paiement à destination — pas d’encaissement immédiat en caisse.
                   </p>

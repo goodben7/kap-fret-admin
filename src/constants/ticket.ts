@@ -45,8 +45,21 @@ export function isPayAtDestination(mode: string | undefined | null): boolean {
   return mode === PAYMENT_MODE.PDA || mode === PAYMENT_MODE.PTA
 }
 
+/** Modes formulaires / création (sans alias legacy PTA). */
+export type FormPaymentMode =
+  | typeof PAYMENT_MODE.CASH
+  | typeof PAYMENT_MODE.ACC
+  | typeof PAYMENT_MODE.PDA
+
+/** PTA legacy → PDA pour les formulaires. */
+export function toFormPaymentMode(mode: string | null | undefined): FormPaymentMode {
+  if (mode === PAYMENT_MODE.ACC) return PAYMENT_MODE.ACC
+  if (isPayAtDestination(mode)) return PAYMENT_MODE.PDA
+  return PAYMENT_MODE.CASH
+}
+
 /** Modes proposés à la création / filtres — alignés sur Ticket::getPaymentModes() */
-export const PAYMENT_MODE_OPTIONS: { value: PaymentMode; label: string }[] = [
+export const PAYMENT_MODE_OPTIONS: { value: FormPaymentMode; label: string }[] = [
   PAYMENT_MODE.CASH,
   PAYMENT_MODE.ACC,
   PAYMENT_MODE.PDA,

@@ -23,9 +23,10 @@ import {
 import {
   CHECK_IN_EXCESS_PRICE_PER_KG_USD,
   CHECK_IN_PAYMENT_MODE,
-  CHECK_IN_PAYMENT_MODE_LABELS,
   CHECK_IN_PAYMENT_MODE_OPTIONS,
-  type CheckInPaymentMode,
+  isCheckInPayAtDestination,
+  toCheckInFormPaymentMode,
+  type CheckInFormPaymentMode,
 } from '@/constants/check-in'
 import {
   BAGGAGE_TYPE,
@@ -494,25 +495,26 @@ export function CheckInForm(props: CheckInFormProps) {
   const netToPayNumber = parseFloat(netToPay) || 0
   const isCashPayment = paymentMode === CHECK_IN_PAYMENT_MODE.CASH
   const isAccPayment = paymentMode === CHECK_IN_PAYMENT_MODE.ACC
-  const isPdaPayment = paymentMode === CHECK_IN_PAYMENT_MODE.PDA || paymentMode === CHECK_IN_PAYMENT_MODE.PTA
+  const isPdaPayment = isCheckInPayAtDestination(paymentMode)
   const needsCashRegister = hasExcessPayment && !isPdaPayment
   const depositAmountNumber = isAccPayment
     ? (parseFloat(String(paidAmount ?? '').replace(',', '.')) || 0)
     : netToPayNumber
   const remainingPreview = Math.max(0, netToPayNumber - (isCashPayment ? netToPayNumber : depositAmountNumber))
 
-  const handlePaymentModeChange = (mode: CheckInPaymentMode) => {
-    setValue('paymentMode', mode, { shouldValidate: true })
-    if (mode === CHECK_IN_PAYMENT_MODE.PDA || mode === CHECK_IN_PAYMENT_MODE.PTA) {
+  const handlePaymentModeChange = (mode: CheckInFormPaymentMode | string) => {
+    const nextMode = toCheckInFormPaymentMode(mode)
+    setValue('paymentMode', nextMode, { shouldValidate: true })
+    if (isCheckInPayAtDestination(nextMode)) {
       setValue('cashRegister', '', { shouldValidate: true })
       setValue('paidAmount', '', { shouldValidate: true })
       setValue('mixedPayment', false, { shouldValidate: true })
       setValue('paidAmountUsd', '', { shouldValidate: true })
       setValue('paidAmountCdf', '', { shouldValidate: true })
       setValue('exchangeRate', '', { shouldValidate: true })
-    } else if (mode === CHECK_IN_PAYMENT_MODE.CASH) {
+    } else if (nextMode === CHECK_IN_PAYMENT_MODE.CASH) {
       setValue('paidAmount', '', { shouldValidate: true })
-    } else if (mode === CHECK_IN_PAYMENT_MODE.ACC) {
+    } else if (nextMode === CHECK_IN_PAYMENT_MODE.ACC) {
       const half = netToPayNumber > 0 ? (netToPayNumber / 2).toFixed(2) : ''
       setValue('paidAmount', half, { shouldValidate: true })
     }
@@ -1178,7 +1180,7 @@ export function CheckInForm(props: CheckInFormProps) {
           options={paymentModeOptions}
           variant="filter"
           value={paymentMode}
-          onChange={(e) => handlePaymentModeChange(e.target.value as CheckInPaymentMode)}
+          onChange={(e) => handlePaymentModeChange(e.target.value)}
           error={errors.paymentMode?.message}
           className="sm:col-span-2"
         />
