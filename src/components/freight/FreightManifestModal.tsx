@@ -19,7 +19,6 @@ import { resolveUserIssuingOfficeIri } from '@/lib/issuing-office'
 import { getCheckpointIri } from '@/services/issuing-office.service'
 import { isAxiosError } from 'axios'
 import { extractApiErrorMessage } from '@/services/api'
-import { getUpcomingFlightTravelDateInput } from '@/lib/ticket'
 import { formatDate, cn } from '@/lib/utils'
 import {
   buildFreightManifestFileName,
@@ -73,7 +72,7 @@ export function FreightManifestModal({ open, onOpenChange }: FreightManifestModa
     defaultValues: {
       departure: '',
       destination: '',
-      shipmentDate: getUpcomingFlightTravelDateInput(),
+      shipmentDate: '',
       flightNumber: '',
     },
   })
@@ -100,7 +99,7 @@ export function FreightManifestModal({ open, onOpenChange }: FreightManifestModa
     reset({
       departure: '',
       destination: '',
-      shipmentDate: getUpcomingFlightTravelDateInput(),
+      shipmentDate: '',
       flightNumber: '',
     })
     setDepartureLabel('')
@@ -154,8 +153,8 @@ export function FreightManifestModal({ open, onOpenChange }: FreightManifestModa
     }
   }, [destination, resolveCheckpoint])
 
-  const canGenerate = !!departure?.trim() && !!destination?.trim() && !!shipmentDate?.trim()
-  const hasRouteSummary = !!departureLabel && !!destinationLabel && !!shipmentDate
+  const canGenerate = !!departure?.trim() && !!destination?.trim()
+  const hasRouteSummary = !!departureLabel && !!destinationLabel
 
   const generate = handleSubmit(async (data) => {
     setIsGenerating(true)
@@ -165,21 +164,26 @@ export function FreightManifestModal({ open, onOpenChange }: FreightManifestModa
         resolveCheckpoint(data.destination),
       ])
 
+      const shipmentDateValue = data.shipmentDate?.trim() || ''
       const shipments = await fetchFreightShipmentsForManifest(
         data.departure,
         data.destination,
-        data.shipmentDate,
+        shipmentDateValue || undefined,
       )
 
       if (shipments.length === 0) {
-        toast.error('Aucune expédition trouvée pour ce trajet et cette date')
+        toast.error(
+          shipmentDateValue
+            ? 'Aucune expédition trouvée pour ce trajet et cette date'
+            : 'Aucune expédition trouvée pour ce trajet',
+        )
         return
       }
 
       const departureCode = getCheckpointRouteCode(departureCheckpoint)
       const destinationCode = getCheckpointRouteCode(destinationCheckpoint)
       const flightNumber = resolveFreightManifestFlightNumber(
-        data.shipmentDate,
+        shipmentDateValue,
         departureCode,
         destinationCode,
         data.flightNumber,
@@ -190,7 +194,7 @@ export function FreightManifestModal({ open, onOpenChange }: FreightManifestModa
         destinationLabel: getCheckpointManifestName(destinationCheckpoint),
         departureCode,
         destinationCode,
-        shipmentDate: data.shipmentDate,
+        shipmentDate: shipmentDateValue,
         flightNumber,
         shipments,
       })
@@ -199,7 +203,7 @@ export function FreightManifestModal({ open, onOpenChange }: FreightManifestModa
         departureLabel: getCheckpointManifestName(departureCheckpoint),
         departureCode,
         destinationCode,
-        shipmentDate: data.shipmentDate,
+        shipmentDate: shipmentDateValue,
       })
 
       setPreviewUrl((current) => {
@@ -235,7 +239,7 @@ export function FreightManifestModal({ open, onOpenChange }: FreightManifestModa
       open={open}
       onOpenChange={handleOpenChange}
       title="Manifeste fret"
-      description="Générez le PDF paysage à partir du trajet et de la date d'expédition."
+      description="Générez le PDF paysage à partir du trajet (date d'expédition optionnelle)."
       className={cn(
         'rounded-2xl',
         previewUrl ? 'sm:max-w-[min(96vw,72rem)]' : 'sm:max-w-xl',
@@ -282,7 +286,7 @@ export function FreightManifestModal({ open, onOpenChange }: FreightManifestModa
               </p>
               <div className="grid grid-cols-1 gap-4">
                 <Input
-                  label="Date d'expédition"
+                  label="Date d'expédition (optionnel)"
                   type="date"
                   className={fieldClass}
                   error={errors.shipmentDate?.message}
@@ -308,7 +312,11 @@ export function FreightManifestModal({ open, onOpenChange }: FreightManifestModa
                   <ArrowRight className="h-4 w-4 shrink-0 text-brand-orange" aria-hidden="true" />
                   <span>{destinationLabel}</span>
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">{formatDate(shipmentDate)}</p>
+                {shipmentDate?.trim() ? (
+                  <p className="mt-1 text-xs text-muted-foreground">{formatDate(shipmentDate)}</p>
+                ) : (
+                  <p className="mt-1 text-xs text-muted-foreground">Toutes les dates</p>
+                )}
               </div>
             )}
 
@@ -345,7 +353,7 @@ export function FreightManifestModal({ open, onOpenChange }: FreightManifestModa
 
             {!canGenerate && (
               <p className="text-xs text-muted-foreground">
-                Renseignez le chargement, le déchargement et la date d&apos;expédition pour activer la génération.
+                Renseignez le chargement et le déchargement pour activer la génération.
               </p>
             )}
           </div>

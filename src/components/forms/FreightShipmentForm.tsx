@@ -17,7 +17,7 @@ import { freightShipmentSchema, type FreightShipmentFormData } from '@/schemas/f
 import { CURRENCY, CURRENCY_OPTIONS } from '@/constants/ticket'
 import {
   FREIGHT_PAYMENT_MODE,
-  FREIGHT_PAYMENT_MODE_LABELS,
+  FREIGHT_PAYMENT_MODE_OPTIONS,
   isFreightPayAtDestination,
   NATURE_OF_GOODS,
   NATURE_OF_GOODS_LABELS,
@@ -74,10 +74,7 @@ const lockedFieldClass = cn(fieldClass, 'cursor-not-allowed bg-muted/60')
 
 const packagingOptions = Object.entries(PACKAGING_TYPE_LABELS).map(([value, label]) => ({ value, label }))
 const natureOptions = Object.entries(NATURE_OF_GOODS_LABELS).map(([value, label]) => ({ value, label }))
-const allPaymentModeOptions = Object.entries(FREIGHT_PAYMENT_MODE_LABELS).map(([value, label]) => ({
-  value,
-  label,
-}))
+const allPaymentModeOptions = FREIGHT_PAYMENT_MODE_OPTIONS
 const cashOnlyPaymentModeOptions = allPaymentModeOptions.filter(
   (opt) => opt.value === FREIGHT_PAYMENT_MODE.CASH,
 )

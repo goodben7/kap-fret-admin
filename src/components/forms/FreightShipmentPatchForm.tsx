@@ -8,7 +8,7 @@ import { freightShipmentPatchSchema, type FreightShipmentPatchFormData } from '@
 import { CURRENCY, CURRENCY_OPTIONS } from '@/constants/ticket'
 import {
   FREIGHT_PAYMENT_MODE,
-  FREIGHT_PAYMENT_MODE_LABELS,
+  FREIGHT_PAYMENT_MODE_OPTIONS,
   isFreightPayAtDestination,
 } from '@/constants/freight'
 import { FREIGHT_PERISHABLE_CASH_MESSAGE } from '@/constants/freight-business-rules'
@@ -33,10 +33,7 @@ const fieldClass =
 
 const lockedFieldClass = cn(fieldClass, 'cursor-not-allowed bg-muted/60')
 
-const allPaymentModeOptions = Object.entries(FREIGHT_PAYMENT_MODE_LABELS).map(([value, label]) => ({
-  value,
-  label,
-}))
+const allPaymentModeOptions = FREIGHT_PAYMENT_MODE_OPTIONS
 const cashOnlyPaymentModeOptions = allPaymentModeOptions.filter(
   (opt) => opt.value === FREIGHT_PAYMENT_MODE.CASH,
 )

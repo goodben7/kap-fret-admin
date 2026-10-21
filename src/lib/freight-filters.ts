@@ -154,12 +154,12 @@ export function countActiveFreightFilters(filters: FreightFiltersState): number 
 export function buildFreightManifestFilters(
   loadingPlace: string,
   unloadingPlace: string,
-  shipmentDate: string,
+  shipmentDate?: string,
 ): FreightFilters {
   return {
     loadingPlace,
     unloadingPlace,
-    shipmentDate,
+    shipmentDate: shipmentDate?.trim() || '',
     itemsPerPage: 500,
     page: 1,
   }

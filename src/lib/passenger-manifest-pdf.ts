@@ -110,10 +110,10 @@ export function resolveManifestPassengerType(ticket: Pick<Ticket, 'category' | '
 
 function typeToColumnCells(type: ManifestPassengerType | null): [string, string, string, string] {
   return [
-    type === 'M' ? '1' : '',
-    type === 'F' ? '1' : '',
-    type === 'C' ? '1' : '',
-    type === 'I' ? '1' : '',
+    type === 'M' ? '*' : '',
+    type === 'F' ? '*' : '',
+    type === 'C' ? '*' : '',
+    type === 'I' ? '*' : '',
   ]
 }
 
@@ -195,7 +195,7 @@ function drawBrandTitle(doc: jsPDF, centerX: number, y: number) {
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(16)
   const kapPart = 'KAP '
-  const fretPart = 'FRET S.A.R.L'
+  const fretPart = 'FRET'
   doc.setTextColor(NAVY.r, NAVY.g, NAVY.b)
   const kapWidth = doc.getTextWidth(kapPart)
   doc.setTextColor(ORANGE.r, ORANGE.g, ORANGE.b)

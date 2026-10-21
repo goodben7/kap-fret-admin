@@ -74,8 +74,10 @@ const COLUMN_COUNT = 18
 const DASH = '--'
 
 function formatManifestDate(dateInput: string): string {
-  const [year, month, day] = dateInput.split('-')
-  if (!year || !month || !day) return dateInput
+  const trimmed = dateInput?.trim()
+  if (!trimmed) return '—'
+  const [year, month, day] = trimmed.split('-')
+  if (!year || !month || !day) return trimmed
   return `${day}/${month}/${year}`
 }
 
@@ -129,7 +131,7 @@ function emptyManifestRow(): string[] {
 export async function fetchFreightShipmentsForManifest(
   loadingPlace: string,
   unloadingPlace: string,
-  shipmentDate: string,
+  shipmentDate?: string,
 ): Promise<FreightShipment[]> {
   const filters = buildFreightManifestFilters(loadingPlace, unloadingPlace, shipmentDate)
   const { items } = await freightService.getAll(filters)
@@ -538,12 +540,14 @@ export function buildFreightManifestFileName(
 }
 
 export function resolveFreightManifestFlightNumber(
-  shipmentDate: string,
+  shipmentDate: string | undefined,
   departureCode: string,
   destinationCode: string,
   flightNumber?: string,
 ): string {
   const trimmed = flightNumber?.trim()
   if (trimmed) return trimmed
-  return buildManifestNumber(shipmentDate, departureCode, destinationCode)
+  const datePart = shipmentDate?.trim()
+  if (datePart) return buildManifestNumber(datePart, departureCode, destinationCode)
+  return `${departureCode}-${destinationCode}`
 }
