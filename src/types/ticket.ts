@@ -64,6 +64,14 @@ export interface Ticket extends HydraResource {
   status: TicketStatus
   /** UUID d'achat groupé (plusieurs billets d'une même vente). */
   purchaseGroupId?: string | null
+  /** Dérivé CGU #7 — free | penalty | noshow. */
+  cancelPolicy?: 'free' | 'penalty' | 'noshow' | string
+  cancelPolicyMessage?: string
+  canCancel?: boolean
+  /** Dérivé CGU #6 — montant remboursement 50 %. */
+  refundPreviewAmount?: string
+  /** Dérivé CGU #1 — frais débarquement 5 % (preview). */
+  offloadFeePreviewAmount?: string
 }
 
 export interface TicketPassengerCreatePayload {

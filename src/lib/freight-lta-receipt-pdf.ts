@@ -3,6 +3,10 @@ import { BRAND } from '@/constants/brand'
 import { FREIGHT_PAYMENT_MODE_LABELS, FREIGHT_STATUS_LABELS } from '@/constants/freight'
 import { normalizeCurrency } from '@/constants/ticket'
 import { formatFreightWeight, getFreightIssuingOfficeLabel } from '@/lib/freight'
+import {
+  drawFreightTransportConditions,
+  FREIGHT_CONDITIONS_SHORT_NOTICE,
+} from '@/lib/freight-transport-conditions-pdf'
 import { downloadBlob } from '@/lib/passenger-manifest-pdf'
 import { formatDateTime, formatMoney } from '@/lib/utils'
 import type { FreightShipment } from '@/types/freight-shipment'
@@ -30,6 +34,8 @@ export function buildFreightLtaReceiptWhatsAppText(shipment: FreightShipment): s
     remaining > 0 ? `Reste : ${money(shipment.remainingAmount, currency)}` : null,
     `Mode : ${FREIGHT_PAYMENT_MODE_LABELS[shipment.paymentMode] ?? shipment.paymentMode}`,
     ``,
+    FREIGHT_CONDITIONS_SHORT_NOTICE,
+    ``,
     `${BRAND.name}`,
   ]
   return lines.filter((line) => line != null).join('\n')
@@ -40,6 +46,19 @@ export function downloadFreightLtaReceiptPdf(shipment: FreightShipment): void {
   const marginX = 16
   let y = 18
   const currency = normalizeCurrency(shipment.currency)
+  const fullySigned = !!shipment.ltaFullySigned
+    || (!!shipment.issuerSignedAt && !!shipment.cashierSignedAt)
+
+  if (!fullySigned) {
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(22)
+    doc.setTextColor(200, 60, 60)
+    doc.text('LTA NON SIGNÉE — NULLE ET SANS VALEUR', 105, 150, {
+      align: 'center',
+      angle: 35,
+    })
+    doc.setTextColor(0, 0, 0)
+  }
 
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(16)
@@ -138,6 +157,14 @@ export function downloadFreightLtaReceiptPdf(shipment: FreightShipment): void {
     y += 10
   }
   doc.text(`Document généré le ${formatDateTime(new Date().toISOString())} — ${BRAND.name}`, marginX, y)
+  y += 8
+
+  drawFreightTransportConditions({
+    doc,
+    startY: y,
+    marginX,
+    contentWidth: 178,
+  })
 
   const safeLta = shipment.ltaNumber.replace(/[^\w.-]+/g, '_')
   downloadBlob(doc.output('blob'), `recu-lta-${safeLta}.pdf`)

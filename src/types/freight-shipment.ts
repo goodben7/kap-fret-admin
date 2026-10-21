@@ -53,6 +53,36 @@ export interface FreightShipment extends HydraResource {
   sentBy?: string | FreightUserRef
   arrivedAt?: string
   arrivedBy?: string | FreightUserRef
+  /** Dérivé CGU #1 — échéance paiement après arrivée. */
+  paymentDueAt?: string | null
+  /** Dérivé CGU #3 — échéance enlèvement selon mode. */
+  pickupDueAt?: string | null
+  /** Dérivé — retard paiement (ARRIVED + reste > 0). */
+  paymentOverdue?: boolean
+  /** Dérivé — retard enlèvement (ARRIVED). */
+  pickupOverdue?: boolean
+  /** Dérivé CGU #5 — fin de grâce entreposage. */
+  storageGraceEndsAt?: string | null
+  /** Dérivé CGU #5 — jours facturables d'entreposage. */
+  storageBillableDays?: number
+  /** Dérivé CGU #5 — frais d'entreposage estimés. */
+  storageFees?: string | null
+  /** Dérivé CGU #6 — échéance liquidation J+15. */
+  liquidationDueAt?: string | null
+  /** Dérivé CGU #6 — éligible au statut PENDING_LIQUIDATION. */
+  eligibleForLiquidation?: boolean
+  /** #13 — signatures LTA */
+  issuerSignedAt?: string | null
+  issuerSignedBy?: string | FreightUserRef
+  cashierSignedAt?: string | null
+  cashierSignedBy?: string | FreightUserRef
+  ltaFullySigned?: boolean
+  /** #10 — réclamation perte/vol */
+  claimLostWeightKg?: string | null
+  claimAmountUsd?: string | null
+  claimNotes?: string | null
+  claimAt?: string | null
+  claimBy?: string | FreightUserRef
   deliveredAt?: string
   deliveredBy?: string | FreightUserRef
   cancelledAt?: string

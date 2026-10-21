@@ -19,7 +19,7 @@ import { useBoardTicket } from '@/hooks/useTickets'
 import { useAuth } from '@/hooks/useAuth'
 import { useIssuingOffice } from '@/hooks/useIssuingOffices'
 import { CHECK_IN_STATUS } from '@/constants/check-in'
-import { TICKET_STATUS, TICKET_STATUS_LABELS } from '@/constants/ticket'
+import { CURRENCY, TICKET_STATUS, TICKET_STATUS_LABELS } from '@/constants/ticket'
 import {
   getCheckInPassengerName,
   getCheckInTicketId,
@@ -28,8 +28,13 @@ import {
 import { extractResourceId } from '@/lib/hydra'
 import { resolveUserIssuingOfficeIri } from '@/lib/issuing-office'
 import { getCheckpointIri } from '@/services/issuing-office.service'
-import { getUpcomingFlightTravelDateInput } from '@/lib/ticket'
-import { formatDate, cn } from '@/lib/utils'
+import {
+  getTicketRemainingAmount,
+  getUpcomingFlightTravelDateInput,
+  isTicketFullyPaid,
+} from '@/lib/ticket'
+import { TICKET_UNPAID_TRAVEL_MESSAGE } from '@/constants/ticket-business-rules'
+import { formatDate, formatMoney, cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
@@ -72,18 +77,22 @@ function PassengerRow({
   const ticketNumber = getCheckInTicketNumber(checkIn)
   const passengerName = getCheckInPassengerName(checkIn) ?? '—'
   const status = ticket?.status
+  const unpaid = ticket != null && !isTicketFullyPaid(ticket)
+  const rowDisabled = disabled || unpaid
 
   return (
     <button
       type="button"
       onClick={onToggle}
-      disabled={disabled}
+      disabled={rowDisabled}
+      title={unpaid ? TICKET_UNPAID_TRAVEL_MESSAGE : undefined}
       className={cn(
         'flex w-full items-start gap-3 rounded-2xl border p-4 text-left transition-colors',
         selected
           ? 'border-brand-orange/50 bg-brand-orange/5'
           : 'border-border/80 bg-card hover:border-brand-orange/30',
-        disabled && 'opacity-60',
+        rowDisabled && 'opacity-60',
+        unpaid && 'border-destructive/30',
       )}
     >
       <span className="mt-0.5 text-brand-orange" aria-hidden="true">
@@ -99,6 +108,11 @@ function PassengerRow({
           )}
         </div>
         <p className="truncate text-sm font-medium">{passengerName}</p>
+        {unpaid && ticket && (
+          <p className="text-xs text-destructive">
+            Impayé — reste {formatMoney(getTicketRemainingAmount(ticket), CURRENCY.USD)}
+          </p>
+        )}
       </div>
       {getCheckInTicketId(checkIn) && (
         <Link
@@ -177,19 +191,31 @@ export function BoardingPage() {
     })
   }, [applied, data?.items])
 
+  const boardablePassengers = useMemo(
+    () =>
+      readyPassengers.filter((checkIn) => {
+        const ticket = resolveTicket(checkIn)
+        return !ticket || isTicketFullyPaid(ticket)
+      }),
+    [readyPassengers],
+  )
+
   const selectedCheckIns = useMemo(
-    () => readyPassengers.filter((c) => selectedIds.includes(c.id)),
-    [readyPassengers, selectedIds],
+    () => boardablePassengers.filter((c) => selectedIds.includes(c.id)),
+    [boardablePassengers, selectedIds],
   )
 
   const toggle = (id: string) => {
+    const checkIn = readyPassengers.find((c) => c.id === id)
+    const ticket = checkIn ? resolveTicket(checkIn) : null
+    if (ticket && !isTicketFullyPaid(ticket)) return
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     )
   }
 
   const selectAll = () => {
-    setSelectedIds(readyPassengers.map((c) => c.id))
+    setSelectedIds(boardablePassengers.map((c) => c.id))
   }
 
   const onApply = (form: BoardingFilterForm) => {
@@ -203,6 +229,8 @@ export function BoardingPage() {
     setBoarding(true)
     try {
       for (const checkIn of selectedCheckIns) {
+        const ticket = resolveTicket(checkIn)
+        if (ticket && !isTicketFullyPaid(ticket)) continue
         const ticketId = getCheckInTicketId(checkIn)
         if (!ticketId) continue
         await boardTicket.mutateAsync(ticketId)

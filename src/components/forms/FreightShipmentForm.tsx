@@ -23,6 +23,10 @@ import {
   PACKAGING_TYPE,
   PACKAGING_TYPE_LABELS,
 } from '@/constants/freight'
+import {
+  getFreightCashRequirementMessage,
+  packagesRequireCashBeforeShipment,
+} from '@/constants/freight-business-rules'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
@@ -69,7 +73,13 @@ const lockedFieldClass = cn(fieldClass, 'cursor-not-allowed bg-muted/60')
 
 const packagingOptions = Object.entries(PACKAGING_TYPE_LABELS).map(([value, label]) => ({ value, label }))
 const natureOptions = Object.entries(NATURE_OF_GOODS_LABELS).map(([value, label]) => ({ value, label }))
-const paymentModeOptions = Object.entries(FREIGHT_PAYMENT_MODE_LABELS).map(([value, label]) => ({ value, label }))
+const allPaymentModeOptions = Object.entries(FREIGHT_PAYMENT_MODE_LABELS).map(([value, label]) => ({
+  value,
+  label,
+}))
+const cashOnlyPaymentModeOptions = allPaymentModeOptions.filter(
+  (opt) => opt.value === FREIGHT_PAYMENT_MODE.CASH,
+)
 
 interface FreightShipmentFormProps {
   defaultValues?: Partial<FreightShipmentFormData>
@@ -296,6 +306,12 @@ export function FreightShipmentForm({
   const computedRemainingAmount = computeFreightRemainingAmount(computedTotalAmount, watchedPaidAmount)
   const paidDueNumber = parseFloat(String(watchedPaidAmount ?? '').replace(',', '.')) || 0
 
+  const requiresCashForSpecialCargo = packagesRequireCashBeforeShipment(watchedPackages)
+  const cashRequirementMessage = getFreightCashRequirementMessage(watchedPackages)
+  const paymentModeOptions = requiresCashForSpecialCargo
+    ? cashOnlyPaymentModeOptions
+    : allPaymentModeOptions
+
   const isCashPayment = paymentMode === FREIGHT_PAYMENT_MODE.CASH
   const isAccPayment = paymentMode === FREIGHT_PAYMENT_MODE.ACC
   const needsCashRegister = isCashPayment || isAccPayment
@@ -476,8 +492,12 @@ export function FreightShipmentForm({
   }
 
   const handlePaymentModeChange = (mode: FreightShipmentFormData['paymentMode']) => {
-    setValue('paymentMode', mode, { shouldValidate: true })
-    if (mode !== FREIGHT_PAYMENT_MODE.CASH && mode !== FREIGHT_PAYMENT_MODE.ACC) {
+    const nextMode =
+      requiresCashForSpecialCargo && mode !== FREIGHT_PAYMENT_MODE.CASH
+        ? FREIGHT_PAYMENT_MODE.CASH
+        : mode
+    setValue('paymentMode', nextMode, { shouldValidate: true })
+    if (nextMode !== FREIGHT_PAYMENT_MODE.CASH && nextMode !== FREIGHT_PAYMENT_MODE.ACC) {
       setValue('cashRegister', '', { shouldValidate: true })
       setValue('mixedPayment', false, { shouldValidate: true })
       setValue('paidAmountUsd', '', { shouldValidate: true })
@@ -493,9 +513,9 @@ export function FreightShipmentForm({
     const currentPaid = getValues('paidAmount')
     const currentPaidNum = parseFloat(currentPaid) || 0
     const paid =
-      mode === FREIGHT_PAYMENT_MODE.CASH
+      nextMode === FREIGHT_PAYMENT_MODE.CASH
         ? total
-        : mode === FREIGHT_PAYMENT_MODE.ACC
+        : nextMode === FREIGHT_PAYMENT_MODE.ACC
           ? currentPaidNum > 0
             ? currentPaid
             : ''
@@ -503,6 +523,13 @@ export function FreightShipmentForm({
     setValue('paidAmount', paid, { shouldValidate: true })
     setValue('remainingAmount', computeFreightRemainingAmount(total, paid), { shouldValidate: true })
   }
+
+  useEffect(() => {
+    if (!requiresCashForSpecialCargo) return
+    if (paymentMode === FREIGHT_PAYMENT_MODE.CASH) return
+    handlePaymentModeChange(FREIGHT_PAYMENT_MODE.CASH)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync payment mode when special cargo appears
+  }, [requiresCashForSpecialCargo, paymentMode])
 
   const paidAmountField = register('paidAmount')
 
@@ -784,7 +811,13 @@ export function FreightShipmentForm({
             handlePaymentModeChange(e.target.value as FreightShipmentFormData['paymentMode'])
           }
           error={errors.paymentMode?.message}
+          disabled={requiresCashForSpecialCargo}
         />
+        {requiresCashForSpecialCargo && cashRequirementMessage && (
+          <p className="sm:col-span-2 text-xs text-brand-orange">
+            {cashRequirementMessage}
+          </p>
+        )}
         {needsCashRegister && (
           <Select
             label="Caisse"

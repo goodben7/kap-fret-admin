@@ -2,6 +2,8 @@ export const FREIGHT_STATUS = {
   PENDING: 'PENDING',
   SENT: 'SENT',
   ARRIVED: 'ARRIVED',
+  /** CGU #6 — à liquider (ops, pas vente auto). */
+  PENDING_LIQUIDATION: 'PENDING_LIQUIDATION',
   DELIVERED: 'DELIVERED',
   CANCELLED: 'CANCELLED',
   ARCHIVED: 'ARCHIVED',
@@ -13,6 +15,7 @@ export const FREIGHT_STATUS_LABELS: Record<FreightStatus, string> = {
   PENDING: 'En attente',
   SENT: 'Expédié',
   ARRIVED: 'Arrivé',
+  PENDING_LIQUIDATION: 'À liquider',
   DELIVERED: 'Livré',
   CANCELLED: 'Annulé',
   ARCHIVED: 'Archivé',
@@ -23,6 +26,7 @@ export function freightStatusBadgeVariant(
 ): 'default' | 'secondary' | 'success' | 'destructive' | 'outline' {
   if (status === FREIGHT_STATUS.DELIVERED) return 'success'
   if (status === FREIGHT_STATUS.ARRIVED) return 'secondary'
+  if (status === FREIGHT_STATUS.PENDING_LIQUIDATION) return 'destructive'
   if (status === FREIGHT_STATUS.CANCELLED) return 'destructive'
   if (status === FREIGHT_STATUS.ARCHIVED) return 'outline'
   return 'default'
@@ -36,6 +40,8 @@ export function freightStatusSelectClass(status: FreightStatus | string): string
       return 'border-primary/30 bg-primary/10 text-primary hover:bg-primary/15'
     case FREIGHT_STATUS.ARRIVED:
       return 'border-border bg-secondary/90 text-secondary-foreground hover:bg-secondary'
+    case FREIGHT_STATUS.PENDING_LIQUIDATION:
+      return 'border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/15'
     case FREIGHT_STATUS.DELIVERED:
       return 'border-emerald-300 bg-emerald-100 text-emerald-800 hover:bg-emerald-200/80'
     case FREIGHT_STATUS.CANCELLED:
@@ -59,6 +65,7 @@ export function freightStatusFilterOptions(allLabel = 'Tous les statuts') {
 export const FREIGHT_STATUS_TRANSITIONS = [
   FREIGHT_STATUS.SENT,
   FREIGHT_STATUS.ARRIVED,
+  FREIGHT_STATUS.PENDING_LIQUIDATION,
   FREIGHT_STATUS.DELIVERED,
   FREIGHT_STATUS.CANCELLED,
 ] as const
@@ -133,6 +140,7 @@ export const NATURE_OF_GOODS = {
   FRAGILE: 'FRAGILE',
   VALUABLES: 'VALUABLES',
   PHARMACEUTICALS: 'PHARMACEUTICALS',
+  LIVESTOCK: 'LIVESTOCK',
   OTHER: 'OTHER',
 } as const
 
@@ -145,5 +153,6 @@ export const NATURE_OF_GOODS_LABELS: Record<NatureOfGoods, string> = {
   FRAGILE: 'Fragile',
   VALUABLES: 'Objets de valeur',
   PHARMACEUTICALS: 'Pharmaceutiques',
+  LIVESTOCK: 'Bêtes / animaux',
   OTHER: 'Autre',
 }

@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   ClipboardCheck,
   CreditCard,
+  Download,
   FileText,
   History,
   MapPin,
@@ -39,6 +40,7 @@ import { mergeTicketHistory } from '@/lib/ticket-history'
 import { EntityHistoryTimeline } from '@/components/history/EntityHistoryTimeline'
 import { getUserRefLabel } from '@/lib/user-ref'
 import {
+  CURRENCY,
   TICKET_STATUS,
   TICKET_STATUS_LABELS,
   PAYMENT_MODE_LABELS,
@@ -60,9 +62,21 @@ import {
   getTicketPaidAmount,
   getTicketRemainingAmount,
   getTicketTotalAmount,
+  isTicketFullyPaid,
   toTicketPaymentPayload,
   toTicketReportTravelDatePayload,
 } from '@/lib/ticket'
+import {
+  TICKET_BUSINESS_RULES,
+  TICKET_CANCEL_POLICY,
+  TICKET_UNPAID_TRAVEL_MESSAGE,
+  canCancelTicketByPolicy,
+  getTicketCancelPolicy,
+  getTicketCancelPolicyMessage,
+  getTicketRefundPreviewAmount,
+} from '@/constants/ticket-business-rules'
+import type { Ticket as TicketResource } from '@/types/ticket'
+import { downloadTicketReceiptPdf } from '@/lib/ticket-receipt-pdf'
 import { downloadTicketThermalReceiptPdf } from '@/lib/ticket-thermal-receipt-pdf'
 import { toast } from 'sonner'
 import type { TicketReportTravelDateFormData } from '@/schemas/ticket-report-travel-date.schema'
@@ -202,33 +216,75 @@ function DetailTabs({
   )
 }
 
-const STATUS_CONFIRM: Partial<
-  Record<TicketStatus, { title: string; description: string; confirmLabel: string; variant: ConfirmDialogVariant }>
-> = {
-  [TICKET_STATUS.ISSUED]: {
-    title: 'Émettre ce billet ?',
-    description: 'Le billet est soldé. Il passera au statut Émis et pourra être utilisé au check-in.',
-    confirmLabel: 'Oui, émettre',
-    variant: 'success',
-  },
-  [TICKET_STATUS.USED]: {
-    title: 'Marquer comme utilisé ?',
-    description: 'Le passager a embarqué. Ce billet sera définitivement marqué comme utilisé et ne pourra plus être modifié.',
-    confirmLabel: 'Oui, marquer utilisé',
-    variant: 'success',
-  },
-  [TICKET_STATUS.CANCELLED]: {
-    title: 'Annuler ce billet ?',
-    description: 'Le billet sera annulé. Cette action est irréversible.',
-    confirmLabel: 'Oui, annuler',
-    variant: 'destructive',
-  },
-  [TICKET_STATUS.REFUNDED]: {
-    title: 'Rembourser ce billet ?',
-    description: 'Le billet sera marqué comme remboursé. Assurez-vous que le remboursement a bien été effectué.',
-    confirmLabel: 'Oui, confirmer le remboursement',
-    variant: 'warning',
-  },
+type StatusConfirm = {
+  title: string
+  description: string
+  confirmLabel: string
+  variant: ConfirmDialogVariant
+}
+
+function getStatusConfirm(ticket: TicketResource, status: TicketStatus): StatusConfirm | undefined {
+  if (status === TICKET_STATUS.ISSUED) {
+    return {
+      title: 'Émettre ce billet ?',
+      description: 'Le billet est soldé. Il passera au statut Émis et pourra être utilisé au check-in.',
+      confirmLabel: 'Oui, émettre',
+      variant: 'success',
+    }
+  }
+  if (status === TICKET_STATUS.USED) {
+    return {
+      title: 'Marquer comme utilisé ?',
+      description:
+        'Le passager a embarqué. Ce billet sera définitivement marqué comme utilisé et ne pourra plus être modifié.',
+      confirmLabel: 'Oui, marquer utilisé',
+      variant: 'success',
+    }
+  }
+  if (status === TICKET_STATUS.CANCELLED) {
+    const policy = getTicketCancelPolicy(ticket)
+    const policyMessage = getTicketCancelPolicyMessage(ticket)
+    if (policy === TICKET_CANCEL_POLICY.NOSHOW) {
+      return {
+        title: 'Annulation impossible',
+        description: policyMessage,
+        confirmLabel: 'Compris',
+        variant: 'destructive',
+      }
+    }
+    const penaltyNote =
+      policy === TICKET_CANCEL_POLICY.PENALTY
+        ? ` Pénalité de ${TICKET_BUSINESS_RULES.cancelPenaltyUsd} USD à encaisser manuellement.`
+        : ''
+    return {
+      title: 'Annuler ce billet ?',
+      description: `${policyMessage}${penaltyNote} Cette action est irréversible.`,
+      confirmLabel:
+        policy === TICKET_CANCEL_POLICY.PENALTY
+          ? `Oui, annuler (pénalité ${TICKET_BUSINESS_RULES.cancelPenaltyUsd} $)`
+          : 'Oui, annuler',
+      variant: 'destructive',
+    }
+  }
+  if (status === TICKET_STATUS.REFUNDED) {
+    const policy = getTicketCancelPolicy(ticket)
+    if (policy === TICKET_CANCEL_POLICY.NOSHOW) {
+      return {
+        title: 'Remboursement impossible',
+        description: `Dans les ${TICKET_BUSINESS_RULES.noshowWithinHours} h avant embarquement : billet caduc (noshow).`,
+        confirmLabel: 'Compris',
+        variant: 'warning',
+      }
+    }
+    const refundAmount = getTicketRefundPreviewAmount(ticket)
+    return {
+      title: 'Rembourser ce billet ?',
+      description: `Remboursement CGU : 50 % du prix payé → ${formatMoney(refundAmount, CURRENCY.USD)}. Des sorties de caisse (non validées) seront créées.`,
+      confirmLabel: 'Oui, rembourser 50 %',
+      variant: 'warning',
+    }
+  }
+  return undefined
 }
 
 export function TicketDetailPage() {
@@ -298,10 +354,27 @@ export function TicketDetailPage() {
   const remaining = getTicketRemainingAmount(ticket)
   const money = (amount: number) => formatMoney(amount, ticket.currency)
   const currencyLabel = normalizeCurrency(ticket.currency)
-  const confirm = pendingAction ? STATUS_CONFIRM[pendingAction] : undefined
+  const cancelPolicy = getTicketCancelPolicy(ticket)
+  const canCancelByPolicy = canCancelTicketByPolicy(ticket)
+  const canRefundByPolicy = cancelPolicy !== TICKET_CANCEL_POLICY.NOSHOW
+  const confirm = pendingAction ? getStatusConfirm(ticket, pendingAction) : undefined
 
   const handleConfirmStatus = async () => {
     if (!pendingAction) return
+    if (
+      pendingAction === TICKET_STATUS.CANCELLED
+      && !canCancelByPolicy
+    ) {
+      setPendingAction(null)
+      return
+    }
+    if (
+      pendingAction === TICKET_STATUS.REFUNDED
+      && !canRefundByPolicy
+    ) {
+      setPendingAction(null)
+      return
+    }
     await updateStatus.mutateAsync({ id: ticketId, status: pendingAction })
     setPendingAction(null)
   }
@@ -376,6 +449,18 @@ export function TicketDetailPage() {
       {activeTab === 'details' && (
         <Card className="rounded-2xl border-border/80 shadow-sm">
           <CardContent className="flex flex-wrap gap-2 p-4">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 rounded-xl"
+              onClick={() => {
+                downloadTicketReceiptPdf(ticket)
+                toast.success('Reçu billet téléchargé')
+              }}
+            >
+              <Download className="h-4 w-4" />
+              Télécharger le reçu
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -471,6 +556,10 @@ export function TicketDetailPage() {
           onReportTravelDate={() => setReportTravelDateOpen(true)}
           pending={actionPending}
           canEdit={canEditFields}
+          canMarkUsed={isTicketFullyPaid(ticket)}
+          canCancel={canCancelByPolicy}
+          canRefund={canRefundByPolicy}
+          cancelPolicyMessage={getTicketCancelPolicyMessage(ticket)}
           className="hidden lg:grid"
         />
       )}
@@ -520,7 +609,8 @@ export function TicketDetailPage() {
                 variant="destructive"
                 className="h-11 shrink-0 rounded-xl"
                 onClick={() => setPendingAction(TICKET_STATUS.CANCELLED)}
-                disabled={actionPending}
+                disabled={actionPending || !canCancelByPolicy}
+                title={!canCancelByPolicy ? getTicketCancelPolicyMessage(ticket) : undefined}
               >
                 <Ban className="h-4 w-4" />
                 Annuler
@@ -660,6 +750,10 @@ export function TicketDetailPage() {
               onReportTravelDate={() => setReportTravelDateOpen(true)}
               pending={actionPending}
               canEdit={canEditFields}
+              canMarkUsed={isTicketFullyPaid(ticket)}
+              canCancel={canCancelByPolicy}
+              canRefund={canRefundByPolicy}
+              cancelPolicyMessage={getTicketCancelPolicyMessage(ticket)}
               layout="mobile"
             />
           </div>
@@ -678,7 +772,15 @@ export function TicketDetailPage() {
                   ? setDeleteConfirmOpen(true)
                   : setPendingAction(TICKET_STATUS.CANCELLED)
               }
-              disabled={actionPending}
+              disabled={
+                actionPending
+                || (!canDeleteReserved && !canCancelByPolicy)
+              }
+              title={
+                !canDeleteReserved && !canCancelByPolicy
+                  ? getTicketCancelPolicyMessage(ticket)
+                  : undefined
+              }
               aria-label={canDeleteReserved ? 'Supprimer la réservation' : 'Annuler la réservation'}
             >
               {canDeleteReserved ? <Trash2 className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
@@ -795,6 +897,10 @@ function TicketActions({
   onReportTravelDate,
   pending,
   canEdit = true,
+  canMarkUsed = true,
+  canCancel = true,
+  canRefund = true,
+  cancelPolicyMessage,
   className,
   layout = 'desktop',
 }: {
@@ -803,10 +909,19 @@ function TicketActions({
   onReportTravelDate: () => void
   pending: boolean
   canEdit?: boolean
+  canMarkUsed?: boolean
+  canCancel?: boolean
+  canRefund?: boolean
+  cancelPolicyMessage?: string
   className?: string
   layout?: 'desktop' | 'mobile'
 }) {
   const btnClass = 'h-11 rounded-xl font-semibold'
+  const usedDisabled = pending || !canMarkUsed
+  const usedTitle = canMarkUsed ? undefined : TICKET_UNPAID_TRAVEL_MESSAGE
+  const cancelDisabled = pending || !canCancel
+  const refundDisabled = pending || !canRefund
+  const policyTitle = !canCancel || !canRefund ? cancelPolicyMessage : undefined
 
   if (layout === 'mobile') {
     return (
@@ -834,7 +949,8 @@ function TicketActions({
             type="button"
             className={cn(btnClass, 'bg-emerald-600 text-white hover:bg-emerald-700')}
             onClick={() => onStatus(TICKET_STATUS.USED)}
-            disabled={pending}
+            disabled={usedDisabled}
+            title={usedTitle}
           >
             <CheckCircle2 className="h-4 w-4" />
             Utilisé
@@ -843,22 +959,30 @@ function TicketActions({
             type="button"
             className={cn(btnClass, 'bg-brand-orange text-white hover:bg-brand-orange/90')}
             onClick={() => onStatus(TICKET_STATUS.REFUNDED)}
-            disabled={pending}
+            disabled={refundDisabled}
+            title={policyTitle}
           >
             <RotateCcw className="h-4 w-4" />
             Rembourser
           </Button>
         </div>
+        {!canMarkUsed && (
+          <p className="text-xs text-destructive">{TICKET_UNPAID_TRAVEL_MESSAGE}</p>
+        )}
         <Button
           type="button"
           variant="destructive"
           className={cn(btnClass, 'w-full')}
           onClick={() => onStatus(TICKET_STATUS.CANCELLED)}
-          disabled={pending}
+          disabled={cancelDisabled}
+          title={policyTitle}
         >
           <Ban className="h-4 w-4" />
           Annuler le billet
         </Button>
+        {(!canCancel || !canRefund) && cancelPolicyMessage && (
+          <p className="text-xs text-destructive">{cancelPolicyMessage}</p>
+        )}
       </div>
     )
   }
@@ -887,7 +1011,8 @@ function TicketActions({
         type="button"
         className={cn(btnClass, 'bg-emerald-600 text-white hover:bg-emerald-700')}
         onClick={() => onStatus(TICKET_STATUS.USED)}
-        disabled={pending}
+        disabled={usedDisabled}
+        title={usedTitle}
       >
         <CheckCircle2 className="h-4 w-4" />
         Marquer utilisé
@@ -896,7 +1021,8 @@ function TicketActions({
         type="button"
         className={cn(btnClass, 'bg-brand-orange text-white hover:bg-brand-orange/90')}
         onClick={() => onStatus(TICKET_STATUS.REFUNDED)}
-        disabled={pending}
+        disabled={refundDisabled}
+        title={policyTitle}
       >
         <RotateCcw className="h-4 w-4" />
         Rembourser
@@ -906,11 +1032,18 @@ function TicketActions({
         variant="destructive"
         className={btnClass}
         onClick={() => onStatus(TICKET_STATUS.CANCELLED)}
-        disabled={pending}
+        disabled={cancelDisabled}
+        title={policyTitle}
       >
         <Ban className="h-4 w-4" />
         Annuler
       </Button>
+      {!canMarkUsed && (
+        <p className="sm:col-span-2 text-xs text-destructive">{TICKET_UNPAID_TRAVEL_MESSAGE}</p>
+      )}
+      {(!canCancel || !canRefund) && cancelPolicyMessage && (
+        <p className="sm:col-span-2 text-xs text-destructive">{cancelPolicyMessage}</p>
+      )}
     </div>
   )
 }

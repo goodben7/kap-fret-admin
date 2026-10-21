@@ -7,6 +7,7 @@ import { Banknote, Plane, User } from 'lucide-react'
 import { freightShipmentPatchSchema, type FreightShipmentPatchFormData } from '@/schemas/freight.schema'
 import { CURRENCY, CURRENCY_OPTIONS } from '@/constants/ticket'
 import { FREIGHT_PAYMENT_MODE, FREIGHT_PAYMENT_MODE_LABELS } from '@/constants/freight'
+import { FREIGHT_PERISHABLE_CASH_MESSAGE } from '@/constants/freight-business-rules'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
@@ -28,13 +29,23 @@ const fieldClass =
 
 const lockedFieldClass = cn(fieldClass, 'cursor-not-allowed bg-muted/60')
 
-const paymentModeOptions = Object.entries(FREIGHT_PAYMENT_MODE_LABELS).map(([value, label]) => ({ value, label }))
+const allPaymentModeOptions = Object.entries(FREIGHT_PAYMENT_MODE_LABELS).map(([value, label]) => ({
+  value,
+  label,
+}))
+const cashOnlyPaymentModeOptions = allPaymentModeOptions.filter(
+  (opt) => opt.value === FREIGHT_PAYMENT_MODE.CASH,
+)
 
 interface FreightShipmentPatchFormProps {
   defaultValues?: Partial<FreightShipmentPatchFormData>
   onSubmit: (data: FreightShipmentPatchFormData) => void
   isLoading?: boolean
   cancelHref?: string
+  /** CGU #8 / #12 — périssables ou bêtes : mode verrouillé sur cash. */
+  forceCashPayment?: boolean
+  /** Message affiché quand le cash est forcé (périssable ou animaux). */
+  cashRequirementMessage?: string
 }
 
 function FormSection({
@@ -66,7 +77,12 @@ export function FreightShipmentPatchForm({
   onSubmit,
   isLoading,
   cancelHref,
+  forceCashPayment = false,
+  cashRequirementMessage = FREIGHT_PERISHABLE_CASH_MESSAGE,
 }: FreightShipmentPatchFormProps) {
+  const paymentModeOptions = forceCashPayment
+    ? cashOnlyPaymentModeOptions
+    : allPaymentModeOptions
   const {
     register,
     handleSubmit,
@@ -173,17 +189,33 @@ export function FreightShipmentPatchForm({
   }
 
   const handlePaymentModeChange = (mode: FreightShipmentPatchFormData['paymentMode']) => {
-    setValue('paymentMode', mode, { shouldValidate: true })
+    const nextMode =
+      forceCashPayment && mode !== FREIGHT_PAYMENT_MODE.CASH
+        ? FREIGHT_PAYMENT_MODE.CASH
+        : mode
+    setValue('paymentMode', nextMode, { shouldValidate: true })
     const total = computeFreightTotalAmount(
       getValues('ordinaryFreight'),
       getValues('volumeFreight'),
       getValues('rva'),
       getValues('ltaFees'),
     )
-    const paid = mode === FREIGHT_PAYMENT_MODE.CASH ? total : '0.00'
+    const paid =
+      nextMode === FREIGHT_PAYMENT_MODE.CASH
+        ? total
+        : nextMode === FREIGHT_PAYMENT_MODE.ACC
+          ? getValues('paidAmount')
+          : '0.00'
     setValue('paidAmount', paid, { shouldValidate: true })
     setValue('remainingAmount', computeFreightRemainingAmount(total, paid), { shouldValidate: true })
   }
+
+  useEffect(() => {
+    if (!forceCashPayment) return
+    if (paymentMode === FREIGHT_PAYMENT_MODE.CASH) return
+    handlePaymentModeChange(FREIGHT_PAYMENT_MODE.CASH)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- lock cash for perishable shipments
+  }, [forceCashPayment, paymentMode])
 
   return (
     <form id={FORM_ID} onSubmit={handleSubmit(onSubmit)} className="space-y-4 pb-44 lg:pb-6">
@@ -341,7 +373,13 @@ export function FreightShipmentPatchForm({
             handlePaymentModeChange(e.target.value as FreightShipmentPatchFormData['paymentMode'])
           }
           error={errors.paymentMode?.message}
+          disabled={forceCashPayment}
         />
+        {forceCashPayment && cashRequirementMessage && (
+          <p className="sm:col-span-2 text-xs text-brand-orange">
+            {cashRequirementMessage}
+          </p>
+        )}
         {canEditPaidAmount ? (
           <Input
             label="Montant payé"

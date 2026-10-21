@@ -2,6 +2,10 @@ import { Link, useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Package } from 'lucide-react'
 import { useFreightShipment, useUpdateFreightShipment } from '@/hooks/useFreight'
 import { FreightShipmentPatchForm } from '@/components/forms/FreightShipmentPatchForm'
+import {
+  getFreightCashRequirementMessage,
+  packagesRequireCashBeforeShipment,
+} from '@/constants/freight-business-rules'
 import { shipmentToPatchFormDefaults, toFreightPatchPayload } from '@/lib/freight'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import type { FreightShipmentPatchFormData } from '@/schemas/freight.schema'
@@ -46,6 +50,10 @@ export function FreightEditPage() {
         onSubmit={handleSubmit}
         isLoading={updateShipment.isPending}
         cancelHref={`/freight/${shipmentId}`}
+        forceCashPayment={packagesRequireCashBeforeShipment(shipment.packages)}
+        cashRequirementMessage={
+          getFreightCashRequirementMessage(shipment.packages) ?? undefined
+        }
       />
     </div>
   )

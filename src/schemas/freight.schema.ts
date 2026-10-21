@@ -5,6 +5,10 @@ import {
   NATURE_OF_GOODS,
   PACKAGING_TYPE,
 } from '@/constants/freight'
+import {
+  getFreightCashRequirementMessage,
+  packagesRequireCashBeforeShipment,
+} from '@/constants/freight-business-rules'
 
 const packagingEnum = z.enum([
   PACKAGING_TYPE.BOX,
@@ -23,6 +27,7 @@ const natureEnum = z.enum([
   NATURE_OF_GOODS.FRAGILE,
   NATURE_OF_GOODS.VALUABLES,
   NATURE_OF_GOODS.PHARMACEUTICALS,
+  NATURE_OF_GOODS.LIVESTOCK,
   NATURE_OF_GOODS.OTHER,
 ])
 
@@ -96,6 +101,19 @@ export const freightShipmentSchema = z
         code: 'custom',
         path: ['shipmentDate'],
         message: 'Date requise si une heure est renseignée',
+      })
+    }
+
+    if (
+      packagesRequireCashBeforeShipment(data.packages)
+      && data.paymentMode !== FREIGHT_PAYMENT_MODE.CASH
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['paymentMode'],
+        message:
+          getFreightCashRequirementMessage(data.packages)
+          ?? 'Paiement cash obligatoire pour cette nature de marchandise.',
       })
     }
 

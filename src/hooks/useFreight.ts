@@ -82,6 +82,43 @@ export function useUpdateFreightStatus() {
   })
 }
 
+export function useRecordFreightClaim() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      id,
+      lostWeightKg,
+      notes,
+    }: {
+      id: string
+      lostWeightKg: string
+      notes?: string
+    }) => freightService.recordClaim(id, { lostWeightKg, notes }),
+    onSuccess: (_data, { id }) => {
+      void queryClient.invalidateQueries({ queryKey: freightKeys.detail(id) })
+      void queryClient.invalidateQueries({ queryKey: freightKeys.lists() })
+      toast.success('Réclamation enregistrée')
+    },
+  })
+}
+
+export function useSignFreightLta() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, role }: { id: string; role: 'ISSUER' | 'CASHIER' }) =>
+      freightService.signLta(id, role),
+    onSuccess: (_data, { id, role }) => {
+      void queryClient.invalidateQueries({ queryKey: freightKeys.detail(id) })
+      void queryClient.invalidateQueries({ queryKey: freightKeys.lists() })
+      toast.success(
+        role === 'ISSUER'
+          ? 'Signature émetteur enregistrée'
+          : 'Signature caissière enregistrée',
+      )
+    },
+  })
+}
+
 export function useMarkFreightShipmentsSent() {
   const queryClient = useQueryClient()
   return useMutation({

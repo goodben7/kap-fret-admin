@@ -2,6 +2,7 @@ import { BRAND } from '@/constants/brand'
 import { FREIGHT_PAYMENT_MODE_LABELS, FREIGHT_STATUS_LABELS } from '@/constants/freight'
 import { normalizeCurrency } from '@/constants/ticket'
 import { formatFreightWeight, getFreightIssuingOfficeLabel } from '@/lib/freight'
+import { FREIGHT_CONDITIONS_SHORT_NOTICE } from '@/lib/freight-transport-conditions-pdf'
 import {
   createThermalDoc,
   finalizeThermalDoc,
@@ -23,8 +24,19 @@ function money(value: string | number, currency: string) {
 export function downloadFreightLtaThermalReceiptPdf(shipment: FreightShipment): void {
   const ctx = createThermalDoc(220)
   const currency = normalizeCurrency(shipment.currency)
+  const fullySigned = !!shipment.ltaFullySigned
+    || (!!shipment.issuerSignedAt && !!shipment.cashierSignedAt)
 
   thermalBrandHeader(ctx, 'Reçu LTA — 80 mm')
+  if (!fullySigned) {
+    ctx.doc.setFont('helvetica', 'bold')
+    ctx.doc.setFontSize(7)
+    ctx.doc.setTextColor(180, 40, 40)
+    const banner = ctx.doc.splitTextToSize('LTA NON SIGNÉE — NULLE ET SANS VALEUR', ctx.contentWidth)
+    ctx.doc.text(banner, ctx.marginX, ctx.y)
+    ctx.y += banner.length * 3 + 2
+    ctx.doc.setTextColor(0, 0, 0)
+  }
   thermalLine(ctx, 'N° LTA', shipment.ltaNumber, true)
   thermalLine(ctx, 'Date', shipment.shipmentDate ? formatDateTime(shipment.shipmentDate) : '—')
   thermalLine(ctx, 'Statut', FREIGHT_STATUS_LABELS[shipment.status] ?? shipment.status)
@@ -50,6 +62,13 @@ export function downloadFreightLtaThermalReceiptPdf(shipment: FreightShipment): 
     thermalLine(ctx, 'Observations', shipment.observations.trim())
   }
   thermalFooter(ctx)
+  ctx.doc.setFont('helvetica', 'normal')
+  ctx.doc.setFontSize(5)
+  ctx.doc.setTextColor(80, 80, 80)
+  const noticeLines = ctx.doc.splitTextToSize(FREIGHT_CONDITIONS_SHORT_NOTICE, ctx.contentWidth)
+  ctx.doc.text(noticeLines, ctx.marginX, ctx.y)
+  ctx.y += noticeLines.length * 2.4 + 2
+  ctx.doc.setTextColor(0, 0, 0)
   ctx.doc.setFontSize(5)
   ctx.doc.text(`Généré ${formatDateTime(new Date().toISOString())} — ${BRAND.name}`, ctx.marginX, ctx.y)
 

@@ -23,6 +23,8 @@ import {
   useFreightShipment,
   useUpdateFreightStatus,
   useUpdateFreightPackage,
+  useRecordFreightClaim,
+  useSignFreightLta,
 } from '@/hooks/useFreight'
 import { useCreateCashTransaction } from '@/hooks/useCashTransactions'
 import { useFreightActivities } from '@/hooks/useActivities'
@@ -43,6 +45,24 @@ import {
 } from '@/constants/freight'
 import { FreightPackageForm } from '@/components/forms/FreightPackageForm'
 import { FreightDeliveryPaymentModal, type FreightDeliveryPaymentResult } from '@/components/freight/FreightDeliveryPaymentModal'
+import { FreightOverdueBadges } from '@/components/freight/FreightOverdueBadges'
+import {
+  FREIGHT_BUSINESS_RULES,
+  FREIGHT_LIVESTOCK_CASH_MESSAGE,
+  computeFreightLossClaimAmountUsd,
+  getFreightLiquidationDueAt,
+  getFreightPaymentDueAt,
+  getFreightPickupDueAt,
+  getFreightStorageBillableDays,
+  getFreightStorageFees,
+  isFreightEligibleForLiquidation,
+  isFreightPaymentOverdue,
+  isFreightPickupOverdue,
+  packagesContainLivestock,
+} from '@/constants/freight-business-rules'
+import { getUserRefLabel } from '@/lib/user-ref'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { TicketContactActions } from '@/components/tickets/TicketContactActions'
 import {
   buildFreightLtaReceiptWhatsAppText,
@@ -333,9 +353,14 @@ export function FreightDetailPage() {
   const updateStatus = useUpdateFreightStatus()
   const updatePackage = useUpdateFreightPackage()
   const createTransaction = useCreateCashTransaction()
+  const recordClaim = useRecordFreightClaim()
+  const signLta = useSignFreightLta()
 
   const [statusModalOpen, setStatusModalOpen] = useState(false)
   const [deliveryPaymentModalOpen, setDeliveryPaymentModalOpen] = useState(false)
+  const [claimModalOpen, setClaimModalOpen] = useState(false)
+  const [claimLostKg, setClaimLostKg] = useState('')
+  const [claimNotes, setClaimNotes] = useState('')
   const [newStatus, setNewStatus] = useState('')
   const [editingPackage, setEditingPackage] = useState<FreightPackage | null>(null)
   const [activeTab, setActiveTab] = useState<FreightDetailTab>('details')
@@ -376,10 +401,53 @@ export function FreightDetailPage() {
   const acompteAmount = getFreightAcompteAmount(shipment)
   const pdAmount = getFreightPdAmount(shipment)
   const showObservations = hasFreightObservations(shipment.observations)
+  const paymentDueDate =
+    shipment.paymentDueAt != null && shipment.paymentDueAt !== ''
+      ? new Date(shipment.paymentDueAt)
+      : getFreightPaymentDueAt(shipment.arrivedAt)
+  const pickupDueDate =
+    shipment.pickupDueAt != null && shipment.pickupDueAt !== ''
+      ? new Date(shipment.pickupDueAt)
+      : getFreightPickupDueAt(shipment.arrivedAt, shipment.paymentMode)
+  const paymentOverdue = isFreightPaymentOverdue(shipment)
+  const pickupOverdue = isFreightPickupOverdue(shipment)
+  const storageBillableDays = getFreightStorageBillableDays(shipment)
+  const storageFees = getFreightStorageFees(shipment)
+  const ltaFullySigned =
+    !!shipment.ltaFullySigned
+    || (!!shipment.issuerSignedAt && !!shipment.cashierSignedAt)
+  const isLivestockShipment = packagesContainLivestock(shipment.packages)
+  const canRecordClaim =
+    !isLivestockShipment
+    && !shipment.claimAt
+    && (
+      shipment.status === FREIGHT_STATUS.ARRIVED
+      || shipment.status === FREIGHT_STATUS.PENDING_LIQUIDATION
+      || shipment.status === FREIGHT_STATUS.DELIVERED
+    )
+  const claimPreviewAmount = computeFreightLossClaimAmountUsd(claimLostKg)
+  const liquidationDueDate =
+    shipment.liquidationDueAt != null && shipment.liquidationDueAt !== ''
+      ? new Date(shipment.liquidationDueAt)
+      : getFreightLiquidationDueAt(shipment.arrivedAt)
+  const eligibleForLiquidation = isFreightEligibleForLiquidation(shipment)
 
   const statusOptions = FREIGHT_STATUS_TRANSITIONS.filter((value) => {
     if (value === shipment.status) return false
     if (value === FREIGHT_STATUS.SENT && shipment.status !== FREIGHT_STATUS.PENDING) return false
+    if (
+      value === FREIGHT_STATUS.PENDING_LIQUIDATION
+      && shipment.status !== FREIGHT_STATUS.ARRIVED
+    ) {
+      return false
+    }
+    if (
+      shipment.status === FREIGHT_STATUS.PENDING_LIQUIDATION
+      && value !== FREIGHT_STATUS.DELIVERED
+      && value !== FREIGHT_STATUS.CANCELLED
+    ) {
+      return false
+    }
     return true
   }).map((value) => ({ value, label: FREIGHT_STATUS_LABELS[value] }))
 
@@ -419,6 +487,22 @@ export function FreightDetailPage() {
     setEditingPackage(null)
   }
 
+  const handleRecordClaim = async () => {
+    const kg = parseFloat(String(claimLostKg).replace(',', '.'))
+    if (!Number.isFinite(kg) || kg <= 0) {
+      toast.error('Indiquez un poids perdu valide (kg)')
+      return
+    }
+    await recordClaim.mutateAsync({
+      id: shipmentId,
+      lostWeightKg: String(kg),
+      notes: claimNotes.trim() || undefined,
+    })
+    setClaimModalOpen(false)
+    setClaimLostKg('')
+    setClaimNotes('')
+  }
+
   const actionPending = updateStatus.isPending || createTransaction.isPending
 
   return (
@@ -442,12 +526,22 @@ export function FreightDetailPage() {
                 </h1>
                 <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{shipment.id}</p>
               </div>
-              <Badge
-                variant={freightStatusBadgeVariant(shipment.status) as 'default'}
-                className="shrink-0 px-3 py-1 text-sm"
-              >
-                {FREIGHT_STATUS_LABELS[shipment.status]}
-              </Badge>
+              <div className="flex shrink-0 flex-col items-end gap-1.5">
+                <Badge
+                  variant={freightStatusBadgeVariant(shipment.status) as 'default'}
+                  className="px-3 py-1 text-sm"
+                >
+                  {FREIGHT_STATUS_LABELS[shipment.status]}
+                </Badge>
+                <FreightOverdueBadges shipment={shipment} />
+                {ltaFullySigned ? (
+                  <Badge variant="success" className="shrink-0">LTA signée</Badge>
+                ) : (
+                  <Badge variant="outline" className="shrink-0 border-destructive/40 text-destructive">
+                    LTA non signée
+                  </Badge>
+                )}
+              </div>
             </div>
 
             <div className="flex items-end justify-between gap-4 border-t border-border/60 pt-4">
@@ -497,11 +591,15 @@ export function FreightDetailPage() {
               className="h-11 rounded-xl"
               onClick={() => {
                 downloadFreightLtaReceiptPdf(shipment)
-                toast.success('Reçu LTA téléchargé')
+                toast.success(
+                  ltaFullySigned
+                    ? 'Reçu LTA téléchargé'
+                    : 'Brouillon téléchargé (LTA non signée — nulle)',
+                )
               }}
             >
               <Download className="h-4 w-4" />
-              Télécharger le reçu
+              {ltaFullySigned ? 'Télécharger le reçu' : 'Brouillon PDF'}
             </Button>
             <Button
               type="button"
@@ -515,6 +613,42 @@ export function FreightDetailPage() {
               <Printer className="h-4 w-4" />
               Thermique 80 mm
             </Button>
+            {!shipment.issuerSignedAt && (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 rounded-xl"
+                disabled={signLta.isPending}
+                onClick={() => void signLta.mutateAsync({ id: shipmentId, role: 'ISSUER' })}
+              >
+                Signer (émetteur)
+              </Button>
+            )}
+            {!shipment.cashierSignedAt && (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 rounded-xl"
+                disabled={signLta.isPending}
+                onClick={() => void signLta.mutateAsync({ id: shipmentId, role: 'CASHIER' })}
+              >
+                Signer (caissière)
+              </Button>
+            )}
+            {canRecordClaim && (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 rounded-xl border-brand-orange/40 text-brand-orange"
+                onClick={() => {
+                  setClaimLostKg('')
+                  setClaimNotes('')
+                  setClaimModalOpen(true)
+                }}
+              >
+                Réclamation perte/vol
+              </Button>
+            )}
             {shipment.senderPhone && (
               <Button
                 type="button"
@@ -569,11 +703,121 @@ export function FreightDetailPage() {
           {shipment.sentAt && (
             <DetailRow label="Expédié le" value={formatDateTime(shipment.sentAt)} />
           )}
+          {shipment.arrivedAt && (
+            <DetailRow label="Arrivé le" value={formatDateTime(shipment.arrivedAt)} />
+          )}
+          {shipment.arrivedAt && (
+            <DetailRow
+              label="Échéance paiement"
+              value={
+                paymentDueDate && !Number.isNaN(paymentDueDate.getTime())
+                  ? formatDateTime(paymentDueDate.toISOString())
+                  : '—'
+              }
+              highlight={paymentOverdue}
+            />
+          )}
+          {shipment.arrivedAt && (
+            <DetailRow
+              label="Échéance enlèvement"
+              value={
+                pickupDueDate && !Number.isNaN(pickupDueDate.getTime())
+                  ? formatDateTime(pickupDueDate.toISOString())
+                  : '—'
+              }
+              highlight={pickupOverdue}
+            />
+          )}
+          {shipment.arrivedAt && (
+            <DetailRow
+              label="Entreposage"
+              value={
+                storageBillableDays > 0
+                  ? `${storageBillableDays} j facturables · ${money(storageFees)}`
+                  : 'Période de grâce'
+              }
+              highlight={storageBillableDays > 0}
+            />
+          )}
+          {shipment.arrivedAt && (
+            <DetailRow
+              label="Échéance liquidation"
+              value={
+                liquidationDueDate && !Number.isNaN(liquidationDueDate.getTime())
+                  ? formatDateTime(liquidationDueDate.toISOString())
+                  : '—'
+              }
+              highlight={
+                eligibleForLiquidation
+                || shipment.status === FREIGHT_STATUS.PENDING_LIQUIDATION
+              }
+            />
+          )}
           <CheckpointDetailRow title="Chargement" checkpoint={shipment.loadingPlace} />
           <CheckpointDetailRow title="Déchargement" checkpoint={shipment.unloadingPlace} />
           <DetailRow label="Bureau" value={getFreightIssuingOfficeLabel(shipment)} />
           <DetailRow label="Colis" value={String(shipment.packageCount)} />
+          <DetailRow
+            label="Signature émetteur"
+            value={
+              shipment.issuerSignedAt
+                ? `${formatDateTime(shipment.issuerSignedAt)}${
+                    getUserRefLabel(shipment.issuerSignedBy)
+                      ? ` · ${getUserRefLabel(shipment.issuerSignedBy)}`
+                      : ''
+                  }`
+                : 'En attente'
+            }
+            highlight={!shipment.issuerSignedAt}
+          />
+          <DetailRow
+            label="Signature caissière"
+            value={
+              shipment.cashierSignedAt
+                ? `${formatDateTime(shipment.cashierSignedAt)}${
+                    getUserRefLabel(shipment.cashierSignedBy)
+                      ? ` · ${getUserRefLabel(shipment.cashierSignedBy)}`
+                      : ''
+                  }`
+                : 'En attente'
+            }
+            highlight={!shipment.cashierSignedAt}
+          />
+          {shipment.claimAt && (
+            <>
+              <DetailRow
+                label="Réclamation"
+                value={`${formatFreightWeight(shipment.claimLostWeightKg ?? '0')} · ${
+                  shipment.claimAmountUsd != null
+                    ? formatMoney(parseFloat(shipment.claimAmountUsd) || 0, 'USD')
+                    : '—'
+                }`}
+                highlight
+              />
+              <DetailRow
+                label="Réclamé le"
+                value={
+                  `${formatDateTime(shipment.claimAt)}${
+                    getUserRefLabel(shipment.claimBy)
+                      ? ` · ${getUserRefLabel(shipment.claimBy)}`
+                      : ''
+                  }`
+                }
+              />
+              {shipment.claimNotes?.trim() && (
+                <DetailRow label="Notes sinistre" value={shipment.claimNotes.trim()} />
+              )}
+            </>
+          )}
         </DetailSection>
+
+        {isLivestockShipment && (
+          <Card className="rounded-2xl border-brand-orange/30 bg-brand-orange/5 lg:col-span-2">
+            <CardContent className="p-4 text-sm text-brand-orange">
+              {FREIGHT_LIVESTOCK_CASH_MESSAGE}
+            </CardContent>
+          </Card>
+        )}
 
         <DetailSection title="Tarification" icon={Banknote}>
           <DetailRow label="Poids total" value={formatFreightWeight(shipment.totalWeight)} />
@@ -596,7 +840,7 @@ export function FreightDetailPage() {
           <DetailRow
             label="Reste"
             value={money(shipment.remainingAmount)}
-            highlight={remainingAmount > 0}
+            highlight={remainingAmount > 0 || paymentOverdue}
           />
           <div className="mt-3 flex items-center justify-between rounded-xl bg-brand-orange/10 px-4 py-3">
             <span className="text-sm font-semibold">Total</span>
@@ -784,6 +1028,62 @@ export function FreightDetailPage() {
         onConfirm={handleDeliveryPaymentConfirm}
         isLoading={actionPending}
       />
+
+      <Modal
+        open={claimModalOpen}
+        onOpenChange={(open) => {
+          if (!open && !recordClaim.isPending) {
+            setClaimModalOpen(false)
+          }
+        }}
+        title="Réclamation perte / vol"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Indemnisation plafonnée à {FREIGHT_BUSINESS_RULES.lossRefundUsdPerKg}&nbsp;$ / kg
+            (CGU #10). Les bêtes / animaux sont exclus.
+          </p>
+          <Input
+            label="Poids perdu (kg)"
+            inputMode="decimal"
+            value={claimLostKg}
+            onChange={(e) => setClaimLostKg(e.target.value)}
+            placeholder="Ex. 12.5"
+          />
+          <Textarea
+            label="Notes (optionnel)"
+            value={claimNotes}
+            onChange={(e) => setClaimNotes(e.target.value)}
+            rows={3}
+            placeholder="Circonstances, référence…"
+          />
+          <div className="flex items-center justify-between rounded-xl bg-muted/40 px-4 py-3 text-sm">
+            <span className="text-muted-foreground">Montant estimé</span>
+            <span className="font-semibold tabular-nums">
+              {formatMoney(claimPreviewAmount, 'USD')}
+            </span>
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl"
+              disabled={recordClaim.isPending}
+              onClick={() => setClaimModalOpen(false)}
+            >
+              Annuler
+            </Button>
+            <Button
+              type="button"
+              className="rounded-xl"
+              disabled={recordClaim.isPending}
+              onClick={() => void handleRecordClaim()}
+            >
+              Enregistrer
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         open={!!editingPackage}

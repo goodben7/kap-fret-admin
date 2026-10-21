@@ -8,6 +8,7 @@ import {
   normalizeCurrency,
 } from '@/constants/ticket'
 import { getCheckpointDisplayName } from '@/lib/checkpoint'
+import { PASSENGER_CONDITIONS_SHORT_NOTICE } from '@/lib/passenger-contract-conditions-pdf'
 import {
   getTicketIssuingOfficeLabel,
   getTicketPaidAmount,
@@ -61,6 +62,13 @@ export function downloadTicketThermalReceiptPdf(ticket: Ticket): void {
   thermalTotal(ctx, 'TOTAL', money(getTicketTotalAmount(ticket)))
 
   thermalFooter(ctx)
+  ctx.doc.setFont('helvetica', 'normal')
+  ctx.doc.setFontSize(5)
+  ctx.doc.setTextColor(80, 80, 80)
+  const noticeLines = ctx.doc.splitTextToSize(PASSENGER_CONDITIONS_SHORT_NOTICE, ctx.contentWidth)
+  ctx.doc.text(noticeLines, ctx.marginX, ctx.y)
+  ctx.y += noticeLines.length * 2.4 + 2
+  ctx.doc.setTextColor(0, 0, 0)
   ctx.doc.setFontSize(5)
   ctx.doc.text(`Généré ${formatDateTime(new Date().toISOString())} — ${BRAND.name}`, ctx.marginX, ctx.y)
 

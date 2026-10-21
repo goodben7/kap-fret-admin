@@ -198,6 +198,13 @@ export function getTicketRemainingAmount(
   return remaining > 0 ? remaining : 0
 }
 
+/** CGU billet #3 — soldé si paid ≥ total (tolérance 0.001). */
+export function isTicketFullyPaid(
+  ticket: Pick<Ticket, 'paidAmount' | 'totalAmount' | 'basePrice' | 'tva' | 'fpt' | 'rva'>,
+): boolean {
+  return getTicketRemainingAmount(ticket) <= 0.001
+}
+
 /** Montant à encaisser dans la devise de paiement (tarif billet toujours en USD). */
 export function computeTicketPaymentAmount(
   totalUsd: number,

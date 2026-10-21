@@ -20,6 +20,7 @@ import {
   Send,
 } from 'lucide-react'
 import { FreightManifestModal } from '@/components/freight/FreightManifestModal'
+import { FreightOverdueBadges } from '@/components/freight/FreightOverdueBadges'
 import { TicketContactActions } from '@/components/tickets/TicketContactActions'
 import { useFreight } from '@/hooks/useFreight'
 import {
@@ -361,6 +362,7 @@ function FreightCard({ shipment }: { shipment: FreightShipment }) {
                 <Badge variant={freightStatusBadgeVariant(shipment.status) as 'default'} className="shrink-0">
                   {FREIGHT_STATUS_LABELS[shipment.status]}
                 </Badge>
+                <FreightOverdueBadges shipment={shipment} />
               </div>
               <p className="inline-flex items-center gap-1.5 text-sm font-semibold truncate">
                 <Plane className="h-3.5 w-3.5 shrink-0 text-brand-orange" aria-hidden="true" />
@@ -463,8 +465,11 @@ function FreightTable({ shipments }: { shipments: FreightShipment[] }) {
                 <TableCell className={cn(cellClass, 'truncate')} title={shipment.receiverName}>
                   {shipment.receiverName || '—'}
                 </TableCell>
-                <TableCell className={cn(cellClass, 'truncate font-mono text-[11px] lg:text-xs')} title={shipment.ltaNumber}>
-                  {shipment.ltaNumber}
+                <TableCell className={cn(cellClass)} title={shipment.ltaNumber}>
+                  <div className="space-y-1">
+                    <p className="truncate font-mono text-[11px] lg:text-xs">{shipment.ltaNumber}</p>
+                    <FreightOverdueBadges shipment={shipment} />
+                  </div>
                 </TableCell>
                 <TableCell className={cn(cellClass, 'text-right tabular-nums whitespace-nowrap')}>
                   {shipment.packageCount}

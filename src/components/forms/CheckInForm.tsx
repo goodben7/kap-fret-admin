@@ -37,6 +37,7 @@ import {
   type BaggageType,
 } from '@/constants/check-in-baggage'
 import { CURRENCY, CURRENCY_OPTIONS, TICKET_STATUS, TICKET_STATUS_LABELS } from '@/constants/ticket'
+import { TICKET_UNPAID_TRAVEL_MESSAGE } from '@/constants/ticket-business-rules'
 import { useAuth } from '@/hooks/useAuth'
 import { useCashRegistersForSelect } from '@/hooks/useCashRegisters'
 import { useCurrenciesForSelect } from '@/hooks/useCurrencies'
@@ -62,6 +63,10 @@ import {
   sumTicketBaggageAllowances,
   toEncodedAtDateInput,
 } from '@/lib/check-in'
+import {
+  getTicketRemainingAmount,
+  isTicketFullyPaid,
+} from '@/lib/ticket'
 import { ticketService } from '@/services/ticket.service'
 import type { Ticket } from '@/types/ticket'
 import { Input } from '@/components/ui/input'
@@ -226,10 +231,27 @@ function CheckInFormActions({
 }
 
 function SelectedTicketCard({ ticket }: { ticket: Ticket }) {
+  const unpaid = !isTicketFullyPaid(ticket)
+  const remaining = getTicketRemainingAmount(ticket)
+
   return (
-    <div className="rounded-xl border border-brand-orange/25 bg-brand-orange/5 p-4 space-y-3">
+    <div
+      className={cn(
+        'rounded-xl border p-4 space-y-3',
+        unpaid
+          ? 'border-destructive/40 bg-destructive/5'
+          : 'border-brand-orange/25 bg-brand-orange/5',
+      )}
+    >
       <div className="flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-orange/15 text-brand-orange">
+        <span
+          className={cn(
+            'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
+            unpaid
+              ? 'bg-destructive/15 text-destructive'
+              : 'bg-brand-orange/15 text-brand-orange',
+          )}
+        >
           <User className="h-5 w-5" aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
@@ -255,6 +277,11 @@ function SelectedTicketCard({ ticket }: { ticket: Ticket }) {
           <p className="text-muted-foreground truncate">Bureau : {ticket.issuingOfficeName}</p>
         )}
       </div>
+      {unpaid && (
+        <p className="text-sm font-medium text-destructive">
+          {TICKET_UNPAID_TRAVEL_MESSAGE} Reste : {formatMoney(remaining, CURRENCY.USD)}.
+        </p>
+      )}
     </div>
   )
 }
@@ -302,7 +329,10 @@ export function CheckInForm(props: CheckInFormProps) {
   }, [groupData?.items, selectedTicket])
 
   const groupIssuedTickets = useMemo(
-    () => groupTickets.filter((t) => t.status === TICKET_STATUS.ISSUED),
+    () =>
+      groupTickets.filter(
+        (t) => t.status === TICKET_STATUS.ISSUED && isTicketFullyPaid(t),
+      ),
     [groupTickets],
   )
 
@@ -617,35 +647,30 @@ export function CheckInForm(props: CheckInFormProps) {
     }
   }, [excessWeightKg, isEdit, setValue])
 
+  const applySelectedTicket = (ticket: Ticket) => {
+    const canTravel =
+      ticket.status === TICKET_STATUS.ISSUED && isTicketFullyPaid(ticket)
+    setSelectedTicket(ticket)
+    setSelectedGroupTicketIds(canTravel ? [ticket.id] : [])
+    const ticketIri = ticket['@id'] ?? toIri('tickets', ticket.id)
+    setValue('ticketIri', ticketIri, { shouldValidate: true, shouldDirty: true })
+    if (ticket.baggageAllowanceKg != null && ticket.baggageAllowanceKg !== '') {
+      setValue('baggageAllowanceKg', ticket.baggageAllowanceKg, {
+        shouldValidate: true,
+        shouldDirty: true,
+      })
+    }
+    setValue('currency', CURRENCY.USD, { shouldValidate: true, shouldDirty: true })
+    syncDerivedWeights({ updateExcessPrice: true })
+  }
+
   const handleTicketSelect = async (ticket: Ticket) => {
     setIsLoadingTicket(true)
     try {
       const fullTicket = await ticketService.getById(ticket.id)
-      setSelectedTicket(fullTicket)
-      setSelectedGroupTicketIds(
-        fullTicket.status === TICKET_STATUS.ISSUED ? [fullTicket.id] : [],
-      )
-      const ticketIri = fullTicket['@id'] ?? toIri('tickets', fullTicket.id)
-      setValue('ticketIri', ticketIri, { shouldValidate: true, shouldDirty: true })
-      setValue('baggageAllowanceKg', fullTicket.baggageAllowanceKg, {
-        shouldValidate: true,
-        shouldDirty: true,
-      })
-      setValue('currency', CURRENCY.USD, { shouldValidate: true, shouldDirty: true })
-      syncDerivedWeights({ updateExcessPrice: true })
+      applySelectedTicket(fullTicket)
     } catch {
-      setSelectedTicket(ticket)
-      setSelectedGroupTicketIds(ticket.status === TICKET_STATUS.ISSUED ? [ticket.id] : [])
-      const ticketIri = ticket['@id'] ?? toIri('tickets', ticket.id)
-      setValue('ticketIri', ticketIri, { shouldValidate: true, shouldDirty: true })
-      if (ticket.baggageAllowanceKg != null && ticket.baggageAllowanceKg !== '') {
-        setValue('baggageAllowanceKg', ticket.baggageAllowanceKg, {
-          shouldValidate: true,
-          shouldDirty: true,
-        })
-      }
-      setValue('currency', CURRENCY.USD, { shouldValidate: true, shouldDirty: true })
-      syncDerivedWeights({ updateExcessPrice: true })
+      applySelectedTicket(ticket)
     } finally {
       setIsLoadingTicket(false)
     }
@@ -680,18 +705,7 @@ export function CheckInForm(props: CheckInFormProps) {
       setIsLoadingTicket(true)
       try {
         const ticket = await ticketService.getById(initialTicketId.trim())
-        setSelectedTicket(ticket)
-        setSelectedGroupTicketIds(
-          ticket.status === TICKET_STATUS.ISSUED ? [ticket.id] : [],
-        )
-        const ticketIri = ticket['@id'] ?? toIri('tickets', ticket.id)
-        setValue('ticketIri', ticketIri, { shouldValidate: true, shouldDirty: true })
-        setValue('baggageAllowanceKg', ticket.baggageAllowanceKg, {
-          shouldValidate: true,
-          shouldDirty: true,
-        })
-        setValue('currency', CURRENCY.USD, { shouldValidate: true, shouldDirty: true })
-        syncDerivedWeights({ updateExcessPrice: true })
+        applySelectedTicket(ticket)
       } catch {
         initialTicketLoadedRef.current = false
       } finally {
@@ -735,9 +749,17 @@ export function CheckInForm(props: CheckInFormProps) {
     queueMicrotask(() => syncDerivedWeights({ updateExcessPrice: true }))
   }
 
+  const primaryTicketUnpaid =
+    !isEdit && !!selectedTicket && !isTicketFullyPaid(selectedTicket)
+  const groupHasUnpaid =
+    !isEdit
+    && selectedGroupTickets.some((t) => !isTicketFullyPaid(t))
+  const blockCreateForUnpaidTicket = primaryTicketUnpaid || groupHasUnpaid
+
   const handleFormSubmit = isEdit
     ? handleSubmit((data) => (onSubmit as CheckInEditFormProps['onSubmit'])(data))
     : handleSubmit((data) => {
+        if (blockCreateForUnpaidTicket) return
         const iris = selectedGroupTickets.map((t) => t['@id'] ?? toIri('tickets', t.id))
         const ticketIris = iris.length > 0
           ? iris
@@ -821,12 +843,14 @@ export function CheckInForm(props: CheckInFormProps) {
                 <ul className="space-y-2">
                   {groupTickets.map((ticket) => {
                     const isIssued = ticket.status === TICKET_STATUS.ISSUED
+                    const isPaid = isTicketFullyPaid(ticket)
+                    const selectable = isIssued && isPaid
                     const checked = selectedGroupTicketIds.includes(ticket.id)
                     return (
                       <li key={ticket.id}>
                         <label
                           className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 ${
-                            isIssued
+                            selectable
                               ? 'cursor-pointer border-border/60 bg-background/80'
                               : 'cursor-not-allowed border-border/40 bg-muted/30 opacity-70'
                           }`}
@@ -835,9 +859,9 @@ export function CheckInForm(props: CheckInFormProps) {
                             type="checkbox"
                             className="mt-1 h-4 w-4 rounded border-input"
                             checked={checked}
-                            disabled={!isIssued}
+                            disabled={!selectable}
                             onChange={() => {
-                              if (isIssued) toggleGroupTicket(ticket.id)
+                              if (selectable) toggleGroupTicket(ticket.id)
                             }}
                           />
                           <span className="min-w-0 flex-1">
@@ -852,7 +876,11 @@ export function CheckInForm(props: CheckInFormProps) {
                             <span className="block font-mono text-xs text-muted-foreground">
                               {ticket.ticketNumber} · franchise{' '}
                               {formatCheckInWeight(ticket.baggageAllowanceKg)}
-                              {!isIssued ? ' · non sélectionnable' : ''}
+                              {!isIssued
+                                ? ' · non sélectionnable'
+                                : !isPaid
+                                  ? ` · impayé (reste ${formatMoney(getTicketRemainingAmount(ticket), CURRENCY.USD)})`
+                                  : ''}
                             </span>
                           </span>
                         </label>
@@ -1425,6 +1453,12 @@ export function CheckInForm(props: CheckInFormProps) {
         </p>
       )}
 
+      {blockCreateForUnpaidTicket && (
+        <p className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          {TICKET_UNPAID_TRAVEL_MESSAGE}
+        </p>
+      )}
+
       <input type="hidden" {...register('ticketIri')} />
       <input type="hidden" {...register('currency')} />
 
@@ -1432,6 +1466,7 @@ export function CheckInForm(props: CheckInFormProps) {
         formId={FORM_ID}
         canSubmit={
           isValid
+          && !blockCreateForUnpaidTicket
           && (!mixedPayment || !hasExcessPayment || isPdaPayment || mixedPaymentOk)
         }
         isLoading={isLoading}

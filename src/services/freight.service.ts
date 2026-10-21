@@ -125,6 +125,24 @@ export const freightService = {
 
     return { succeeded, failed }
   },
+
+  async recordClaim(id: string, payload: { lostWeightKg: string; notes?: string }) {
+    const { data } = await api.post<FreightShipment>(
+      `/api/freight_shipments/${id}/claim`,
+      payload,
+      { headers: JSON_HEADERS },
+    )
+    return data
+  },
+
+  async signLta(id: string, role: 'ISSUER' | 'CASHIER') {
+    const { data } = await api.post<FreightShipment>(
+      `/api/freight_shipments/${id}/sign`,
+      { role },
+      { headers: JSON_HEADERS },
+    )
+    return data
+  },
 }
 
 export const freightPackageService = {
