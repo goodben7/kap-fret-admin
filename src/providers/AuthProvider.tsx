@@ -43,7 +43,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setToken(storedToken)
       setUser(storedUser)
       try {
-        const freshUser = await authService.getCurrentUser()
+        // skipAuthRedirect : ne pas éjecter vers /login depuis une page publique (/reserver, /suivi)
+        const freshUser = await authService.getCurrentUser({ skipAuthRedirect: true })
         setUser(freshUser)
         authService.persistAuth(storedToken, localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN) ?? undefined, freshUser)
       } catch {

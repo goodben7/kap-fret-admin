@@ -45,6 +45,23 @@ function onTokenRefreshed(token: string) {
   refreshSubscribers = []
 }
 
+/** Pages accessibles sans session bureau — un 401 ne doit jamais forcer /login. */
+function isPublicAppPath(pathname = window.location.pathname): boolean {
+  return (
+    pathname === '/reserver'
+    || pathname.startsWith('/reserver/')
+    || pathname === '/suivi'
+    || pathname.startsWith('/suivi/')
+    || pathname === '/login'
+    || pathname.startsWith('/login/')
+  )
+}
+
+function redirectToLoginIfNeeded() {
+  if (isPublicAppPath()) return
+  window.location.href = '/login'
+}
+
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError<HydraError>) => {
@@ -78,7 +95,7 @@ api.interceptors.response.use(
           localStorage.removeItem(STORAGE_KEYS.TOKEN)
           localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN)
           localStorage.removeItem(STORAGE_KEYS.USER)
-          window.location.href = '/login'
+          redirectToLoginIfNeeded()
         } finally {
           isRefreshing = false
         }
@@ -95,9 +112,7 @@ api.interceptors.response.use(
         localStorage.removeItem(STORAGE_KEYS.TOKEN)
         localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN)
         localStorage.removeItem(STORAGE_KEYS.USER)
-        if (!window.location.pathname.includes('/login')) {
-          window.location.href = '/login'
-        }
+        redirectToLoginIfNeeded()
       }
     }
 

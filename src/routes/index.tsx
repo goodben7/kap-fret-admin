@@ -188,5 +188,7 @@ export const router = createBrowserRouter([
       },
     ],
   },
-  { path: '*', element: <Navigate to="/dashboard" replace /> },
+  // Fallback : login (pas /dashboard) pour éviter une boucle ProtectedRoute → login
+  // sur les URLs inconnues / builds sans routes publiques encore déployées.
+  { path: '*', element: <Navigate to="/login" replace /> },
 ])
