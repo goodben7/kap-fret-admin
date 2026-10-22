@@ -40,6 +40,11 @@ export const TICKET_BUSINESS_RULES = {
    * #4 — Checking bagages : minimum d'heures avant embarquement (info / alerte).
    */
   baggageCheckInMinHoursBeforeBoarding: 2,
+
+  /**
+   * Hold réservation non payée — aligné sur `app:tickets:expire-unpaid-reservations` (défaut 48 h).
+   */
+  unpaidReservationHoldHours: 48,
 } as const
 
 export type TicketBusinessRules = typeof TICKET_BUSINESS_RULES

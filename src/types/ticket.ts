@@ -1,7 +1,14 @@
 import type { HydraResource } from './hydra'
 import type { Checkpoint } from './checkpoint'
 import type { IssuingOffice } from './issuing-office'
-import type { Gender, PaymentMode, TicketStatus, Currency, TicketCategory } from '@/constants/ticket'
+import type {
+  Gender,
+  PaymentMode,
+  TicketStatus,
+  TicketSource,
+  Currency,
+  TicketCategory,
+} from '@/constants/ticket'
 
 export interface CashRegisterRef extends HydraResource {
   id: string
@@ -62,6 +69,10 @@ export interface Ticket extends HydraResource {
   createdAt?: string
   updatedAt?: string
   status: TicketStatus
+  /** Canal d'origine — COUNTER (guichet) ou ONLINE (portail). */
+  source?: TicketSource | string
+  /** Code de suivi public (réservation en ligne, P6.2). */
+  trackingCode?: string | null
   /** UUID d'achat groupé (plusieurs billets d'une même vente). */
   purchaseGroupId?: string | null
   /** Dérivé CGU #7 — free | penalty | noshow. */

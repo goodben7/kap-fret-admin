@@ -9,10 +9,12 @@ import {
   PAYMENT_MODE,
   CURRENCY,
   TICKET_CATEGORY_BASE_PRICE_USD,
+  TICKET_SOURCE,
   TICKET_STATUS,
   toFormPaymentMode,
 } from '@/constants/ticket'
-import type { Currency, Gender, PaymentMode, TicketCategory } from '@/constants/ticket'
+import type { Currency, Gender, PaymentMode, TicketCategory, TicketSource } from '@/constants/ticket'
+import { TICKET_BUSINESS_RULES } from '@/constants/ticket-business-rules'
 import type { Ticket, TicketBatchCreatePayload, TicketCreatePayload, TicketPatchPayload, TicketReportTravelDatePayload, TicketPaymentPayload } from '@/types/ticket'
 import type { TicketFormData, TicketPatchFormData } from '@/schemas/ticket.schema'
 import type { TicketReportTravelDateFormData } from '@/schemas/ticket-report-travel-date.schema'
@@ -450,6 +452,68 @@ export function getTicketIssuingOfficeLabel(ticket: Ticket): string {
 
 function toTicketFormPaymentMode(mode: PaymentMode): TicketFormData['paymentMode'] {
   return toFormPaymentMode(mode)
+}
+
+/** Date d'expiration du hold réservation (création + unpaidReservationHoldHours). */
+export function getReservationHoldExpiresAt(
+  createdAt: string | null | undefined,
+  holdHours = TICKET_BUSINESS_RULES.unpaidReservationHoldHours,
+): Date | null {
+  if (!createdAt?.trim()) return null
+  const created = new Date(createdAt)
+  if (Number.isNaN(created.getTime())) return null
+  return new Date(created.getTime() + holdHours * 60 * 60 * 1000)
+}
+
+export type ReservationHoldInfo = {
+  expiresAt: Date
+  remainingMs: number
+  expired: boolean
+  /** Libellé court : « 12 h », « 45 min », « Expirée » */
+  label: string
+}
+
+export function getReservationHoldInfo(
+  createdAt: string | null | undefined,
+  now = new Date(),
+  holdHours = TICKET_BUSINESS_RULES.unpaidReservationHoldHours,
+): ReservationHoldInfo | null {
+  const expiresAt = getReservationHoldExpiresAt(createdAt, holdHours)
+  if (!expiresAt) return null
+  const remainingMs = expiresAt.getTime() - now.getTime()
+  if (remainingMs <= 0) {
+    return { expiresAt, remainingMs: 0, expired: true, label: 'Expirée' }
+  }
+  const totalMinutes = Math.ceil(remainingMs / 60_000)
+  if (totalMinutes < 60) {
+    return { expiresAt, remainingMs, expired: false, label: `${totalMinutes} min` }
+  }
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24)
+    const remHours = hours % 24
+    return {
+      expiresAt,
+      remainingMs,
+      expired: false,
+      label: remHours > 0 ? `${days} j ${remHours} h` : `${days} j`,
+    }
+  }
+  return {
+    expiresAt,
+    remainingMs,
+    expired: false,
+    label: minutes > 0 ? `${hours} h ${minutes} min` : `${hours} h`,
+  }
+}
+
+export function isOnlineTicketSource(source: string | null | undefined): boolean {
+  return source === TICKET_SOURCE.ONLINE
+}
+
+export function normalizeTicketSource(source: string | null | undefined): TicketSource {
+  return source === TICKET_SOURCE.ONLINE ? TICKET_SOURCE.ONLINE : TICKET_SOURCE.COUNTER
 }
 
 export function ticketToFormDefaults(ticket: Ticket): Partial<TicketPatchFormData> {

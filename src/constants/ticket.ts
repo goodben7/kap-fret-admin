@@ -16,6 +16,34 @@ export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
   REFUNDED: 'Remboursé',
 }
 
+/** Canal d'origine du billet (P6.1). */
+export const TICKET_SOURCE = {
+  COUNTER: 'COUNTER',
+  ONLINE: 'ONLINE',
+} as const
+
+export type TicketSource = (typeof TICKET_SOURCE)[keyof typeof TICKET_SOURCE]
+
+export const TICKET_SOURCE_LABELS: Record<TicketSource, string> = {
+  COUNTER: 'Guichet',
+  ONLINE: 'En ligne',
+}
+
+export const TICKET_SOURCE_OPTIONS: { value: TicketSource; label: string }[] = [
+  TICKET_SOURCE.COUNTER,
+  TICKET_SOURCE.ONLINE,
+].map((value) => ({ value, label: TICKET_SOURCE_LABELS[value] }))
+
+export function ticketSourceFilterOptions(allLabel = 'Tous les canaux') {
+  return [{ value: '', label: allLabel }, ...TICKET_SOURCE_OPTIONS]
+}
+
+export function parseTicketSourceFilter(value: string): '' | TicketSource {
+  const code = value.trim().toUpperCase()
+  if (code === TICKET_SOURCE.COUNTER || code === TICKET_SOURCE.ONLINE) return code
+  return ''
+}
+
 export const PAYMENT_MODE = {
   CASH: 'CASH',
   ACC: 'ACC',

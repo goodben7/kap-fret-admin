@@ -7,6 +7,7 @@ import {
   X,
   ChevronRight,
   Calendar,
+  Globe,
   Phone,
   Ticket,
   MapPin,
@@ -28,9 +29,13 @@ import {
   CURRENCY_LABELS,
   currencyFilterOptions,
   paymentModeFilterOptions,
+  ticketSourceFilterOptions,
+  TICKET_SOURCE,
+  TICKET_SOURCE_LABELS,
   TICKET_STATUS,
   TICKET_STATUS_LABELS,
   type Currency,
+  type TicketSource,
   type TicketStatus,
 } from '@/constants/ticket'
 import { Button } from '@/components/ui/button'
@@ -45,7 +50,14 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { CheckpointAsyncSelect } from '@/components/ui/checkpoint-async-select'
 import { formatMoney, cn } from '@/lib/utils'
-import { getTicketTotal, getUpcomingFlightTravelDateInput, formatTicketTravelDate, formatTravelDateInput, toTicketReportTravelDatePayload } from '@/lib/ticket'
+import {
+  getTicketTotal,
+  getUpcomingFlightTravelDateInput,
+  formatTicketTravelDate,
+  formatTravelDateInput,
+  isOnlineTicketSource,
+  toTicketReportTravelDatePayload,
+} from '@/lib/ticket'
 import type { TicketReportTravelDateFormData } from '@/schemas/ticket-report-travel-date.schema'
 import { toast } from 'sonner'
 import { isAxiosError } from 'axios'
@@ -127,6 +139,12 @@ function TicketCard({
                 <Badge variant={statusVariant(ticket.status) as 'default'} className="shrink-0">
                   {TICKET_STATUS_LABELS[ticket.status]}
                 </Badge>
+                {isOnlineTicketSource(ticket.source) && (
+                  <Badge variant="outline" className="shrink-0 gap-1 border-brand-orange/40 text-brand-orange">
+                    <Globe className="h-3 w-3" aria-hidden="true" />
+                    {TICKET_SOURCE_LABELS[TICKET_SOURCE.ONLINE]}
+                  </Badge>
+                )}
               </div>
               <p className="font-semibold text-base leading-tight truncate">{ticket.passengerName}</p>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
@@ -258,9 +276,20 @@ function TicketTable({
                 </TableCell>
                 <TableCell className="font-medium max-w-[180px] truncate">{ticket.passengerName}</TableCell>
                 <TableCell>
-                  <Badge variant={statusVariant(ticket.status) as 'default'} className="whitespace-nowrap">
-                    {TICKET_STATUS_LABELS[ticket.status]}
-                  </Badge>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <Badge variant={statusVariant(ticket.status) as 'default'} className="whitespace-nowrap">
+                      {TICKET_STATUS_LABELS[ticket.status]}
+                    </Badge>
+                    {isOnlineTicketSource(ticket.source) && (
+                      <Badge
+                        variant="outline"
+                        className="gap-1 whitespace-nowrap border-brand-orange/40 text-brand-orange"
+                      >
+                        <Globe className="h-3 w-3" aria-hidden="true" />
+                        {TICKET_SOURCE_LABELS[TICKET_SOURCE.ONLINE]}
+                      </Badge>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell className="hidden sm:table-cell text-muted-foreground whitespace-nowrap">
                   {formatTicketTravelDate(ticket.travelDate)}
@@ -496,6 +525,14 @@ function TicketFiltersFields({
         options={currencyFilterOptions()}
         value={draft.currency}
         onChange={(e) => onChange({ currency: e.target.value })}
+      />
+      <Select
+        label="Canal"
+        variant="filter"
+        placement="top"
+        options={ticketSourceFilterOptions()}
+        value={draft.source}
+        onChange={(e) => onChange({ source: e.target.value })}
       />
     </FilterSection>
   )
@@ -944,6 +981,12 @@ export function TicketsListPage() {
             <FilterChip
               label={CURRENCY_LABELS[filters.currency as Currency]}
               onRemove={() => patchFilters({ currency: '' })}
+            />
+          )}
+          {filters.source && (
+            <FilterChip
+              label={TICKET_SOURCE_LABELS[filters.source as TicketSource]}
+              onRemove={() => patchFilters({ source: '' })}
             />
           )}
           {(filters.departure || filters.destination) && (

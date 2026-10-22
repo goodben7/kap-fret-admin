@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { AppLayout } from '@/layouts/AppLayout'
 import { AuthLayout } from '@/layouts/AuthLayout'
+import { PublicLayout } from '@/layouts/PublicLayout'
 import { ProtectedRoute } from '@/routes/ProtectedRoute'
 import { ROLES } from '@/constants/roles'
 import {
@@ -50,6 +51,8 @@ import {
   ProvinceDetailPage,
   ProvinceFormPage,
   ProvincesPage,
+  PublicReservePage,
+  PublicTrackingPage,
   SuperAdminSetupPage,
   TicketCreatePage,
   TicketDetailPage,
@@ -67,6 +70,13 @@ export const router = createBrowserRouter([
     path: '/login',
     element: <AuthLayout />,
     children: [{ index: true, element: <LoginPage /> }],
+  },
+  {
+    element: <PublicLayout />,
+    children: [
+      { path: '/reserver', element: <PublicReservePage /> },
+      { path: '/suivi', element: <PublicTrackingPage /> },
+    ],
   },
   {
     element: <ProtectedRoute requireIssuingOffice={false} />,

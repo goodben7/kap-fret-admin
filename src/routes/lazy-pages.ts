@@ -3,6 +3,15 @@ import { lazyPage } from '@/routes/lazy-page'
 export const LoginPage = lazyPage(() => import('@/pages/auth/LoginPage'), 'LoginPage')
 export const DashboardPage = lazyPage(() => import('@/pages/dashboard/DashboardPage'), 'DashboardPage')
 
+export const PublicReservePage = lazyPage(
+  () => import('@/pages/public/PublicReservePage'),
+  'PublicReservePage',
+)
+export const PublicTrackingPage = lazyPage(
+  () => import('@/pages/public/PublicTrackingPage'),
+  'PublicTrackingPage',
+)
+
 export const TicketsListPage = lazyPage(() => import('@/pages/tickets/TicketsListPage'), 'TicketsListPage')
 export const TicketReservationsPage = lazyPage(
   () => import('@/pages/tickets/TicketReservationsPage'),

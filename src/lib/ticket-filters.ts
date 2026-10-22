@@ -1,5 +1,5 @@
 import { normalizeIri } from '@/lib/hydra'
-import { parseCurrencyFilter } from '@/constants/ticket'
+import { parseCurrencyFilter, parseTicketSourceFilter } from '@/constants/ticket'
 
 /** DateFilter API Platform — filtre sur un jour (YYYY-MM-DD) */
 function addDay(isoDate: string, days: number): string {
@@ -31,6 +31,8 @@ export interface TicketFilters {
   status?: string
   paymentMode?: string
   currency?: string
+  source?: string
+  trackingCode?: string
   purchaseGroupId?: string
 }
 
@@ -47,6 +49,7 @@ export type TicketFiltersState = Required<
     | 'status'
     | 'paymentMode'
     | 'currency'
+    | 'source'
   >
 >
 
@@ -61,6 +64,7 @@ export const emptyTicketFilters: TicketFiltersState = {
   status: '',
   paymentMode: '',
   currency: '',
+  source: '',
 }
 
 const FILTER_PARAM_KEYS = [
@@ -74,6 +78,7 @@ const FILTER_PARAM_KEYS = [
   'status',
   'paymentMode',
   'currency',
+  'source',
 ] as const satisfies readonly (keyof TicketFiltersState)[]
 
 export function buildTicketFilterParams(filters: TicketFilters): Record<string, string | number> {
@@ -99,6 +104,12 @@ export function buildTicketFilterParams(filters: TicketFilters): Record<string, 
 
   const currency = parseCurrencyFilter(filters.currency ?? '')
   if (currency) params.currency = currency
+
+  const source = parseTicketSourceFilter(filters.source ?? '')
+  if (source) params.source = source
+
+  const trackingCode = filters.trackingCode?.trim().toUpperCase()
+  if (trackingCode) params.trackingCode = trackingCode
 
   if (filters.departure?.trim()) params.departure = normalizeIri(filters.departure.trim())
   if (filters.destination?.trim()) params.destination = normalizeIri(filters.destination.trim())
@@ -132,6 +143,7 @@ export function parseTicketFiltersFromSearchParams(searchParams: URLSearchParams
     status: get('status'),
     paymentMode: get('paymentMode'),
     currency: parseCurrencyFilter(get('currency')),
+    source: parseTicketSourceFilter(get('source')),
   }
 }
 

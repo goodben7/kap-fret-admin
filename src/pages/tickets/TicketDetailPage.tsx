@@ -7,9 +7,11 @@ import {
   CalendarClock,
   CheckCircle2,
   ClipboardCheck,
+  Clock,
   CreditCard,
   Download,
   FileText,
+  Globe,
   History,
   MapPin,
   Pencil,
@@ -41,12 +43,15 @@ import { EntityHistoryTimeline } from '@/components/history/EntityHistoryTimelin
 import { getUserRefLabel } from '@/lib/user-ref'
 import {
   CURRENCY,
+  TICKET_SOURCE,
+  TICKET_SOURCE_LABELS,
   TICKET_STATUS,
   TICKET_STATUS_LABELS,
   PAYMENT_MODE_LABELS,
   GENDER_LABELS,
   TICKET_CATEGORY_LABELS,
   normalizeCurrency,
+  type TicketSource,
   type TicketStatus,
 } from '@/constants/ticket'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -59,10 +64,13 @@ import { formatMoney, formatDate, formatDateTime, cn } from '@/lib/utils'
 import { getCheckpointDisplayName } from '@/lib/checkpoint'
 import {
   formatBirthDateDisplay,
+  getReservationHoldInfo,
   getTicketPaidAmount,
   getTicketRemainingAmount,
   getTicketTotalAmount,
+  isOnlineTicketSource,
   isTicketFullyPaid,
+  normalizeTicketSource,
   toTicketPaymentPayload,
   toTicketReportTravelDatePayload,
 } from '@/lib/ticket'
@@ -425,9 +433,17 @@ export function TicketDetailPage() {
                 </h1>
                 <p className="mt-1 truncate font-mono text-xs text-muted-foreground">{ticket.id}</p>
               </div>
-              <Badge variant={statusVariant(ticket.status) as 'default'} className="shrink-0 px-3 py-1 text-sm">
-                {TICKET_STATUS_LABELS[ticket.status]}
-              </Badge>
+              <div className="flex shrink-0 flex-col items-end gap-1.5">
+                <Badge variant={statusVariant(ticket.status) as 'default'} className="px-3 py-1 text-sm">
+                  {TICKET_STATUS_LABELS[ticket.status]}
+                </Badge>
+                {isOnlineTicketSource(ticket.source) && (
+                  <Badge variant="outline" className="gap-1 border-brand-orange/40 text-brand-orange">
+                    <Globe className="h-3.5 w-3.5" aria-hidden="true" />
+                    {TICKET_SOURCE_LABELS[TICKET_SOURCE.ONLINE]}
+                  </Badge>
+                )}
+              </div>
             </div>
 
             <div className="flex items-end justify-between gap-4 border-t border-border/60 pt-4">
@@ -531,6 +547,39 @@ export function TicketDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      {activeTab === 'details' && ticket.status === TICKET_STATUS.RESERVED && (() => {
+        const hold = getReservationHoldInfo(ticket.createdAt)
+        if (!hold) return null
+        return (
+          <Card
+            className={cn(
+              'rounded-2xl shadow-sm',
+              hold.expired
+                ? 'border-destructive/30 bg-destructive/5'
+                : 'border-amber-500/30 bg-amber-500/5',
+            )}
+          >
+            <CardContent className="flex items-start gap-3 p-4 text-sm">
+              <Clock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <div>
+                <p className="font-medium text-foreground">
+                  {hold.expired
+                    ? `Hold ${TICKET_BUSINESS_RULES.unpaidReservationHoldHours} h dépassé`
+                    : `Hold réservation — expire dans ${hold.label}`}
+                </p>
+                <p className="mt-0.5 text-muted-foreground">
+                  Les réservations non payées sont annulées automatiquement après{' '}
+                  {TICKET_BUSINESS_RULES.unpaidReservationHoldHours} h (cron
+                  {' '}
+                  <span className="font-mono text-xs">app:tickets:expire-unpaid-reservations</span>
+                  ).
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )
+      })()}
 
       {canModify && activeTab === 'details' && editWindowExpired && !canEditFields && (
         <Card className="rounded-2xl border-amber-500/30 bg-amber-500/5 shadow-sm">
@@ -693,6 +742,33 @@ export function TicketDetailPage() {
             </>
           )}
           <DetailRow label="Bureau" value={ticket.issuingOfficeName ?? '—'} />
+          <DetailRow
+            label="Canal"
+            value={TICKET_SOURCE_LABELS[normalizeTicketSource(ticket.source) as TicketSource]}
+          />
+          {ticket.trackingCode && (
+            <DetailRow label="Code de suivi" value={ticket.trackingCode} />
+          )}
+          {ticket.status === TICKET_STATUS.RESERVED && ticket.createdAt && (() => {
+            const hold = getReservationHoldInfo(ticket.createdAt)
+            if (!hold) return null
+            return (
+              <div className="border-b border-border/40 py-2.5 last:border-0">
+                <p className="text-xs text-muted-foreground">Hold réservation</p>
+                <p
+                  className={cn(
+                    'mt-0.5 flex items-center gap-1.5 text-sm font-medium',
+                    hold.expired ? 'text-destructive' : 'text-foreground',
+                  )}
+                >
+                  <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  {hold.expired
+                    ? `Dépassé (${TICKET_BUSINESS_RULES.unpaidReservationHoldHours} h)`
+                    : `${hold.label} restantes · expire le ${formatDateTime(hold.expiresAt.toISOString())}`}
+                </p>
+              </div>
+            )
+          })()}
         </DetailSection>
 
         <DetailSection title="Tarification" icon={Banknote}>
