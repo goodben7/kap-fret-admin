@@ -27,6 +27,8 @@ import {
   CURRENCY,
   CURRENCY_OPTIONS,
   TICKET_CATEGORY_OPTIONS,
+  TRIP_TYPE,
+  TRIP_TYPE_OPTIONS,
   isPayAtDestination,
 } from '@/constants/ticket'
 import { useAuth } from '@/hooks/useAuth'
@@ -239,6 +241,9 @@ function TicketCreateForm({
       paidAmountUsd: '',
       paidAmountCdf: '',
       exchangeRate: '',
+      tripType: TRIP_TYPE.ONE_WAY,
+      returnTravelDate: '',
+      returnTravelTime: '06:30',
       departure: createDefaults?.departure ?? '',
       ...createDefaults,
       passengers: createDefaults?.passengers?.length
@@ -269,6 +274,8 @@ function TicketCreateForm({
   const exchangeRate = watch('exchangeRate')
   const passengers = watch('passengers')
   const travelDate = watch('travelDate')
+  const tripType = watch('tripType')
+  const isRoundTrip = tripType === TRIP_TYPE.ROUND_TRIP
   const isAccPayment = paymentMode === PAYMENT_MODE.ACC
   const needsCashRegister = paymentMode === PAYMENT_MODE.CASH || isAccPayment
 
@@ -360,7 +367,10 @@ function TicketCreateForm({
     }
   }, [reserveForLater, setValue])
 
-  const totalPreview = getTicketFormGroupTotal({ passengers: passengers ?? [] })
+  const totalPreview = getTicketFormGroupTotal({
+    passengers: passengers ?? [],
+    tripType: tripType ?? TRIP_TYPE.ONE_WAY,
+  })
   const mixedDueAmount = isAccPayment
     ? (parseFloat(String(paidAmount ?? '').replace(',', '.')) || 0)
     : totalPreview
@@ -613,7 +623,13 @@ function TicketCreateForm({
 
           <div className="flex items-center justify-between rounded-xl bg-brand-orange/10 px-4 py-3 sm:col-span-2">
             <span className="text-sm font-semibold">
-              {fields.length > 1 ? 'Total groupe estimé' : 'Total estimé'}
+              {isRoundTrip
+                ? fields.length > 1
+                  ? 'Total A/R groupe estimé'
+                  : 'Total aller-retour estimé'
+                : fields.length > 1
+                  ? 'Total groupe estimé'
+                  : 'Total estimé'}
             </span>
             <span className="text-lg font-bold tabular-nums text-brand-orange">
               {formatMoney(totalPreview, CURRENCY.USD)}
@@ -622,6 +638,37 @@ function TicketCreateForm({
         </FormSection>
 
         <FormSection title="Voyage" icon={MapPin}>
+          <div className="sm:col-span-2">
+            <Select
+              label="Type de voyage"
+              options={TRIP_TYPE_OPTIONS}
+              error={errors.tripType?.message}
+              disabled={locked}
+              variant="filter"
+              value={tripType ?? TRIP_TYPE.ONE_WAY}
+              onChange={(e) => {
+                const next = e.target.value as TicketFormData['tripType']
+                setValue('tripType', next, { shouldValidate: true })
+                if (next === TRIP_TYPE.ROUND_TRIP) {
+                  const outboundDate = watch('travelDate')
+                  if (outboundDate && !watch('returnTravelDate')) {
+                    setValue('returnTravelDate', outboundDate, { shouldValidate: true })
+                  }
+                  if (!watch('returnTravelTime')) {
+                    setValue('returnTravelTime', watch('travelTime') || '06:30', {
+                      shouldValidate: true,
+                    })
+                  }
+                }
+              }}
+            />
+            {isRoundTrip && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Un billet aller et un billet retour seront créés (trajet inversé). Le total
+                encaissé couvre les deux trajets.
+              </p>
+            )}
+          </div>
           <div className="sm:col-span-2">
             <CheckpointAsyncSelect
               label="Départ"
@@ -647,7 +694,7 @@ function TicketCreateForm({
             />
           </div>
           <Input
-            label="Date de voyage"
+            label={isRoundTrip ? 'Date aller' : 'Date de voyage'}
             type="date"
             error={errors.travelDate?.message}
             disabled={locked}
@@ -655,13 +702,33 @@ function TicketCreateForm({
             {...register('travelDate')}
           />
           <Input
-            label="Heure de voyage"
+            label={isRoundTrip ? 'Heure aller' : 'Heure de voyage'}
             type="time"
             error={errors.travelTime?.message}
             disabled={locked}
             className={fieldClass}
             {...register('travelTime')}
           />
+          {isRoundTrip && (
+            <>
+              <Input
+                label="Date retour"
+                type="date"
+                error={errors.returnTravelDate?.message}
+                disabled={locked}
+                className={fieldClass}
+                {...register('returnTravelDate')}
+              />
+              <Input
+                label="Heure retour"
+                type="time"
+                error={errors.returnTravelTime?.message}
+                disabled={locked}
+                className={fieldClass}
+                {...register('returnTravelTime')}
+              />
+            </>
+          )}
         </FormSection>
 
         <FormSection title="Paiement" icon={CreditCard}>
@@ -915,7 +982,7 @@ function TicketCreateForm({
                 ) : null}
                 {isPayAtDestination(paymentMode) && (
                   <p className="text-xs text-muted-foreground">
-                    PDA : paiement à destination — pas d’encaissement immédiat en caisse.
+                    PTA : paiement à destination — pas d’encaissement immédiat en caisse.
                   </p>
                 )}
                 {paymentMode === PAYMENT_MODE.CASH && previewEnabled && (

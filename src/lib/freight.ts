@@ -4,6 +4,7 @@ import {
   FREIGHT_PAYMENT_MODE,
   FREIGHT_STATUS,
   FREIGHT_ORDINARY_PRICE_PER_KG_USD,
+  isFreightPayAtDestination,
   toFreightFormPaymentMode,
 } from '@/constants/freight'
 import { convertAmountBetweenCurrencyCodes } from '@/lib/exchange-rate'
@@ -423,7 +424,7 @@ export function getFreightPdAmount(shipment: FreightShipment): number {
   }
   if (
     shipment.paymentMode !== FREIGHT_PAYMENT_MODE.ACC
-    && shipment.paymentMode !== FREIGHT_PAYMENT_MODE.PDA && shipment.paymentMode !== FREIGHT_PAYMENT_MODE.PTA
+    && !isFreightPayAtDestination(shipment.paymentMode)
   ) {
     return 0
   }
@@ -436,7 +437,7 @@ export function shouldCollectFreightRemainingOnDelivery(shipment: FreightShipmen
   if (remaining <= 0) return false
   return (
     shipment.paymentMode === FREIGHT_PAYMENT_MODE.ACC
-    || shipment.paymentMode === FREIGHT_PAYMENT_MODE.PDA || shipment.paymentMode === FREIGHT_PAYMENT_MODE.PTA
+    || isFreightPayAtDestination(shipment.paymentMode)
   )
 }
 

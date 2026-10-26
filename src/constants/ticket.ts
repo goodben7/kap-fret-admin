@@ -47,9 +47,10 @@ export function parseTicketSourceFilter(value: string): '' | TicketSource {
 export const PAYMENT_MODE = {
   CASH: 'CASH',
   ACC: 'ACC',
-  PDA: 'PDA',
-  /** @deprecated legacy — traiter comme PDA */
+  /** Canonical billets — payer à destination. */
   PTA: 'PTA',
+  /** @deprecated legacy billets — traiter comme PTA */
+  PDA: 'PDA',
   /** Legacy — billets existants uniquement */
   CARD: 'CARD',
   MOBILE_MONEY: 'MOBILE_MONEY',
@@ -61,36 +62,36 @@ export type PaymentMode = (typeof PAYMENT_MODE)[keyof typeof PAYMENT_MODE]
 export const PAYMENT_MODE_LABELS: Record<PaymentMode, string> = {
   CASH: 'Cash',
   ACC: 'ACC',
-  PDA: 'PDA',
-  PTA: 'PDA',
+  PTA: 'PTA',
+  PDA: 'PTA',
   CARD: 'Carte bancaire',
   MOBILE_MONEY: 'Mobile Money',
   SPONSOR: 'Sponsor',
 }
 
-/** True si mode payer-à-destination (PDA ou ancien PTA). */
+/** True si mode payer-à-destination (PTA ou ancien PDA). */
 export function isPayAtDestination(mode: string | undefined | null): boolean {
-  return mode === PAYMENT_MODE.PDA || mode === PAYMENT_MODE.PTA
+  return mode === PAYMENT_MODE.PTA || mode === PAYMENT_MODE.PDA
 }
 
-/** Modes formulaires / création (sans alias legacy PTA). */
+/** Modes formulaires / création (valeur API PTA). */
 export type FormPaymentMode =
   | typeof PAYMENT_MODE.CASH
   | typeof PAYMENT_MODE.ACC
-  | typeof PAYMENT_MODE.PDA
+  | typeof PAYMENT_MODE.PTA
 
-/** PTA legacy → PDA pour les formulaires. */
+/** PDA legacy → PTA pour les formulaires billets. */
 export function toFormPaymentMode(mode: string | null | undefined): FormPaymentMode {
   if (mode === PAYMENT_MODE.ACC) return PAYMENT_MODE.ACC
-  if (isPayAtDestination(mode)) return PAYMENT_MODE.PDA
+  if (isPayAtDestination(mode)) return PAYMENT_MODE.PTA
   return PAYMENT_MODE.CASH
 }
 
-/** Modes proposés à la création / filtres — alignés sur Ticket::getPaymentModes() */
+/** Modes proposés à la création / filtres — envoi API : CASH | ACC | PTA */
 export const PAYMENT_MODE_OPTIONS: { value: FormPaymentMode; label: string }[] = [
   PAYMENT_MODE.CASH,
   PAYMENT_MODE.ACC,
-  PAYMENT_MODE.PDA,
+  PAYMENT_MODE.PTA,
 ].map((value) => ({ value, label: PAYMENT_MODE_LABELS[value] }))
 
 export function paymentModeFilterOptions(allLabel = 'Tous les modes') {
@@ -177,4 +178,35 @@ export const TICKET_CATEGORY_AGE_RANGE: Record<TicketCategory, { min: number; ma
   INF: { min: 0, max: 2 },
   CD: { min: 3, max: 10 },
   AD: { min: 11, max: 120 },
+}
+
+/** Type de voyage — aller simple ou aller-retour. */
+export const TRIP_TYPE = {
+  ONE_WAY: 'ONE_WAY',
+  ROUND_TRIP: 'ROUND_TRIP',
+} as const
+
+export type TripType = (typeof TRIP_TYPE)[keyof typeof TRIP_TYPE]
+
+export const TRIP_TYPE_LABELS: Record<TripType, string> = {
+  ONE_WAY: 'Aller simple',
+  ROUND_TRIP: 'Aller-retour',
+}
+
+export const TRIP_TYPE_OPTIONS: { value: TripType; label: string }[] = [
+  { value: TRIP_TYPE.ONE_WAY, label: TRIP_TYPE_LABELS.ONE_WAY },
+  { value: TRIP_TYPE.ROUND_TRIP, label: TRIP_TYPE_LABELS.ROUND_TRIP },
+]
+
+/** Leg du billet dans un A/R. */
+export const TRIP_LEG = {
+  OUTBOUND: 'OUTBOUND',
+  RETURN: 'RETURN',
+} as const
+
+export type TripLeg = (typeof TRIP_LEG)[keyof typeof TRIP_LEG]
+
+export const TRIP_LEG_LABELS: Record<TripLeg, string> = {
+  OUTBOUND: 'Aller',
+  RETURN: 'Retour',
 }

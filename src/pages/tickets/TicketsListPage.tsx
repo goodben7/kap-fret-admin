@@ -34,6 +34,7 @@ import {
   TICKET_SOURCE_LABELS,
   TICKET_STATUS,
   TICKET_STATUS_LABELS,
+  TRIP_LEG_LABELS,
   type Currency,
   type TicketSource,
   type TicketStatus,
@@ -52,10 +53,12 @@ import { CheckpointAsyncSelect } from '@/components/ui/checkpoint-async-select'
 import { formatMoney, cn } from '@/lib/utils'
 import {
   getTicketTotal,
+  getTicketTripLeg,
   getUpcomingFlightTravelDateInput,
   formatTicketTravelDate,
   formatTravelDateInput,
   isOnlineTicketSource,
+  isRoundTripTicket,
   toTicketReportTravelDatePayload,
 } from '@/lib/ticket'
 import type { TicketReportTravelDateFormData } from '@/schemas/ticket-report-travel-date.schema'
@@ -139,6 +142,11 @@ function TicketCard({
                 <Badge variant={statusVariant(ticket.status) as 'default'} className="shrink-0">
                   {TICKET_STATUS_LABELS[ticket.status]}
                 </Badge>
+                {isRoundTripTicket(ticket) && (
+                  <Badge variant="secondary" className="shrink-0">
+                    {TRIP_LEG_LABELS[getTicketTripLeg(ticket)]}
+                  </Badge>
+                )}
                 {isOnlineTicketSource(ticket.source) && (
                   <Badge variant="outline" className="shrink-0 gap-1 border-brand-orange/40 text-brand-orange">
                     <Globe className="h-3 w-3" aria-hidden="true" />
@@ -280,6 +288,11 @@ function TicketTable({
                     <Badge variant={statusVariant(ticket.status) as 'default'} className="whitespace-nowrap">
                       {TICKET_STATUS_LABELS[ticket.status]}
                     </Badge>
+                    {isRoundTripTicket(ticket) && (
+                      <Badge variant="secondary" className="whitespace-nowrap">
+                        {TRIP_LEG_LABELS[getTicketTripLeg(ticket)]}
+                      </Badge>
+                    )}
                     {isOnlineTicketSource(ticket.source) && (
                       <Badge
                         variant="outline"

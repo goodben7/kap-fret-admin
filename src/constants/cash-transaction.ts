@@ -19,6 +19,7 @@ export const CASH_TRANSACTION_REFERENCE_TYPE = {
   FREIGHT: 'FREIGHT',
   CHECKIN: 'CHECKIN',
   MANUAL: 'MANUAL',
+  DEBT: 'DEBT',
 } as const
 
 export type CashTransactionReferenceType =
@@ -30,6 +31,7 @@ export const CASH_TRANSACTION_REFERENCE_TYPE_LABELS: Record<string, string> = {
   FREIGHT: 'Fret',
   CHECKIN: 'Check-in',
   MANUAL: 'Manuel',
+  DEBT: 'Dette',
 }
 
 export const CASH_TRANSACTION_TYPE_OPTIONS = Object.entries(CASH_TRANSACTION_TYPE_LABELS).map(

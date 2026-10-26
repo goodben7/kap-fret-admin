@@ -454,3 +454,31 @@ export function downloadBlob(blob: Blob, fileName: string) {
   anchor.click()
   URL.revokeObjectURL(url)
 }
+
+/**
+ * Ouvre un PDF dans un onglet (pour visualisation / impression manuelle).
+ * Préférer `printJsPdf` quand le document vient de jsPDF (autoPrint intégré).
+ */
+export function openPdfBlob(blob: Blob): void {
+  const url = URL.createObjectURL(blob)
+  const win = window.open(url, '_blank')
+  window.setTimeout(() => URL.revokeObjectURL(url), 120_000)
+  if (!win) {
+    // Pop-up bloquée : navigation dans le même onglet en dernier recours
+    window.location.assign(url)
+  }
+}
+
+/**
+ * Impression directe via l’action OpenAction du PDF (jsPDF.autoPrint).
+ * Évite le print() trop tôt qui affiche des pages blanches dans le dialogue macOS.
+ */
+export function printJsPdf(doc: { autoPrint: (options?: { variant?: string }) => unknown; output: (type: 'blob') => Blob }): void {
+  doc.autoPrint({ variant: 'non-conform' })
+  openPdfBlob(doc.output('blob'))
+}
+
+/** @deprecated utiliser printJsPdf pour un aperçu correct */
+export function printBlob(blob: Blob): void {
+  openPdfBlob(blob)
+}

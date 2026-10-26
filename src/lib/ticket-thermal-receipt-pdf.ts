@@ -3,8 +3,10 @@ import {
   CURRENCY,
   GENDER_LABELS,
   PAYMENT_MODE_LABELS,
-  TICKET_CATEGORY_LABELS,
   TICKET_STATUS_LABELS,
+  TRIP_LEG_LABELS,
+  TRIP_TYPE,
+  TRIP_TYPE_LABELS,
   normalizeCurrency,
 } from '@/constants/ticket'
 import { getCheckpointDisplayName } from '@/lib/checkpoint'
@@ -14,10 +16,14 @@ import {
   getTicketPaidAmount,
   getTicketRemainingAmount,
   getTicketTotalAmount,
+  getTicketTripLeg,
+  isRoundTripTicket,
 } from '@/lib/ticket'
+import { downloadBlob, printJsPdf } from '@/lib/passenger-manifest-pdf'
 import {
+  buildThermalDocBlob,
   createThermalDoc,
-  finalizeThermalDoc,
+  type ThermalDoc,
   thermalBrandHeader,
   thermalFooter,
   thermalLine,
@@ -28,7 +34,7 @@ import { formatDate, formatDateTime, formatMoney } from '@/lib/utils'
 import type { Ticket } from '@/types/ticket'
 
 /** Reçu billet format thermique 80 mm. */
-export function downloadTicketThermalReceiptPdf(ticket: Ticket): void {
+export function buildTicketThermalReceiptPdfDoc(ticket: Ticket): ThermalDoc {
   const ctx = createThermalDoc(200)
   const currency = normalizeCurrency(ticket.currency ?? CURRENCY.USD)
   const money = (amount: number) => formatMoney(amount, currency)
@@ -38,10 +44,17 @@ export function downloadTicketThermalReceiptPdf(ticket: Ticket): void {
   thermalLine(ctx, 'Statut', TICKET_STATUS_LABELS[ticket.status] ?? ticket.status)
   thermalLine(ctx, 'Passager', ticket.passengerName)
   if (ticket.category) {
-    thermalLine(ctx, 'Catégorie', TICKET_CATEGORY_LABELS[ticket.category] ?? ticket.category)
+    thermalLine(ctx, 'Catégorie', ticket.category)
   }
   thermalLine(ctx, 'Sexe', GENDER_LABELS[ticket.gender] ?? ticket.gender)
   if (ticket.phone) thermalLine(ctx, 'Téléphone', ticket.phone)
+  if (isRoundTripTicket(ticket)) {
+    thermalLine(
+      ctx,
+      'Voyage',
+      `${TRIP_TYPE_LABELS[TRIP_TYPE.ROUND_TRIP]} — ${TRIP_LEG_LABELS[getTicketTripLeg(ticket)]}`,
+    )
+  }
   thermalLine(ctx, 'Départ', getCheckpointDisplayName(ticket.departure))
   thermalLine(ctx, 'Destination', getCheckpointDisplayName(ticket.destination))
   thermalLine(ctx, 'Vol', `${formatDate(ticket.travelDate)} · ${ticket.travelTime}`)
@@ -72,6 +85,18 @@ export function downloadTicketThermalReceiptPdf(ticket: Ticket): void {
   ctx.doc.setFontSize(5)
   ctx.doc.text(`Généré ${formatDateTime(new Date().toISOString())} — ${BRAND.name}`, ctx.marginX, ctx.y)
 
+  return ctx
+}
+
+export function buildTicketThermalReceiptPdfBlob(ticket: Ticket): Blob {
+  return buildThermalDocBlob(buildTicketThermalReceiptPdfDoc(ticket))
+}
+
+export function downloadTicketThermalReceiptPdf(ticket: Ticket): void {
   const safe = ticket.ticketNumber.replace(/[^\w.-]+/g, '_')
-  finalizeThermalDoc(ctx, `recu-billet-80mm-${safe}.pdf`)
+  downloadBlob(buildTicketThermalReceiptPdfBlob(ticket), `recu-billet-80mm-${safe}.pdf`)
+}
+
+export function printTicketThermalReceiptPdf(ticket: Ticket): void {
+  printJsPdf(buildTicketThermalReceiptPdfDoc(ticket).doc)
 }

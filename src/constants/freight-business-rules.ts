@@ -86,7 +86,7 @@ export function packagesContainPerishable(
 }
 
 export const FREIGHT_PERISHABLE_CASH_MESSAGE =
-  'Les produits périssables doivent être payés cash avant expédition (PDA/ACC interdits).'
+  'Les produits périssables doivent être payés cash avant expédition (PD/ACC interdits).'
 
 /** Mots-clés nature → bêtes / animaux (#11–12). */
 export const FREIGHT_LIVESTOCK_KEYWORDS = [
@@ -128,7 +128,7 @@ export function packagesContainLivestock(
 }
 
 export const FREIGHT_LIVESTOCK_CASH_MESSAGE =
-  'Le transport de bêtes / animaux doit être payé cash avant expédition (PDA/ACC interdits). KAP FRET décline toute responsabilité en cas de mort des bêtes ; le client récupère les bêtes mortes et paie l\'intégralité du transport.'
+  'Le transport de bêtes / animaux doit être payé cash avant expédition (PD/ACC interdits). KAP FRET décline toute responsabilité en cas de mort des bêtes ; le client récupère les bêtes mortes et paie l\'intégralité du transport.'
 
 /** Cash obligatoire si périssable (#8) ou bêtes (#12). */
 export function packagesRequireCashBeforeShipment(

@@ -8,6 +8,8 @@ import type {
   TicketSource,
   Currency,
   TicketCategory,
+  TripType,
+  TripLeg,
 } from '@/constants/ticket'
 
 export interface CashRegisterRef extends HydraResource {
@@ -75,6 +77,12 @@ export interface Ticket extends HydraResource {
   trackingCode?: string | null
   /** UUID d'achat groupé (plusieurs billets d'une même vente). */
   purchaseGroupId?: string | null
+  /** ONE_WAY | ROUND_TRIP */
+  tripType?: TripType | string
+  /** OUTBOUND | RETURN */
+  tripLeg?: TripLeg | string
+  /** ID du billet jumelé (autre leg A/R). */
+  linkedTicketId?: string | null
   /** Dérivé CGU #7 — free | penalty | noshow. */
   cancelPolicy?: 'free' | 'penalty' | 'noshow' | string
   cancelPolicyMessage?: string
@@ -117,6 +125,11 @@ export interface TicketBatchCreatePayload {
   paidAmountCdf?: string
   /** Paiement mixte : taux manuel 1 USD = N CDF. */
   exchangeRate?: string
+  /** ONE_WAY (défaut) | ROUND_TRIP */
+  tripType?: TripType
+  /** Date ISO du vol retour (ROUND_TRIP). */
+  returnTravelDate?: string
+  returnTravelTime?: string
   passengers: TicketPassengerCreatePayload[]
 }
 

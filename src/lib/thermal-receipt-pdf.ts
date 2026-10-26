@@ -95,10 +95,14 @@ export function thermalFooter(ctx: ThermalDoc): void {
 }
 
 /** Recalcule la hauteur de page si le contenu dépasse. */
-export function finalizeThermalDoc(ctx: ThermalDoc, fileName: string): void {
+export function buildThermalDocBlob(ctx: ThermalDoc): Blob {
   const needed = Math.max(120, Math.ceil(ctx.y + 10))
   if (needed > 200) {
     // jsPDF ne redimensionne pas facilement — on coupe proprement
   }
-  downloadBlob(ctx.doc.output('blob'), fileName)
+  return ctx.doc.output('blob')
+}
+
+export function finalizeThermalDoc(ctx: ThermalDoc, fileName: string): void {
+  downloadBlob(buildThermalDocBlob(ctx), fileName)
 }

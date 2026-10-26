@@ -11,9 +11,11 @@ import {
   TICKET_CATEGORY_BASE_PRICE_USD,
   TICKET_SOURCE,
   TICKET_STATUS,
+  TRIP_TYPE,
+  TRIP_LEG,
   toFormPaymentMode,
 } from '@/constants/ticket'
-import type { Currency, Gender, PaymentMode, TicketCategory, TicketSource } from '@/constants/ticket'
+import type { Currency, Gender, PaymentMode, TicketCategory, TicketSource, TripLeg, TripType } from '@/constants/ticket'
 import { TICKET_BUSINESS_RULES } from '@/constants/ticket-business-rules'
 import type { Ticket, TicketBatchCreatePayload, TicketCreatePayload, TicketPatchPayload, TicketReportTravelDatePayload, TicketPaymentPayload } from '@/types/ticket'
 import type { TicketFormData, TicketPatchFormData } from '@/schemas/ticket.schema'
@@ -309,6 +311,7 @@ export function toTicketBatchPayload(data: TicketFormData): TicketBatchCreatePay
     paymentCurrency: data.paymentCurrency,
     paymentMode: data.paymentMode,
     sponsor: data.sponsor?.trim() || null,
+    tripType: data.tripType ?? TRIP_TYPE.ONE_WAY,
     passengers: data.passengers.map((passenger) => {
       const row: TicketBatchCreatePayload['passengers'][number] = {
         passengerName: passenger.passengerName,
@@ -330,6 +333,14 @@ export function toTicketBatchPayload(data: TicketFormData): TicketBatchCreatePay
       }
       return row
     }),
+  }
+
+  if (data.tripType === TRIP_TYPE.ROUND_TRIP) {
+    payload.returnTravelDate = toTravelDateIso(
+      data.returnTravelDate ?? data.travelDate,
+      data.returnTravelTime ?? data.travelTime,
+    )
+    payload.returnTravelTime = data.returnTravelTime ?? data.travelTime
   }
 
   if (
@@ -359,15 +370,30 @@ export function toTicketBatchPayload(data: TicketFormData): TicketBatchCreatePay
   return payload
 }
 
-export function getTicketFormGroupTotal(data: Pick<TicketFormData, 'passengers'>): number {
+export function getTicketFormGroupTotal(
+  data: Pick<TicketFormData, 'passengers' | 'tripType'>,
+): number {
+  const legs = data.tripType === TRIP_TYPE.ROUND_TRIP ? 2 : 1
   return data.passengers.reduce((sum, passenger) => {
-    return sum + getTicketTotal({
+    return sum + legs * getTicketTotal({
       basePrice: passenger.basePrice,
       tva: passenger.tva || '0',
       fpt: passenger.fpt,
       rva: passenger.rva,
     })
   }, 0)
+}
+
+export function isRoundTripTicket(ticket: Pick<Ticket, 'tripType'>): boolean {
+  return ticket.tripType === TRIP_TYPE.ROUND_TRIP
+}
+
+export function getTicketTripLeg(ticket: Pick<Ticket, 'tripLeg'>): TripLeg {
+  return ticket.tripLeg === TRIP_LEG.RETURN ? TRIP_LEG.RETURN : TRIP_LEG.OUTBOUND
+}
+
+export function getTicketTripType(ticket: Pick<Ticket, 'tripType'>): TripType {
+  return ticket.tripType === TRIP_TYPE.ROUND_TRIP ? TRIP_TYPE.ROUND_TRIP : TRIP_TYPE.ONE_WAY
 }
 
 export function buildTicketPaymentDescription(ticket: Pick<Ticket, 'ticketNumber' | 'passengerName'>): string {

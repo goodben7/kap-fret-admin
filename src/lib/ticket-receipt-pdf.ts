@@ -4,8 +4,10 @@ import {
   CURRENCY,
   GENDER_LABELS,
   PAYMENT_MODE_LABELS,
-  TICKET_CATEGORY_LABELS,
   TICKET_STATUS_LABELS,
+  TRIP_LEG_LABELS,
+  TRIP_TYPE_LABELS,
+  TRIP_TYPE,
   normalizeCurrency,
 } from '@/constants/ticket'
 import { getCheckpointDisplayName } from '@/lib/checkpoint'
@@ -13,12 +15,14 @@ import {
   drawPassengerContractConditions,
   PASSENGER_CONDITIONS_SHORT_NOTICE,
 } from '@/lib/passenger-contract-conditions-pdf'
-import { downloadBlob } from '@/lib/passenger-manifest-pdf'
+import { downloadBlob, printJsPdf } from '@/lib/passenger-manifest-pdf'
 import {
   getTicketIssuingOfficeLabel,
   getTicketPaidAmount,
   getTicketRemainingAmount,
   getTicketTotalAmount,
+  getTicketTripLeg,
+  isRoundTripTicket,
 } from '@/lib/ticket'
 import { formatDate, formatDateTime, formatMoney } from '@/lib/utils'
 import type { Ticket } from '@/types/ticket'
@@ -54,7 +58,7 @@ export function buildTicketReceiptWhatsAppText(ticket: Ticket): string {
 }
 
 /** Reçu / facture billet A4 + extraits des conditions du contrat. */
-export function downloadTicketReceiptPdf(ticket: Ticket): void {
+export function buildTicketReceiptPdfDoc(ticket: Ticket): jsPDF {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const marginX = 16
   let y = 18
@@ -92,7 +96,7 @@ export function downloadTicketReceiptPdf(ticket: Ticket): void {
   doc.text(`Sexe : ${GENDER_LABELS[ticket.gender] ?? ticket.gender}`, marginX, y)
   y += 5
   if (ticket.category) {
-    doc.text(`Catégorie : ${TICKET_CATEGORY_LABELS[ticket.category] ?? ticket.category}`, marginX, y)
+    doc.text(`Catégorie : ${ticket.category}`, marginX, y)
     y += 5
   }
   if (ticket.phone) {
@@ -105,6 +109,14 @@ export function downloadTicketReceiptPdf(ticket: Ticket): void {
   doc.text('Voyage', marginX, y)
   y += 6
   doc.setFont('helvetica', 'normal')
+  if (isRoundTripTicket(ticket)) {
+    doc.text(
+      `Type : ${TRIP_TYPE_LABELS[TRIP_TYPE.ROUND_TRIP]} — ${TRIP_LEG_LABELS[getTicketTripLeg(ticket)]}`,
+      marginX,
+      y,
+    )
+    y += 5
+  }
   doc.text(`Départ : ${getCheckpointDisplayName(ticket.departure)}`, marginX, y)
   y += 5
   doc.text(`Destination : ${getCheckpointDisplayName(ticket.destination)}`, marginX, y)
@@ -157,6 +169,18 @@ export function downloadTicketReceiptPdf(ticket: Ticket): void {
     contentWidth: 178,
   })
 
+  return doc
+}
+
+export function buildTicketReceiptPdfBlob(ticket: Ticket): Blob {
+  return buildTicketReceiptPdfDoc(ticket).output('blob')
+}
+
+export function downloadTicketReceiptPdf(ticket: Ticket): void {
   const safe = ticket.ticketNumber.replace(/[^\w.-]+/g, '_')
-  downloadBlob(doc.output('blob'), `recu-billet-${safe}.pdf`)
+  downloadBlob(buildTicketReceiptPdfBlob(ticket), `recu-billet-${safe}.pdf`)
+}
+
+export function printTicketReceiptPdf(ticket: Ticket): void {
+  printJsPdf(buildTicketReceiptPdfDoc(ticket))
 }

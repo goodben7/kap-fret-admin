@@ -73,8 +73,11 @@ export const FREIGHT_STATUS_TRANSITIONS = [
 export const FREIGHT_PAYMENT_MODE = {
   CASH: 'CASH',
   ACC: 'ACC',
+  /** Canonical fret — payer à destination. */
+  PD: 'PD',
+  /** @deprecated legacy — traiter comme PD */
   PDA: 'PDA',
-  /** @deprecated legacy — traiter comme PDA */
+  /** @deprecated legacy — traiter comme PD */
   PTA: 'PTA',
 } as const
 
@@ -83,33 +86,38 @@ export type FreightPaymentMode = (typeof FREIGHT_PAYMENT_MODE)[keyof typeof FREI
 export const FREIGHT_PAYMENT_MODE_LABELS: Record<FreightPaymentMode, string> = {
   CASH: 'Cash',
   ACC: 'ACC (acompte)',
-  PDA: 'PDA (à destination)',
-  PTA: 'PDA (à destination)',
+  PD: 'PD (à destination)',
+  PDA: 'PD (à destination)',
+  PTA: 'PD (à destination)',
 }
 
 export function isFreightPayAtDestination(mode: string | undefined | null): boolean {
-  return mode === FREIGHT_PAYMENT_MODE.PDA || mode === FREIGHT_PAYMENT_MODE.PTA
+  return (
+    mode === FREIGHT_PAYMENT_MODE.PD
+    || mode === FREIGHT_PAYMENT_MODE.PDA
+    || mode === FREIGHT_PAYMENT_MODE.PTA
+  )
 }
 
-/** Modes formulaires / création (sans alias legacy PTA). */
+/** Modes formulaires / création (sans alias legacy PDA/PTA). */
 export type FreightFormPaymentMode =
   | typeof FREIGHT_PAYMENT_MODE.CASH
   | typeof FREIGHT_PAYMENT_MODE.ACC
-  | typeof FREIGHT_PAYMENT_MODE.PDA
+  | typeof FREIGHT_PAYMENT_MODE.PD
 
-/** PTA legacy → PDA pour les formulaires. */
+/** PDA / PTA legacy → PD pour les formulaires. */
 export function toFreightFormPaymentMode(
   mode: string | null | undefined,
 ): FreightFormPaymentMode {
   if (mode === FREIGHT_PAYMENT_MODE.ACC) return FREIGHT_PAYMENT_MODE.ACC
-  if (isFreightPayAtDestination(mode)) return FREIGHT_PAYMENT_MODE.PDA
+  if (isFreightPayAtDestination(mode)) return FREIGHT_PAYMENT_MODE.PD
   return FREIGHT_PAYMENT_MODE.CASH
 }
 
 export const FREIGHT_PAYMENT_MODE_OPTIONS: { value: FreightFormPaymentMode; label: string }[] = [
   FREIGHT_PAYMENT_MODE.CASH,
   FREIGHT_PAYMENT_MODE.ACC,
-  FREIGHT_PAYMENT_MODE.PDA,
+  FREIGHT_PAYMENT_MODE.PD,
 ].map((value) => ({ value, label: FREIGHT_PAYMENT_MODE_LABELS[value] }))
 
 export function freightPaymentModeFilterOptions(allLabel = 'Tous les modes') {

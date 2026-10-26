@@ -39,8 +39,8 @@ export function TicketCreatePage() {
         </div>
         <p className="text-sm text-muted-foreground pl-11">
           {issuingOfficeName
-            ? `Émission depuis ${issuingOfficeName} — un ou plusieurs passagers`
-            : 'Un ou plusieurs passagers pour le même vol'}
+            ? `Émission depuis ${issuingOfficeName} — aller simple ou aller-retour`
+            : 'Aller simple ou aller-retour, un ou plusieurs passagers'}
         </p>
       </div>
 

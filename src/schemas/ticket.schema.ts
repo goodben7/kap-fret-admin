@@ -5,6 +5,7 @@ import {
   PAYMENT_MODE,
   TICKET_CATEGORY,
   TICKET_CATEGORY_AGE_RANGE,
+  TRIP_TYPE,
 } from '@/constants/ticket'
 import { ageFromBirthDate, isValidBirthDateInput, toDateInputValue } from '@/lib/passenger-age'
 
@@ -88,7 +89,7 @@ export const ticketSchema = z
     paymentMode: z.enum([
       PAYMENT_MODE.CASH,
       PAYMENT_MODE.ACC,
-      PAYMENT_MODE.PDA,
+      PAYMENT_MODE.PTA,
     ]),
     paymentCurrency: z.enum([CURRENCY.CDF, CURRENCY.USD], { message: 'Devise de paiement requise' }),
     mixedPayment: z.boolean().optional(),
@@ -102,6 +103,9 @@ export const ticketSchema = z
     reserveForLater: z.boolean().optional(),
     departure: z.string().min(1, 'Checkpoint de départ requis'),
     destination: z.string().min(1, 'Checkpoint de destination requis'),
+    tripType: z.enum([TRIP_TYPE.ONE_WAY, TRIP_TYPE.ROUND_TRIP]).optional(),
+    returnTravelDate: z.string().optional(),
+    returnTravelTime: z.string().optional(),
   })
   .superRefine((data, ctx) => {
     data.passengers.forEach((passenger, index) => {
@@ -121,12 +125,49 @@ export const ticketSchema = z
       )
     })
 
+    const tripType = data.tripType ?? TRIP_TYPE.ONE_WAY
+    if (tripType === TRIP_TYPE.ROUND_TRIP) {
+      if (!data.returnTravelDate?.trim()) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['returnTravelDate'],
+          message: 'Date du retour requise',
+        })
+      }
+      if (!data.returnTravelTime?.trim()) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['returnTravelTime'],
+          message: 'Heure du retour requise',
+        })
+      }
+      if (
+        data.returnTravelDate?.trim()
+        && data.travelDate?.trim()
+        && data.returnTravelDate < data.travelDate
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['returnTravelDate'],
+          message: 'Le retour doit être après (ou le même jour que) l\'aller',
+        })
+      }
+      if (data.departure && data.destination && data.departure === data.destination) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['destination'],
+          message: 'Départ et destination doivent être différents pour un A/R',
+        })
+      }
+    }
+
+    const legs = tripType === TRIP_TYPE.ROUND_TRIP ? 2 : 1
     const groupTotal = data.passengers.reduce((sum, passenger) => {
       const base = parseFloat(String(passenger.basePrice ?? '').replace(',', '.')) || 0
       const tva = parseFloat(String(passenger.tva ?? '').replace(',', '.')) || 0
       const fpt = parseFloat(String(passenger.fpt ?? '').replace(',', '.')) || 0
       const rva = parseFloat(String(passenger.rva ?? '').replace(',', '.')) || 0
-      return sum + base + tva + fpt + rva
+      return sum + (base + tva + fpt + rva) * legs
     }, 0)
 
     if (data.paymentMode === PAYMENT_MODE.CASH && !data.reserveForLater && !data.cashRegister?.trim()) {
@@ -206,7 +247,7 @@ export const ticketPatchSchema = z
     paymentMode: z.enum([
       PAYMENT_MODE.CASH,
       PAYMENT_MODE.ACC,
-      PAYMENT_MODE.PDA,
+      PAYMENT_MODE.PTA,
     ]),
     sponsor: z.string().optional(),
   })

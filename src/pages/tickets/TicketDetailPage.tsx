@@ -47,6 +47,10 @@ import {
   TICKET_SOURCE_LABELS,
   TICKET_STATUS,
   TICKET_STATUS_LABELS,
+  TRIP_LEG,
+  TRIP_LEG_LABELS,
+  TRIP_TYPE,
+  TRIP_TYPE_LABELS,
   PAYMENT_MODE_LABELS,
   GENDER_LABELS,
   TICKET_CATEGORY_LABELS,
@@ -68,7 +72,9 @@ import {
   getTicketPaidAmount,
   getTicketRemainingAmount,
   getTicketTotalAmount,
+  getTicketTripLeg,
   isOnlineTicketSource,
+  isRoundTripTicket,
   isTicketFullyPaid,
   normalizeTicketSource,
   toTicketPaymentPayload,
@@ -84,8 +90,11 @@ import {
   getTicketRefundPreviewAmount,
 } from '@/constants/ticket-business-rules'
 import type { Ticket as TicketResource } from '@/types/ticket'
-import { downloadTicketReceiptPdf } from '@/lib/ticket-receipt-pdf'
-import { downloadTicketThermalReceiptPdf } from '@/lib/ticket-thermal-receipt-pdf'
+import { downloadTicketReceiptPdf, printTicketReceiptPdf } from '@/lib/ticket-receipt-pdf'
+import {
+  downloadTicketThermalReceiptPdf,
+  printTicketThermalReceiptPdf,
+} from '@/lib/ticket-thermal-receipt-pdf'
 import { toast } from 'sonner'
 import type { TicketReportTravelDateFormData } from '@/schemas/ticket-report-travel-date.schema'
 import type { TicketPaymentFormData } from '@/schemas/ticket-payment.schema'
@@ -311,12 +320,33 @@ export function TicketDetailPage() {
   const [reportTravelDateOpen, setReportTravelDateOpen] = useState(false)
   const [paymentModalOpen, setPaymentModalOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [printReceiptOpen, setPrintReceiptOpen] = useState(false)
+  const [printFormat, setPrintFormat] = useState<'a4' | 'thermal'>('a4')
   const [activeTab, setActiveTab] = useState<TicketDetailTab>('details')
 
   const companions = useMemo(() => {
     if (!ticket?.purchaseGroupId) return []
     return (groupData?.items ?? []).filter((t) => t.id !== ticket.id)
   }, [ticket, groupData?.items])
+
+  const linkedTicket = useMemo(() => {
+    if (!ticket?.linkedTicketId) return null
+    return companions.find((t) => t.id === ticket.linkedTicketId) ?? null
+  }, [ticket?.linkedTicketId, companions])
+
+  const otherPassengers = useMemo(() => {
+    if (!ticket) return companions
+    return companions.filter(
+      (t) => t.id !== ticket.linkedTicketId && t.passengerName !== ticket.passengerName,
+    )
+  }, [companions, ticket])
+
+  const groupPassengerCount = useMemo(() => {
+    if (!ticket) return 0
+    const names = new Set<string>([ticket.passengerName])
+    for (const t of companions) names.add(t.passengerName)
+    return names.size
+  }, [ticket, companions])
 
   const issuedCompanions = useMemo(
     () => companions.filter((t) => t.status === TICKET_STATUS.ISSUED),
@@ -437,6 +467,13 @@ export function TicketDetailPage() {
                 <Badge variant={statusVariant(ticket.status) as 'default'} className="px-3 py-1 text-sm">
                   {TICKET_STATUS_LABELS[ticket.status]}
                 </Badge>
+                {isRoundTripTicket(ticket) && (
+                  <Badge variant="secondary" className="px-3 py-1">
+                    {TRIP_LEG_LABELS[getTicketTripLeg(ticket)]}
+                    {' · '}
+                    {TRIP_TYPE_LABELS[TRIP_TYPE.ROUND_TRIP]}
+                  </Badge>
+                )}
                 {isOnlineTicketSource(ticket.source) && (
                   <Badge variant="outline" className="gap-1 border-brand-orange/40 text-brand-orange">
                     <Globe className="h-3.5 w-3.5" aria-hidden="true" />
@@ -467,6 +504,17 @@ export function TicketDetailPage() {
           <CardContent className="flex flex-wrap gap-2 p-4">
             <Button
               type="button"
+              className="h-11 rounded-xl bg-brand-orange hover:bg-brand-orange/90"
+              onClick={() => {
+                setPrintFormat('a4')
+                setPrintReceiptOpen(true)
+              }}
+            >
+              <Printer className="h-4 w-4" />
+              Imprimer
+            </Button>
+            <Button
+              type="button"
               variant="outline"
               className="h-11 rounded-xl"
               onClick={() => {
@@ -486,7 +534,7 @@ export function TicketDetailPage() {
                 toast.success('Reçu thermique 80 mm téléchargé')
               }}
             >
-              <Printer className="h-4 w-4" />
+              <Download className="h-4 w-4" />
               Thermique 80 mm
             </Button>
             {ticket.status === TICKET_STATUS.ISSUED && (
@@ -508,11 +556,40 @@ export function TicketDetailPage() {
         </Card>
       )}
 
-      {activeTab === 'details' && companions.length > 0 && (
+      {activeTab === 'details' && linkedTicket && (
         <Card className="rounded-2xl border border-brand-orange/30 bg-brand-orange/5 shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-base font-semibold">
-              Achat groupé — {companions.length + 1} passagers
+              Billet {getTicketTripLeg(ticket) === TRIP_LEG.OUTBOUND ? 'retour' : 'aller'} lié
+            </CardTitle>
+            <p className="text-sm font-normal text-muted-foreground">
+              Aller-retour — le trajet jumelé partage le même achat.
+            </p>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <Link
+              to={`/tickets/${linkedTicket.id}`}
+              className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/80 px-4 py-3 transition-colors hover:border-brand-orange/40 hover:bg-muted/30"
+            >
+              <div className="min-w-0">
+                <p className="font-mono text-sm font-semibold text-primary">{linkedTicket.ticketNumber}</p>
+                <p className="truncate text-sm text-muted-foreground">
+                  {TRIP_LEG_LABELS[getTicketTripLeg(linkedTicket)]} · {formatDate(linkedTicket.travelDate)}
+                </p>
+              </div>
+              <Badge variant="secondary">
+                {TRIP_LEG_LABELS[getTicketTripLeg(linkedTicket)]}
+              </Badge>
+            </Link>
+          </CardContent>
+        </Card>
+      )}
+
+      {activeTab === 'details' && otherPassengers.length > 0 && (
+        <Card className="rounded-2xl border border-brand-orange/30 bg-brand-orange/5 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold">
+              Achat groupé — {groupPassengerCount} passagers
             </CardTitle>
             <p className="text-sm font-normal text-muted-foreground">
               {canGroupCheckIn
@@ -521,7 +598,7 @@ export function TicketDetailPage() {
             </p>
           </CardHeader>
           <CardContent className="space-y-2 pt-0">
-            {companions.map((companion) => (
+            {otherPassengers.map((companion) => (
               <Link
                 key={companion.id}
                 to={`/tickets/${companion.id}`}
@@ -726,6 +803,12 @@ export function TicketDetailPage() {
         </DetailSection>
 
         <DetailSection title="Voyage" icon={MapPin}>
+          {isRoundTripTicket(ticket) && (
+            <>
+              <DetailRow label="Type" value={TRIP_TYPE_LABELS[TRIP_TYPE.ROUND_TRIP]} />
+              <DetailRow label="Trajet" value={TRIP_LEG_LABELS[getTicketTripLeg(ticket)]} />
+            </>
+          )}
           <DetailRow label="Départ" value={getCheckpointName(ticket.departure)} />
           <DetailRow label="Destination" value={getCheckpointName(ticket.destination)} />
           <DetailRow label="Date" value={formatDate(ticket.travelDate)} />
@@ -920,6 +1003,76 @@ export function TicketDetailPage() {
             <span className="text-muted-foreground">Montant</span>
             <span className="font-bold tabular-nums text-brand-orange">{money(total)}</span>
           </div>
+        </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={printReceiptOpen}
+        onOpenChange={setPrintReceiptOpen}
+        variant="default"
+        title="Imprimer le reçu"
+        description="Choisissez le format, puis OK pour ouvrir le PDF et lancer l’impression."
+        confirmLabel="OK — Imprimer"
+        cancelLabel="Annuler"
+        onConfirm={() => {
+          if (printFormat === 'thermal') {
+            printTicketThermalReceiptPdf(ticket)
+          } else {
+            printTicketReceiptPdf(ticket)
+          }
+          setPrintReceiptOpen(false)
+          toast.success(
+            printFormat === 'thermal'
+              ? 'Impression thermique prête'
+              : 'Impression du reçu prête',
+          )
+        }}
+      >
+        <div className="space-y-2" role="radiogroup" aria-label="Format du reçu">
+          <label
+            className={cn(
+              'flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-3 text-sm transition-colors',
+              printFormat === 'a4'
+                ? 'border-brand-orange/50 bg-brand-orange/10'
+                : 'border-border/70 hover:bg-muted/40',
+            )}
+          >
+            <input
+              type="radio"
+              name="ticket-print-format"
+              className="mt-1"
+              checked={printFormat === 'a4'}
+              onChange={() => setPrintFormat('a4')}
+            />
+            <span>
+              <span className="font-medium">Reçu A4</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                Facture complète avec conditions du contrat
+              </span>
+            </span>
+          </label>
+          <label
+            className={cn(
+              'flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-3 text-sm transition-colors',
+              printFormat === 'thermal'
+                ? 'border-brand-orange/50 bg-brand-orange/10'
+                : 'border-border/70 hover:bg-muted/40',
+            )}
+          >
+            <input
+              type="radio"
+              name="ticket-print-format"
+              className="mt-1"
+              checked={printFormat === 'thermal'}
+              onChange={() => setPrintFormat('thermal')}
+            />
+            <span>
+              <span className="font-medium">Thermique 80 mm</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                Ticket court pour imprimante de caisse
+              </span>
+            </span>
+          </label>
         </div>
       </ConfirmDialog>
 
