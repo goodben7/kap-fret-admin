@@ -473,7 +473,7 @@ export function openPdfBlob(blob: Blob): void {
  * Impression directe via l’action OpenAction du PDF (jsPDF.autoPrint).
  * Évite le print() trop tôt qui affiche des pages blanches dans le dialogue macOS.
  */
-export function printJsPdf(doc: { autoPrint: (options?: { variant?: string }) => unknown; output: (type: 'blob') => Blob }): void {
+export function printJsPdf(doc: jsPDF): void {
   doc.autoPrint({ variant: 'non-conform' })
   openPdfBlob(doc.output('blob'))
 }
